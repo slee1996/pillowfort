@@ -20,6 +20,11 @@ export default {
       return env.ROOM.get(id).fetch(request);
     }
 
+    // room links: /abc123 → serve index.html
+    if (/^\/[a-z0-9]{6}$/.test(url.pathname)) {
+      return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+    }
+
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;

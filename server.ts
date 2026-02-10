@@ -157,7 +157,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
 
 function onJoin(ws: any, d: WSData, msg: any) {
   if (!msg.name?.trim() || !msg.password?.trim() || !msg.room?.trim())
-    return send(ws, "error", { message: "name, password, and fort code required" });
+    return send(ws, "error", { message: "name, password, and fort flag required" });
   if (d.isHost)
     return send(ws, "error", { message: "already in a fort" });
 
@@ -360,7 +360,7 @@ function onDisconnect(ws: any, d: WSData) {
 
 function onRejoin(ws: any, d: WSData, msg: any) {
   if (!msg.name?.trim() || !msg.password?.trim() || !msg.room?.trim())
-    return send(ws, "error", { message: "name, password, and fort code required" });
+    return send(ws, "error", { message: "name, password, and fort flag required" });
 
   const room = rooms.get(msg.room.trim());
   if (!room) return send(ws, "error", { message: "fort not found" });
@@ -412,6 +412,12 @@ Bun.serve({
 
     // static files
     if (url.pathname.includes("..")) return new Response("forbidden", { status: 403 });
+
+    // room links: /abc123 → serve index.html
+    if (/^\/[a-z0-9]{6}$/.test(url.pathname)) {
+      return new Response(Bun.file("./public/index.html"));
+    }
+
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Bun.file(`./public${path}`);
     return (await file.exists()) ? new Response(file) : new Response("not found", { status: 404 });
