@@ -887,8 +887,50 @@ body {
 /* --- minimized windows --- */
 .window.minimized { height: auto; max-height: none; }
 .window.minimized > *:not(.title-bar) { display: none !important; }
-.chat-window.minimized { height: auto !important; max-height: none !important; }
+.chat-window.minimized {
+  height: auto !important;
+  max-height: none !important;
+  width: auto !important;
+  max-width: none !important;
+  position: absolute !important;
+  bottom: 12px;
+  left: 12px;
+  top: auto !important;
+  right: auto !important;
+  align-self: auto !important;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
 .chat-window.minimized > *:not(.title-bar) { display: none !important; }
+.chat-window.minimized .title-bar { border-radius: 6px; padding-right: 6px; }
+.chat-window.minimized .title-text { font-size: 11px; }
+.chat-window.minimized .title-buttons { gap: 1px; }
+
+/* unread badge */
+.unread-badge {
+  display: none;
+  background: #FF3B30;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+  margin-left: 6px;
+  text-shadow: none;
+  font-family: Tahoma, sans-serif;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  animation: badge-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.unread-badge.visible { display: inline-block; }
+
+@keyframes badge-pop {
+  0% { transform: scale(0); }
+  100% { transform: scale(1); }
+}
 
 /* --- breakout game canvas --- */
 #game-canvas {
@@ -1174,6 +1216,7 @@ body {
       <div class="title-text">
         <div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         pillowfort &mdash; <span id="room-code" title="Click to copy fort flag" style="cursor:pointer; text-decoration:underline; text-decoration-style:dotted;"></span>
+        <span class="unread-badge" id="unread-badge"></span>
       </div>
       <div class="title-buttons">
         <div class="title-btn" id="chat-btn-min">&#x2500;</div>
@@ -1532,6 +1575,22 @@ function onMessage(msg) {
   addChat(msg.from, msg.text, msg.style);
   if (!state.mutedNames.has(msg.from)) msgSound();
   $('typing-indicator').textContent = '';
+  // track unread when minimized
+  if (document.querySelector('.chat-window.minimized')) {
+    state.unreadCount = (state.unreadCount || 0) + 1;
+    updateUnreadBadge();
+  }
+}
+
+function updateUnreadBadge() {
+  const badge = $('unread-badge');
+  const count = state.unreadCount || 0;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
 }
 
 // --- typing ---
@@ -2288,27 +2347,30 @@ $('chat-btn-close').onclick = () => {
 };
 
 // Chat minimize
+function restoreChat() {
+  const win = document.querySelector('.chat-window');
+  if (!win.classList.contains('minimized')) return;
+  win.classList.remove('minimized');
+  $('screen-chat').classList.remove('game-visible');
+  breakoutGame.pause();
+  state.unreadCount = 0;
+  updateUnreadBadge();
+}
+
 $('chat-btn-min').onclick = () => {
   const win = document.querySelector('.chat-window');
-  const screen = $('screen-chat');
-  win.classList.toggle('minimized');
   if (win.classList.contains('minimized')) {
-    screen.classList.add('game-visible');
-    breakoutGame.start();
+    restoreChat();
   } else {
-    screen.classList.remove('game-visible');
-    breakoutGame.pause();
+    win.classList.add('minimized');
+    $('screen-chat').classList.add('game-visible');
+    breakoutGame.start();
   }
 };
 
 // Double-click title text to restore
 document.querySelector('.chat-window .title-text').ondblclick = () => {
-  const win = document.querySelector('.chat-window');
-  if (win.classList.contains('minimized')) {
-    win.classList.remove('minimized');
-    $('screen-chat').classList.remove('game-visible');
-    breakoutGame.pause();
-  }
+  restoreChat();
 };
 
 // Minimize on other windows (setup/join/knocked/home)
