@@ -1899,9 +1899,7 @@ function onNewHost(msg) {
   state.members = state.members.filter(n => n !== msg.name);
   state.members.unshift(msg.name);
 
-  if (msg.name === state.name) {
-    state.isHost = true;
-  }
+  state.isHost = msg.name === state.name;
 
   renderHeader();
   renderMembers();
