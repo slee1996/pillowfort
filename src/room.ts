@@ -1,4 +1,5 @@
 import type { Env } from "./index";
+import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS } from "./shared";
 
 interface WSData {
   name: string;
@@ -11,20 +12,6 @@ interface WSData {
 const MAX_GUESTS = 20;
 const IDLE_MS = 10 * 60 * 1000;
 const RATE_MSGS_PER_5S = 10;
-const MAX_NAME = 24;
-const MAX_MSG = 2000;
-const STYLE_COLORS = new Set(['#FF0000','#0000FF','#008000','#FF8C00','#800080','#000000','#FF69B4','#8B4513']);
-const GRACE_MS = 15_000;
-
-function sanitizeStyle(s: any): Record<string, any> | undefined {
-  if (!s || typeof s !== 'object') return undefined;
-  const out: Record<string, any> = {};
-  if (s.bold === true) out.bold = true;
-  if (s.italic === true) out.italic = true;
-  if (s.underline === true) out.underline = true;
-  if (typeof s.color === 'string' && STYLE_COLORS.has(s.color)) out.color = s.color;
-  return Object.keys(out).length ? out : undefined;
-}
 
 export class Room implements DurableObject {
   private state: DurableObjectState;
@@ -134,18 +121,6 @@ export class Room implements DurableObject {
     return names;
   }
 
-  private uniqueName(base: string): string {
-    const taken = new Set(this.getMembers());
-    if (!taken.has(base)) return base;
-    let i = 2;
-    while (true) {
-      const suffix = String(i);
-      const candidate = base.slice(0, MAX_NAME - suffix.length) + suffix;
-      if (!taken.has(candidate)) return candidate;
-      i++;
-    }
-  }
-
   private resetIdle() {
     this.state.storage.setAlarm(Date.now() + IDLE_MS);
   }
@@ -174,7 +149,7 @@ export class Room implements DurableObject {
     if (this.getHost())
       return this.send(ws, "error", { message: "fort already exists" });
 
-    const name = msg.name.trim().slice(0, MAX_NAME);
+    const name = msg.name.trim().slice(0, MAX_NAME_LEN);
     this.password = msg.password.trim();
     await this.state.storage.put("password", this.password);
 
@@ -199,7 +174,7 @@ export class Room implements DurableObject {
     if (registered.length > MAX_GUESTS)
       return this.send(ws, "error", { message: "fort is full (20 max)" });
 
-    const name = this.uniqueName(msg.name.trim().slice(0, MAX_NAME));
+    const name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), new Set(this.getMembers()));
     const prev = this.att(ws);
     ws.serializeAttachment({ name, hash: prev.hash, isHost: false, hostRejected: false, msgTimestamps: [] } as WSData);
 
@@ -223,7 +198,7 @@ export class Room implements DurableObject {
     ws.serializeAttachment(a);
 
     const style = sanitizeStyle((msg as any).style);
-    this.broadcast("message", { from: a.name, text: msg.text.trim().slice(0, MAX_MSG), ...(style ? { style } : {}) });
+    this.broadcast("message", { from: a.name, text: msg.text.trim().slice(0, MAX_MSG_LEN), ...(style ? { style } : {}) });
     this.resetIdle();
   }
 

@@ -1,3 +1,5 @@
+import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS } from "./src/shared";
+
 const PORT = parseInt(process.env.PORT || "3000");
 
 // --- types ---
@@ -32,12 +34,8 @@ const roomCreationByIP = new Map<string, number[]>();
 
 const MAX_GUESTS = 20;
 const IDLE_MS = 10 * 60 * 1000;
-const RATE_ROOMS_PER_MIN = 5;
+const RATE_ROOMS_PER_MIN = parseInt(process.env.PILLOWFORT_RATE_ROOMS || "5");
 const RATE_MSGS_PER_5S = 10;
-const MAX_NAME_LEN = 24;
-const MAX_MSG_LEN = 2000;
-const STYLE_COLORS = new Set(['#FF0000','#0000FF','#008000','#FF8C00','#800080','#000000','#FF69B4','#8B4513']);
-const GRACE_MS = 15_000;
 
 // --- helpers ---
 
@@ -93,32 +91,10 @@ function tag(d: WSData): string {
   return d.name ? `${d.name}#${d.hash}` : `?#${d.hash}`;
 }
 
-function uniqueName(base: string, room: Room): string {
-  const taken = new Set(members(room));
-  if (!taken.has(base)) return base;
-  let i = 2;
-  while (true) {
-    const suffix = String(i);
-    const candidate = base.slice(0, MAX_NAME_LEN - suffix.length) + suffix;
-    if (!taken.has(candidate)) return candidate;
-    i++;
-  }
-}
-
 function rateLimitedMsg(data: WSData): boolean {
   const now = Date.now();
   data.msgTimestamps = data.msgTimestamps.filter(t => now - t < 5_000);
   return data.msgTimestamps.length >= RATE_MSGS_PER_5S;
-}
-
-function sanitizeStyle(s: any): Record<string, any> | undefined {
-  if (!s || typeof s !== 'object') return undefined;
-  const out: Record<string, any> = {};
-  if (s.bold === true) out.bold = true;
-  if (s.italic === true) out.italic = true;
-  if (s.underline === true) out.underline = true;
-  if (typeof s.color === 'string' && STYLE_COLORS.has(s.color)) out.color = s.color;
-  return Object.keys(out).length ? out : undefined;
 }
 
 // --- handlers ---
@@ -170,7 +146,7 @@ function onJoin(ws: any, d: WSData, msg: any) {
 
   d.roomId = room.id;
   d.isHost = false;
-  d.name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), room);
+  d.name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), new Set(members(room)));
 
   room.guests.set(ws, d.name);
   send(ws, "joined", { room: room.id, members: members(room), name: d.name });

@@ -5,7 +5,8 @@
     "dev": "wrangler dev",
     "dev:local": "bun --watch server.ts",
     "deploy": "wrangler deploy",
-    "start": "bun server.ts"
+    "start": "bun server.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",
