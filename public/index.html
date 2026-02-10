@@ -2438,8 +2438,11 @@ const breakoutGame = (() => {
         });
       }
     }
-    paddle = { x: w / 2 - 40, y: h - 30, w: 80, h: PADDLE_H };
-    ball = { x: w / 2, y: h - 50, dx: 3, dy: -3 };
+    // keep paddle above the minimized chat bar
+    const minBar = document.querySelector('.chat-window.minimized');
+    const barH = minBar ? minBar.getBoundingClientRect().height + 20 : 30;
+    paddle = { x: w / 2 - 40, y: h - barH, w: 80, h: PADDLE_H };
+    ball = { x: w / 2, y: h - barH - 20, dx: 3, dy: -3 };
     lives = 3;
     won = false;
     lost = false;
@@ -2568,7 +2571,7 @@ const breakoutGame = (() => {
         return;
       } else {
         ball.x = w / 2;
-        ball.y = h - 50;
+        ball.y = paddle.y - 20;
         ball.dx = 3 * (Math.random() > 0.5 ? 1 : -1);
         ball.dy = -3;
       }
