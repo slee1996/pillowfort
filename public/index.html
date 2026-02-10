@@ -897,7 +897,6 @@ body {
   z-index: 1;
   display: none;
 }
-#screen-chat { position: relative; }
 #screen-chat .chat-window { z-index: 2; position: relative; }
 #screen-chat.game-visible #game-canvas { display: block; }
 
@@ -913,9 +912,27 @@ body {
   pointer-events: none;
   transition: none;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  transform-origin: center center;
 }
-.grab-hand.returning {
-  transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1), top 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+.grab-hand.approaching {
+  /* duration overridden inline based on frustration */
+  transition: left var(--approach-speed) cubic-bezier(0.2, 0, 0.4, 1),
+              top var(--approach-speed) cubic-bezier(0.2, 0, 0.4, 1);
+}
+.grab-hand.grabbing {
+  transition: left var(--return-speed) cubic-bezier(0.4, 0, 0.2, 1),
+              top var(--return-speed) cubic-bezier(0.4, 0, 0.2, 1);
+  animation: hand-shake var(--shake-speed) ease-in-out infinite;
+}
+
+@keyframes hand-shake {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(var(--shake-deg)); }
+  30% { transform: rotate(calc(var(--shake-deg) * -0.8)); }
+  45% { transform: rotate(var(--shake-deg)); }
+  60% { transform: rotate(calc(var(--shake-deg) * -0.6)); }
+  75% { transform: rotate(calc(var(--shake-deg) * 0.4)); }
+  90% { transform: rotate(calc(var(--shake-deg) * -0.2)); }
 }
 
 @media (max-width: 600px) {
@@ -2507,9 +2524,12 @@ const breakoutGame = (() => {
 
   function start() {
     if (running) return;
-    if (!bricks || won || lives <= 0) reset();
-    running = true;
-    loop();
+    // defer to ensure canvas is visible and has dimensions
+    requestAnimationFrame(() => {
+      if (!bricks || won || lives <= 0) reset();
+      running = true;
+      loop();
+    });
   }
 
   function pause() {
@@ -2560,19 +2580,45 @@ const breakoutGame = (() => {
 (() => {
   const chatWin = document.querySelector('.chat-window');
   const screen = $('screen-chat');
-  let offsetX = 0, offsetY = 0;
   let startX = 0, startY = 0;
   let dragging = false;
   let currentX = 0, currentY = 0;
+  let grabCount = 0;
+  let lastGrabTime = 0;
+
+  // singleton hand state
+  let activeHand = null;
+  let handPhase = 'idle'; // idle | approaching | grabbing | returning
 
   const titleBar = chatWin.querySelector('.title-bar');
 
+  function frustration() {
+    const elapsed = (Date.now() - lastGrabTime) / 1000;
+    const decayed = Math.max(0, grabCount - Math.floor(elapsed / 10));
+    return Math.min(decayed, 12);
+  }
+
+  function handParams(f) {
+    return {
+      approachMs: Math.max(150, 800 - f * 70),
+      returnMs: Math.max(100, 600 - f * 55),
+      shakeDeg: Math.min(4 + f * 4, 40),
+      shakeSpeed: Math.max(0.08, 0.5 - f * 0.04),
+      handSize: Math.min(32 + f * 5, 72),
+      pauseMs: Math.max(30, 200 - f * 18),
+      windowReturnMs: Math.max(120, 500 - f * 40),
+      openEmoji: ['\u{1F91A}', '\u{1F590}\uFE0F', '\u{270B}', '\u{1F596}'][Math.min(Math.floor(f / 3), 3)],
+      grabEmoji: f >= 10 ? '\u{1F4A2}' : f >= 6 ? '\u{1F44A}' : '\u{270A}',
+    };
+  }
+
   function onPointerDown(e) {
-    // ignore if clicking buttons
     if (e.target.closest('.title-buttons')) return;
     if (chatWin.classList.contains('minimized')) return;
     dragging = true;
     chatWin.classList.add('dragging');
+    // cancel any in-progress return animation
+    chatWin.style.transition = 'none';
     startX = e.clientX - currentX;
     startY = e.clientY - currentY;
     e.preventDefault();
@@ -2589,6 +2635,7 @@ const breakoutGame = (() => {
     if (!dragging) return;
     dragging = false;
     chatWin.classList.remove('dragging');
+    chatWin.style.transition = '';
 
     if (Math.abs(currentX) < 3 && Math.abs(currentY) < 3) {
       currentX = 0; currentY = 0;
@@ -2596,71 +2643,137 @@ const breakoutGame = (() => {
       return;
     }
 
-    // spawn a grab hand
-    spawnGrabHand(currentX, currentY);
+    grabCount++;
+    lastGrabTime = Date.now();
+    dispatchHand();
   }
 
   titleBar.addEventListener('pointerdown', onPointerDown);
   document.addEventListener('pointermove', onPointerMove);
   document.addEventListener('pointerup', onPointerUp);
 
-  function spawnGrabHand(dx, dy) {
+  function dispatchHand() {
+    const f = frustration();
+    const p = handParams(f);
+
+    // if hand already exists, redirect it to the new position
+    if (activeHand && handPhase !== 'idle') {
+      redirectHand(p);
+      return;
+    }
+
+    // create new hand
     const hand = document.createElement('div');
     hand.className = 'grab-hand';
-    hand.textContent = '\u{1F91A}';
+    hand.textContent = p.openEmoji;
+    hand.style.fontSize = p.handSize + 'px';
+    applyHandVars(hand, p);
+    activeHand = hand;
 
     const screenRect = screen.getBoundingClientRect();
-    const winRect = chatWin.getBoundingClientRect();
 
-    // spawn from a random edge
+    // spawn from random edge
     const edge = Math.floor(Math.random() * 4);
     let spawnX, spawnY;
     switch(edge) {
-      case 0: spawnX = Math.random() * screenRect.width; spawnY = -40; break;
+      case 0: spawnX = Math.random() * screenRect.width; spawnY = -60; break;
       case 1: spawnX = screenRect.width + 10; spawnY = Math.random() * screenRect.height; break;
       case 2: spawnX = Math.random() * screenRect.width; spawnY = screenRect.height + 10; break;
-      case 3: spawnX = -40; spawnY = Math.random() * screenRect.height; break;
+      case 3: spawnX = -60; spawnY = Math.random() * screenRect.height; break;
     }
 
     hand.style.left = spawnX + 'px';
     hand.style.top = spawnY + 'px';
     screen.appendChild(hand);
 
-    // move hand to the window's current position (center of title bar)
-    const targetX = winRect.left - screenRect.left + winRect.width / 2 - 16;
-    const targetY = winRect.top - screenRect.top + 16;
+    handPhase = 'approaching';
+    approachWindow(hand, p);
+  }
+
+  function applyHandVars(hand, p) {
+    hand.style.setProperty('--approach-speed', p.approachMs + 'ms');
+    hand.style.setProperty('--return-speed', p.returnMs + 'ms');
+    hand.style.setProperty('--shake-deg', p.shakeDeg + 'deg');
+    hand.style.setProperty('--shake-speed', p.shakeSpeed + 's');
+  }
+
+  function approachWindow(hand, p) {
+    const screenRect = screen.getBoundingClientRect();
+    const winRect = chatWin.getBoundingClientRect();
+    const hs = p.handSize;
+    const targetX = winRect.left - screenRect.left + winRect.width / 2 - hs / 2;
+    const targetY = winRect.top - screenRect.top + 8;
+
+    hand.textContent = p.openEmoji;
+    hand.style.fontSize = hs + 'px';
+    hand.className = 'grab-hand approaching';
+    applyHandVars(hand, p);
 
     requestAnimationFrame(() => {
-      hand.classList.add('returning');
       hand.style.left = targetX + 'px';
       hand.style.top = targetY + 'px';
     });
 
-    // after hand arrives, drag window back
-    hand.addEventListener('transitionend', function grab() {
-      hand.removeEventListener('transitionend', grab);
+    hand.addEventListener('transitionend', function onArrive(e) {
+      if (e.propertyName !== 'left') return;
+      hand.removeEventListener('transitionend', onArrive);
+      if (handPhase !== 'approaching') return;
+      grabAndReturn(hand, p);
+    }, { once: false });
+  }
 
-      // animate window back to origin
-      chatWin.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+  function grabAndReturn(hand, p) {
+    handPhase = 'grabbing';
+    hand.textContent = p.grabEmoji;
+    hand.className = 'grab-hand grabbing';
+    applyHandVars(hand, p);
+
+    setTimeout(() => {
+      if (handPhase !== 'grabbing') return;
+      handPhase = 'returning';
+
+      // yank window back
+      chatWin.style.transition = `transform ${p.windowReturnMs}ms cubic-bezier(0.2, 0, 0.4, 1)`;
       chatWin.style.transform = 'translate(0, 0)';
       currentX = 0;
       currentY = 0;
 
-      // hand follows back to center
-      const origRect = screen.getBoundingClientRect();
-      const cX = origRect.width / 2 - 16;
-      const cY = origRect.height / 2;
+      // hand follows to center
+      const screenRect = screen.getBoundingClientRect();
+      const cX = screenRect.width / 2 - p.handSize / 2;
+      const cY = screenRect.height / 2;
       hand.style.left = cX + 'px';
       hand.style.top = cY + 'px';
 
-      // cleanup after animation
       setTimeout(() => {
         chatWin.style.transition = '';
-        hand.style.transition = 'opacity 0.3s';
+        if (handPhase !== 'returning') return;
+        // fade out
+        hand.style.transition = 'opacity 0.25s';
         hand.style.opacity = '0';
-        setTimeout(() => hand.remove(), 300);
-      }, 650);
-    }, { once: true });
+        setTimeout(() => {
+          hand.remove();
+          activeHand = null;
+          handPhase = 'idle';
+        }, 250);
+      }, p.windowReturnMs + 80);
+    }, p.pauseMs);
+  }
+
+  function redirectHand(p) {
+    const hand = activeHand;
+    if (!hand) return;
+
+    // cancel current transitions, re-approach the new window position
+    hand.className = 'grab-hand'; // reset classes, stop animations
+    hand.style.transition = 'none';
+    applyHandVars(hand, p);
+
+    // force reflow so transition reset takes effect
+    void hand.offsetWidth;
+
+    handPhase = 'approaching';
+    approachWindow(hand, p);
   }
 })();
 
