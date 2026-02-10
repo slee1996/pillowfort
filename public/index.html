@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pillowfort</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+  font-size: 12px;
+  background: linear-gradient(180deg, #3C7DB5 0%, #1A4D7A 50%, #0D3558 100%);
+  background-attachment: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* --- screens --- */
+
+.screen { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; }
+.screen.active { display: flex; }
+.screen-chat.active { display: flex; }
+
+/* --- xp window chrome --- */
+
+.window {
+  background: #ECE9D8;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.title-bar {
+  background: linear-gradient(180deg, #0997FF 0%, #0663D0 8%, #0553BC 40%, #0250B5 60%, #014AB1 80%, #003F9E 100%);
+  padding: 6px 8px 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
+  user-select: none;
+  gap: 12px;
+}
+
+.title-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.title-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-icon svg { width: 100%; height: 100%; }
+
+.title-buttons { display: flex; gap: 2px; }
+
+.title-btn {
+  width: 21px;
+  height: 21px;
+  border: 1px solid;
+  border-color: rgba(255,255,255,0.6) rgba(0,0,0,0.2) rgba(0,0,0,0.2) rgba(255,255,255,0.6);
+  background: linear-gradient(180deg, #3C8DE4 0%, #2670C0 50%, #1E60B0 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  cursor: default;
+  border-radius: 3px;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+  font-weight: normal;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+
+.title-btn-close {
+  background: linear-gradient(180deg, #E8836C 0%, #D4503A 40%, #C4402A 60%, #B83020 100%);
+  border-color: rgba(255,255,255,0.5) rgba(130,30,20,0.5) rgba(130,30,20,0.5) rgba(255,255,255,0.5);
+}
+
+.window-body { padding: 20px; }
+
+/* --- xp inputs --- */
+
+.xp-field { margin-bottom: 14px; }
+
+.xp-field label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 4px;
+  color: #000;
+}
+
+.xp-input {
+  font-family: Tahoma, Arial, sans-serif;
+  font-size: 12px;
+  border: 2px solid;
+  border-color: #7F9DB9 #F0F0F0 #F0F0F0 #7F9DB9;
+  padding: 4px 6px;
+  background: #fff;
+  width: 100%;
+  outline: none;
+  border-radius: 0;
+}
+
+.xp-input:focus {
+  border-color: #3399FF #A8D4FF #A8D4FF #3399FF;
+}
+
+.xp-input::placeholder { color: #AAA; }
+
+/* --- xp buttons --- */
+
+.xp-btn {
+  font-family: Tahoma, Arial, sans-serif;
+  font-size: 11px;
+  padding: 4px 18px;
+  border: 1px solid #003C74;
+  background: linear-gradient(180deg, #fff 0%, #ECE9D8 45%, #D6D2C2 100%);
+  cursor: pointer;
+  border-radius: 3px;
+  color: #000;
+  min-width: 75px;
+}
+
+.xp-btn:hover {
+  background: linear-gradient(180deg, #FFF8E8 0%, #F5E6C8 45%, #E8D4AA 100%);
+  border-color: #0055AA;
+}
+
+.xp-btn:active {
+  background: #D6D2C2;
+  border-color: #003C74;
+}
+
+.xp-btn:focus-visible {
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
+
+.xp-btn-primary {
+  background: linear-gradient(180deg, #fff 0%, #E0E8F0 45%, #C8D8E8 100%);
+  border-color: #003C74;
+  box-shadow: 0 0 0 1px #7FAACC inset;
+}
+
+.btn-row { display: flex; gap: 8px; margin-top: 12px; justify-content: center; }
+
+/* --- xp checkbox --- */
+
+.xp-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+  font-size: 11px;
+  color: #000;
+  cursor: default;
+  user-select: none;
+}
+
+.xp-checkbox {
+  width: 13px;
+  height: 13px;
+  border: 1px solid;
+  border-color: #7F9DB9 #F0F0F0 #F0F0F0 #7F9DB9;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #333;
+  line-height: 1;
+}
+
+/* --- error banner --- */
+
+#error-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 8px 16px;
+  background: #FFF1A8;
+  border-bottom: 1px solid #C0A000;
+  color: #333;
+  font-size: 11px;
+  text-align: center;
+  z-index: 200;
+  display: none;
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+#error-banner.visible { display: block; }
+
+#reconnect-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 8px 16px;
+  background: #D4E8FC;
+  border-bottom: 1px solid #7FAACC;
+  color: #003C74;
+  font-size: 11px;
+  text-align: center;
+  z-index: 200;
+  display: none;
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+#reconnect-banner.visible { display: block; }
+
+/* --- toast --- */
+
+.copy-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ECE9D8;
+  border: 1px solid #ACA899;
+  color: #333;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: Tahoma, Arial, sans-serif;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  border-radius: 3px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.copy-toast.visible { opacity: 1; }
+
+/* --- sign on window --- */
+
+.sign-on-window {
+  width: 340px;
+}
+
+.sign-on-logo {
+  text-align: center;
+  padding: 16px 0 4px;
+}
+
+.sign-on-logo .logo-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign-on-logo .logo-icon svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 8px rgba(255,165,0,0.4));
+}
+
+.sign-on-logo .logo-text {
+  font-size: 22px;
+  font-weight: bold;
+  color: #003C74;
+  letter-spacing: 2px;
+  font-family: 'Arial Black', Arial, sans-serif;
+}
+
+.sign-on-logo .logo-tagline {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.sign-on-version {
+  text-align: center;
+  font-size: 10px;
+  color: #999;
+  margin-top: 10px;
+  padding-bottom: 2px;
+}
+
+.sign-on-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ACA899, transparent);
+  margin: 14px 0;
+}
+
+/* --- dialog window --- */
+
+.dialog-window {
+  width: 340px;
+}
+
+.dialog-icon {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.dialog-icon .warn-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+}
+
+.dialog-icon .warn-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dialog-text { font-size: 12px; line-height: 1.5; color: #333; }
+.dialog-text strong { font-weight: bold; }
+.dialog-text .muted { color: #666; font-size: 11px; margin-top: 6px; }
+
+/* --- chat window --- */
+
+.chat-window {
+  width: 92vw;
+  max-width: 780px;
+  height: 85vh;
+  max-height: 620px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- menu bar --- */
+
+.menu-bar {
+  background: #ECE9D8;
+  padding: 2px 6px;
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid #ACA899;
+  font-size: 11px;
+  user-select: none;
+}
+
+.menu-bar-item {
+  padding: 2px 6px;
+  color: #000;
+  cursor: default;
+  border-radius: 2px;
+  position: relative;
+}
+
+.menu-bar-item:hover {
+  background: #316AC5;
+  color: #fff;
+}
+
+/* --- AIM action bar --- */
+
+.aim-action-bar {
+  background: #ECE9D8;
+  padding: 3px 6px;
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid #ACA899;
+}
+
+.aim-action-btn {
+  font-family: Tahoma, Arial, sans-serif;
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: #003C74;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.aim-action-btn:hover {
+  border-color: #C0C0C0;
+  background: linear-gradient(180deg, #fff 0%, #ECE9D8 100%);
+}
+
+.aim-action-btn:active {
+  background: #D6D2C2;
+}
+
+/* --- format toolbar --- */
+
+.format-toolbar {
+  background: #ECE9D8;
+  padding: 2px 6px;
+  display: flex;
+  gap: 1px;
+  border-top: 1px solid #ACA899;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.format-btn {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  width: 24px;
+  height: 22px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  border-radius: 2px;
+}
+
+.format-btn:hover {
+  border-color: #C0C0C0;
+  background: linear-gradient(180deg, #fff 0%, #ECE9D8 100%);
+}
+
+.format-sep {
+  width: 1px;
+  height: 18px;
+  background: #ACA899;
+  margin: 0 3px;
+}
+
+.format-btn.active {
+  border-color: #999;
+  background: #D6D2C2;
+  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.2);
+}
+
+.format-btn .color-swatch {
+  width: 12px;
+  height: 12px;
+  background: #FF0000;
+  border: 1px solid #888;
+}
+
+.color-btn-wrap {
+  position: relative;
+}
+
+.color-palette {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #ECE9D8;
+  border: 1px solid #ACA899;
+  padding: 4px;
+  gap: 2px;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  z-index: 50;
+  flex-wrap: wrap;
+  width: 76px;
+}
+
+.color-palette.open { display: flex; }
+
+.color-palette-swatch {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #888;
+  cursor: pointer;
+}
+
+.color-palette-swatch:hover {
+  border-color: #000;
+  outline: 1px solid #fff;
+}
+
+.emoji-btn-wrap {
+  position: relative;
+}
+
+.emoji-picker {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #ECE9D8;
+  border: 1px solid #ACA899;
+  padding: 4px;
+  gap: 2px;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  z-index: 50;
+  flex-wrap: wrap;
+  width: 140px;
+}
+
+.emoji-picker.open { display: flex; }
+
+.emoji-pick {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.emoji-pick:hover {
+  border-color: #C0C0C0;
+  background: #fff;
+}
+
+.chat-content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- chat info text --- */
+
+.chat-info-text {
+  background: #fff;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #888;
+  border-bottom: 1px solid #E8E8E8;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* messages */
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  padding: 8px 10px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.msg {
+  margin-bottom: 3px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.msg-time {
+  color: #888;
+  font-size: 11px;
+}
+
+.msg-name {
+  font-weight: bold;
+}
+
+.msg-text {
+  font-size: 13px;
+}
+
+.msg-system {
+  color: #888;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.msg-system .sys-label {
+  font-weight: bold;
+  color: #999;
+}
+
+/* typing indicator */
+
+#typing-indicator {
+  font-size: 11px;
+  color: #888;
+  padding: 2px 10px;
+  min-height: 18px;
+  background: #fff;
+  border-top: 1px solid #F0F0F0;
+  flex-shrink: 0;
+}
+
+/* chat input area */
+
+.chat-input-wrap {
+  flex-shrink: 0;
+  background: #ECE9D8;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#msg-input {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  border: 2px solid;
+  border-color: #7F9DB9 #F0F0F0 #F0F0F0 #7F9DB9;
+  padding: 6px 8px;
+  background: #fff;
+  width: 100%;
+  outline: none;
+}
+
+#msg-input:focus {
+  border-color: #3399FF #A8D4FF #A8D4FF #3399FF;
+}
+
+#msg-input::placeholder { color: #AAA; }
+
+.chat-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.chat-buttons .spacer { flex: 1; }
+
+/* member panel */
+
+.member-panel {
+  width: 150px;
+  flex-shrink: 0;
+  background: #fff;
+  border-left: 1px solid #ACA899;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-panel-header {
+  background: #ECE9D8;
+  padding: 4px 10px;
+  font-weight: bold;
+  font-size: 11px;
+  color: #333;
+  border-bottom: 1px solid #ACA899;
+  text-align: center;
+}
+
+.buddy-group-header {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #003C74;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid #E8E8E8;
+}
+
+.buddy-group-header:hover {
+  background: #F0F0F0;
+}
+
+.buddy-group-arrow {
+  font-size: 8px;
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.buddy-group-header.collapsed .buddy-group-arrow {
+  transform: rotate(-90deg);
+}
+
+#member-names {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+#member-names.collapsed {
+  display: none;
+}
+
+.member-entry {
+  padding: 3px 10px 3px 20px;
+  font-size: 11px;
+  color: #003C74;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.buddy-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.member-dot {
+  width: 6px;
+  height: 6px;
+  background: #4CAF50;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.member-entry.is-host .member-name { font-weight: bold; }
+
+.member-entry.is-muted .member-name {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.member-entry.is-muted .member-dot {
+  background: #CCC;
+}
+
+.host-badge {
+  font-size: 10px;
+  flex-shrink: 0;
+  color: #DAA520;
+}
+
+/* --- member picker overlay --- */
+
+.member-picker-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.3);
+  align-items: center;
+  justify-content: center;
+}
+
+.member-picker-overlay.open { display: flex; }
+
+.member-picker {
+  background: #ECE9D8;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  min-width: 220px;
+  max-width: 300px;
+}
+
+.member-picker .title-bar { cursor: default; }
+
+.member-picker-body { padding: 8px; }
+
+.member-picker-item {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-size: 12px;
+  color: #003C74;
+}
+
+.member-picker-item:hover {
+  background: #316AC5;
+  color: #fff;
+}
+
+/* --- menu dropdowns --- */
+
+.menu-bar-item.open {
+  background: #316AC5;
+  color: #fff;
+}
+
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #ECE9D8;
+  border: 1px solid #ACA899;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  z-index: 80;
+  min-width: 160px;
+  padding: 2px 0;
+}
+
+.menu-bar-item.open .menu-dropdown { display: block; }
+
+.menu-dropdown-item {
+  padding: 4px 20px;
+  font-size: 11px;
+  color: #000;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.menu-dropdown-item:hover {
+  background: #316AC5;
+  color: #fff;
+}
+
+.menu-dropdown-sep {
+  height: 1px;
+  background: #ACA899;
+  margin: 2px 2px;
+}
+
+/* --- mobile member overlay --- */
+
+#mobile-member-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0,0,0,0.4);
+  align-items: center;
+  justify-content: center;
+}
+
+#mobile-member-overlay.open { display: flex; }
+
+.mobile-member-panel {
+  background: #ECE9D8;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  width: 260px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-member-panel .member-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+}
+
+.mobile-member-close {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  color: #666;
+  padding: 0 2px;
+}
+
+.mobile-member-list {
+  overflow-y: auto;
+  padding: 4px 0;
+  flex: 1;
+}
+
+/* --- responsive --- */
+
+@media (max-width: 600px) {
+  body {
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .screen {
+    padding: 16px;
+    padding-top: env(safe-area-inset-top, 16px);
+  }
+
+  .screen-chat.active {
+    padding: 0;
+  }
+
+  .sign-on-window, .dialog-window {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 8px;
+  }
+
+  .window-body {
+    padding: 16px;
+  }
+
+  .sign-on-logo .logo-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .sign-on-logo .logo-text {
+    font-size: 18px;
+  }
+
+  /* inputs: bigger touch targets */
+  .xp-input {
+    font-size: 16px;
+    padding: 10px 10px;
+  }
+
+  .xp-btn {
+    font-size: 14px;
+    padding: 10px 20px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .btn-row {
+    gap: 10px;
+  }
+
+  /* chat: full screen */
+  .chat-window {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .title-bar {
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top, 8px));
+    font-size: 12px;
+  }
+
+  .title-text {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .title-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* hide member sidebar, show inline */
+  .member-panel { display: none; }
+
+  /* menu bar compact */
+  .menu-bar {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+
+  /* action bar compact */
+  .aim-action-bar {
+    padding: 2px 4px;
+  }
+
+  .aim-action-btn {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+
+  /* format toolbar compact */
+  .format-toolbar {
+    padding: 1px 4px;
+  }
+
+  .format-btn {
+    width: 20px;
+    height: 18px;
+    font-size: 10px;
+  }
+
+  /* messages area */
+  #messages {
+    font-size: 14px;
+    padding: 10px 12px;
+    line-height: 1.5;
+  }
+
+  .msg-system { font-size: 13px; }
+  .msg-time { font-size: 12px; }
+
+  /* typing */
+  #typing-indicator {
+    font-size: 12px;
+    padding: 3px 12px;
+  }
+
+  /* input area */
+  .chat-input-wrap {
+    padding: 8px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+    gap: 8px;
+  }
+
+  #msg-input {
+    font-size: 16px;
+    padding: 10px 10px;
+  }
+
+  .chat-buttons {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .chat-buttons .xp-btn {
+    font-size: 12px;
+    padding: 8px 12px;
+    flex: 0 0 auto;
+  }
+
+  .chat-buttons .spacer { display: none; }
+
+  #member-count {
+    font-size: 12px;
+    margin-left: auto;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="error-banner"></div>
+<div id="reconnect-banner">Reconnecting...</div>
+<div class="copy-toast" id="copy-toast">Copied!</div>
+
+<!-- sign on -->
+<div id="screen-home" class="screen active">
+  <div class="window sign-on-window">
+    <div class="title-bar">
+      <div class="title-text"><div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div> pillowfort Sign On</div>
+      <div class="title-buttons">
+        <div class="title-btn">&#x2500;</div>
+        <div class="title-btn title-btn-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="sign-on-logo">
+        <div class="logo-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="logo-text">pillowfort</div>
+        <div class="logo-tagline">set up &middot; hang out &middot; knock down</div>
+      </div>
+      <div class="sign-on-divider"></div>
+      <div class="xp-field">
+        <label for="name-input">Screen Name</label>
+        <input type="text" id="name-input" class="xp-input" placeholder="Enter a screen name" maxlength="24" autocomplete="off">
+      </div>
+      <div class="xp-checkbox-row" onclick="this.querySelector('.xp-checkbox').textContent = this.querySelector('.xp-checkbox').textContent ? '' : '\u2713'">
+        <span class="xp-checkbox"></span>
+        <span>Save password</span>
+      </div>
+      <div class="btn-row">
+        <button class="xp-btn xp-btn-primary" id="btn-setup">Set Up Fort</button>
+        <button class="xp-btn" id="btn-join">Join Fort</button>
+      </div>
+      <div class="sign-on-version">Version 1.0.0 &middot; 2025</div>
+    </div>
+  </div>
+</div>
+
+<!-- setup -->
+<div id="screen-setup" class="screen">
+  <div class="window dialog-window">
+    <div class="title-bar">
+      <div class="title-text"><div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div> Set Up a Fort</div>
+      <div class="title-buttons">
+        <div class="title-btn title-btn-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="window-body">
+      <p style="font-size:12px; color:#333; margin-bottom:14px;">Pick a secret password. Share it with people you want to let inside.</p>
+      <div class="xp-field">
+        <label for="setup-password">Secret Password</label>
+        <input type="text" id="setup-password" class="xp-input" placeholder="Something only your friends know" maxlength="64" autocomplete="off">
+      </div>
+      <div class="btn-row">
+        <button class="xp-btn xp-btn-primary" id="btn-create">Build the Fort</button>
+        <button class="xp-btn" id="btn-back-setup">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- join -->
+<div id="screen-join" class="screen">
+  <div class="window dialog-window">
+    <div class="title-bar">
+      <div class="title-text"><div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div> Join a Fort</div>
+      <div class="title-buttons">
+        <div class="title-btn title-btn-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="window-body">
+      <p style="font-size:12px; color:#333; margin-bottom:14px;">Enter the fort code and secret password you were given.</p>
+      <div class="xp-field">
+        <label for="join-room">Fort Code</label>
+        <input type="text" id="join-room" class="xp-input" placeholder="6-character code" maxlength="6" autocomplete="off">
+      </div>
+      <div class="xp-field">
+        <label for="join-password">Secret Password</label>
+        <input type="text" id="join-password" class="xp-input" placeholder="The secret password" maxlength="64" autocomplete="off">
+      </div>
+      <div class="btn-row">
+        <button class="xp-btn xp-btn-primary" id="btn-enter">Join Fort</button>
+        <button class="xp-btn" id="btn-back-join">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- chat -->
+<div id="screen-chat" class="screen screen-chat">
+  <div class="window chat-window">
+    <div class="title-bar">
+      <div class="title-text">
+        <div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        pillowfort &mdash; <span id="room-code" title="Click to copy fort code" style="cursor:pointer; text-decoration:underline; text-decoration-style:dotted;"></span>
+      </div>
+      <div class="title-buttons">
+        <div class="title-btn">&#x2500;</div>
+        <div class="title-btn">&#x25A1;</div>
+        <div class="title-btn title-btn-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="menu-bar" id="menu-bar">
+      <span class="menu-bar-item" id="menu-file">File
+        <div class="menu-dropdown">
+          <div class="menu-dropdown-item" id="menu-save-chat">Save Chat</div>
+          <div class="menu-dropdown-sep"></div>
+          <div class="menu-dropdown-item" id="menu-leave"></div>
+        </div>
+      </span>
+      <span class="menu-bar-item" id="menu-edit">Edit
+        <div class="menu-dropdown">
+          <div class="menu-dropdown-item" id="menu-copy-code">Copy Fort Code</div>
+          <div class="menu-dropdown-item" id="menu-clear-msgs">Clear Messages</div>
+        </div>
+      </span>
+      <span class="menu-bar-item" id="menu-people">People
+        <div class="menu-dropdown">
+          <div class="menu-dropdown-item" id="menu-toggle-buddies">Toggle Buddy List</div>
+        </div>
+      </span>
+    </div>
+    <div class="aim-action-bar">
+      <button class="aim-action-btn" id="aim-btn-toss" title="Toss Pillow">&#x1F6CF; Toss Pillow</button>
+      <button class="aim-action-btn" id="aim-btn-mute" title="Mute">&#x1F507; Mute</button>
+      <button class="aim-action-btn" id="aim-btn-info" title="Info">&#x2139; Info</button>
+      <button class="aim-action-btn" id="aim-btn-invite" title="Copy Invite">&#x2709; Invite</button>
+    </div>
+    <div class="chat-content">
+      <div class="chat-main">
+        <div class="chat-info-text" id="chat-info-text"></div>
+        <div id="messages"></div>
+        <div id="typing-indicator"></div>
+        <div class="format-toolbar">
+          <button class="format-btn" id="fmt-bold" title="Bold"><b>B</b></button>
+          <button class="format-btn" id="fmt-italic" title="Italic"><i>I</i></button>
+          <button class="format-btn" id="fmt-underline" title="Underline"><u>U</u></button>
+          <div class="format-sep"></div>
+          <div class="color-btn-wrap">
+            <button class="format-btn" id="fmt-color" title="Font Color"><div class="color-swatch" id="color-swatch-display"></div></button>
+            <div class="color-palette" id="color-palette"></div>
+          </div>
+          <div class="format-sep"></div>
+          <div class="emoji-btn-wrap">
+            <button class="format-btn" id="fmt-smiley" title="Insert Smiley" style="font-size:14px">&#x263A;</button>
+            <div class="emoji-picker" id="emoji-picker"></div>
+          </div>
+        </div>
+        <div class="chat-input-wrap">
+          <input type="text" id="msg-input" placeholder="Type a message..." maxlength="2000" autocomplete="off">
+          <div class="chat-buttons">
+            <button class="xp-btn xp-btn-primary" id="btn-send">Send</button>
+            <div class="spacer"></div>
+            <span id="member-count" style="font-size:11px; color:#666;"></span>
+            <button class="xp-btn" id="btn-knock-down" hidden>Knock Down</button>
+            <button class="xp-btn" id="btn-leave-room" hidden>Leave Fort</button>
+          </div>
+        </div>
+      </div>
+      <div class="member-panel">
+        <div class="member-panel-header">Buddies</div>
+        <div class="buddy-group-header" id="buddy-group-toggle">
+          <span class="buddy-group-arrow">&#x25BC;</span>
+          Inside (<span id="buddy-count">0</span>)
+        </div>
+        <div id="member-names"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- host offer -->
+<div id="host-offer-dialog" style="display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.3); display:none; align-items:center; justify-content:center;">
+  <div class="window dialog-window">
+    <div class="title-bar">
+      <div class="title-text"><div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div> incoming pillow!</div>
+    </div>
+    <div class="window-body">
+      <div class="dialog-icon">
+        <div class="warn-icon" style="font-size:16px;">&#x1F6CF;</div>
+        <div class="dialog-text">
+          <strong id="host-offer-text"></strong>
+          <p class="muted">You'll be in charge of the fort. You can knock it down or keep it going.</p>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="xp-btn xp-btn-primary" id="btn-catch">Catch it</button>
+        <button class="xp-btn" id="btn-duck">Duck</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- member picker -->
+<div class="member-picker-overlay" id="member-picker-overlay">
+  <div class="member-picker">
+    <div class="title-bar">
+      <div class="title-text" id="member-picker-title"></div>
+      <div class="title-buttons">
+        <div class="title-btn title-btn-close" id="member-picker-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="member-picker-body" id="member-picker-body"></div>
+  </div>
+</div>
+
+<!-- mobile member overlay -->
+<div id="mobile-member-overlay">
+  <div class="mobile-member-panel">
+    <div class="member-panel-header">
+      <span>Buddies (<span id="mobile-buddy-count">0</span>)</span>
+      <button class="mobile-member-close" id="mobile-member-close">&#x2715;</button>
+    </div>
+    <div class="mobile-member-list" id="mobile-member-list"></div>
+  </div>
+</div>
+
+<!-- knocked down -->
+<div id="screen-knocked" class="screen">
+  <div class="window dialog-window">
+    <div class="title-bar">
+      <div class="title-text"><div class="title-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div> pillowfort</div>
+      <div class="title-buttons">
+        <div class="title-btn title-btn-close">&#x2715;</div>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="dialog-icon">
+        <div class="warn-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="5" r="3.5" fill="#FFD700"/><path d="M18 9L14 20" stroke="#FFD700" stroke-width="3" stroke-linecap="round"/><path d="M17 12L22 16L26 13" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12L10 14L8 11" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L20 26L24 25" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 20L8 25L5 28" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="dialog-text">
+          <strong>Fort has been knocked down.</strong>
+          <p class="muted" id="knock-reason"></p>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="xp-btn xp-btn-primary" id="btn-home">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- sound ---
+let audioCtx;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function beep(freq, dur, delay = 0, vol = 0.1) {
+  try {
+    const ctx = ensureAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime + delay;
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.start(t);
+    osc.stop(t + dur);
+  } catch {}
+}
+
+function doorOpen() {
+  beep(440, 0.1, 0, 0.08);
+  beep(554, 0.1, 0.08, 0.08);
+  beep(659, 0.18, 0.16, 0.08);
+}
+
+function doorClose() {
+  beep(659, 0.1, 0, 0.08);
+  beep(554, 0.1, 0.08, 0.08);
+  beep(440, 0.18, 0.16, 0.08);
+}
+
+function msgSound() {
+  beep(880, 0.06, 0, 0.06);
+  beep(1109, 0.1, 0.05, 0.06);
+}
+
+function sendSound() {
+  beep(660, 0.04, 0, 0.04);
+}
+
+// --- name colors (AIM style) ---
+const nameColors = ['#0000FF','#FF0000','#008000','#800080','#D26900','#008080','#4B0082','#B22222','#006400','#8B008B'];
+function nameColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return nameColors[Math.abs(h) % nameColors.length];
+}
+
+// --- buddy icon color ---
+function buddyIconColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue}, 55%, 65%)`;
+}
+
+// --- time ---
+function timeStr() {
+  const d = new Date();
+  let h = d.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s} ${ap}`;
+}
+
+// --- state ---
+const state = {
+  name: localStorage.getItem('pillowfort-name') || '',
+  ws: null,
+  roomId: null,
+  password: null,
+  isHost: false,
+  members: [],
+  buddyListCollapsed: false,
+  mutedNames: new Set(),
+  reconnecting: false,
+  reconnectAttempts: 0,
+  reconnectTimer: null,
+  intentionalLeave: false,
+  wakeLock: null,
+};
+
+const formatState = { bold: false, italic: false, underline: false, color: null };
+
+// --- dom refs ---
+const $ = (id) => document.getElementById(id);
+const nameInput = $('name-input');
+const messagesEl = $('messages');
+const msgInput = $('msg-input');
+const memberNamesEl = $('member-names');
+
+// --- screens ---
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(`screen-${id}`).classList.add('active');
+  if (id === 'chat') msgInput.focus();
+}
+
+// --- error ---
+let errorTimer;
+function showError(msg) {
+  const el = $('error-banner');
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => el.classList.remove('visible'), 3000);
+}
+
+// --- toast ---
+let toastTimer;
+function showToast(text) {
+  const el = $('copy-toast');
+  el.textContent = text || 'Copied!';
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('visible'), 1800);
+}
+
+function showCopyToast() {
+  showToast('Copied!');
+}
+
+// --- room id ---
+function generateRoomId() {
+  const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 6; i++) id += c[Math.floor(Math.random() * c.length)];
+  return id;
+}
+
+// --- websocket ---
+function connect(roomId, onOpen) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  state.ws = new WebSocket(`${proto}//${location.host}/ws?room=${roomId}`);
+  state.ws.onopen = onOpen;
+  state.ws.onclose = () => onDisconnect();
+  state.ws.onmessage = (e) => {
+    try { handleMessage(JSON.parse(e.data)); } catch {}
+  };
+}
+
+function send(type, payload = {}) {
+  if (state.ws?.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ type, ...payload }));
+  }
+}
+
+// --- message handlers ---
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'room-created': onRoomCreated(msg); break;
+    case 'joined':       onJoined(msg); break;
+    case 'rejoined':     onRejoined(msg); break;
+    case 'message':      onMessage(msg); break;
+    case 'member-joined': onMemberJoined(msg); break;
+    case 'member-left':  onMemberLeft(msg); break;
+    case 'member-away':  onMemberAway(msg); break;
+    case 'member-back':  onMemberBack(msg); break;
+    case 'new-host':     onNewHost(msg); break;
+    case 'host-offer':   onHostOffer(msg); break;
+    case 'host-ducked':  onHostDucked(msg); break;
+    case 'host-offered': break;
+    case 'knocked-down': onKnockedDown(msg); break;
+    case 'typing':       onTypingReceived(msg); break;
+    case 'error':        onError(msg); break;
+  }
+}
+
+function onRoomCreated(msg) {
+  state.roomId = msg.room;
+  state.isHost = true;
+  state.members = [state.name];
+  show('chat');
+  renderHeader();
+  renderMembers();
+  messagesEl.innerHTML = '';
+  addSystem(`Welcome to the fort.`);
+  addSystem(`Fort: ${msg.room} \u2014 Password: ${state.password}`);
+  addSystem(`Share the fort code and password to let your friends in.`);
+  doorOpen();
+  requestWakeLock();
+}
+
+function onJoined(msg) {
+  const renamed = msg.name && msg.name !== state.name;
+  if (renamed) state.name = msg.name;
+  state.roomId = msg.room;
+  state.isHost = false;
+  state.members = msg.members;
+  show('chat');
+  renderHeader();
+  renderMembers();
+  messagesEl.innerHTML = '';
+  if (renamed) addSystem(`That name's taken \u2014 you're ${state.name} now`);
+  addSystem(`You're inside. ${msg.members.length} people in the fort.`);
+  doorOpen();
+  requestWakeLock();
+}
+
+function onMessage(msg) {
+  addChat(msg.from, msg.text, msg.style);
+  if (!state.mutedNames.has(msg.from)) msgSound();
+  $('typing-indicator').textContent = '';
+}
+
+// --- typing ---
+let typingTimeout;
+let lastTypingSent = 0;
+
+function onTypingReceived(msg) {
+  $('typing-indicator').textContent = `\u270E ${msg.name} is typing...`;
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => {
+    $('typing-indicator').textContent = '';
+  }, 3000);
+}
+
+function onMemberJoined(msg) {
+  state.members.push(msg.name);
+  renderHeader();
+  renderMembers();
+  addSystem(`${msg.name} entered the fort.`);
+  doorOpen();
+}
+
+function onMemberLeft(msg) {
+  state.members = state.members.filter(n => n !== msg.name);
+  state.mutedNames.delete(msg.name);
+  renderHeader();
+  renderMembers();
+  addSystem(`${msg.name} left the fort.`);
+  doorClose();
+}
+
+function onMemberAway(msg) {
+  addSystem(`${msg.name} lost connection...`);
+}
+
+function onMemberBack(msg) {
+  if (!state.members.includes(msg.name)) state.members.push(msg.name);
+  renderHeader();
+  renderMembers();
+  addSystem(`${msg.name} reconnected.`);
+}
+
+function onRejoined(msg) {
+  state.reconnecting = false;
+  state.reconnectAttempts = 0;
+  $('reconnect-banner').classList.remove('visible');
+  state.roomId = msg.room;
+  state.isHost = msg.isHost;
+  state.name = msg.name;
+  state.members = msg.members;
+  renderHeader();
+  renderMembers();
+  addSystem('Reconnected!');
+  requestWakeLock();
+}
+
+function onHostOffer(msg) {
+  $('host-offer-text').textContent = `${msg.oldHost} threw a pillow at you!`;
+  $('host-offer-dialog').style.display = 'flex';
+}
+
+function onHostDucked(msg) {
+  addSystem(`${msg.name} ducked.`);
+}
+
+function onNewHost(msg) {
+  $('host-offer-dialog').style.display = 'none';
+
+  // reorder members: new host goes first
+  state.members = state.members.filter(n => n !== msg.name);
+  state.members.unshift(msg.name);
+
+  if (msg.name === state.name) {
+    state.isHost = true;
+  }
+
+  renderHeader();
+  renderMembers();
+  addSystem(`${msg.name} caught the pillow. they're the new host.`);
+}
+
+function onKnockedDown(msg) {
+  $('knock-reason').textContent = msg.reason;
+  show('knocked');
+  doorClose();
+  cleanup();
+}
+
+function onError(msg) {
+  if (!state.roomId) cleanup();
+  showError(msg.message);
+}
+
+function onDisconnect() {
+  if (state.intentionalLeave || !state.roomId) {
+    if (state.roomId) {
+      $('knock-reason').textContent = 'The fort collapsed.';
+      show('knocked');
+    }
+    cleanup();
+    return;
+  }
+  // unexpected disconnect — try reconnecting
+  if (!state.reconnecting) {
+    state.reconnecting = true;
+    state.reconnectAttempts = 0;
+    attemptReconnect();
+  }
+}
+
+function cleanup() {
+  try { state.ws?.close(); } catch {}
+  state.ws = null;
+  state.roomId = null;
+  state.password = null;
+  state.isHost = false;
+  state.members = [];
+  state.mutedNames.clear();
+  state.reconnecting = false;
+  state.reconnectAttempts = 0;
+  state.intentionalLeave = false;
+  clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
+  $('typing-indicator').textContent = '';
+  $('host-offer-dialog').style.display = 'none';
+  $('reconnect-banner').classList.remove('visible');
+  releaseWakeLock();
+}
+
+// --- reconnect ---
+function attemptReconnect() {
+  if (state.reconnectAttempts >= 3) {
+    // give up
+    $('reconnect-banner').classList.remove('visible');
+    $('knock-reason').textContent = 'Lost connection to the fort.';
+    show('knocked');
+    cleanup();
+    return;
+  }
+
+  const delay = Math.pow(2, state.reconnectAttempts) * 1000; // 1s, 2s, 4s
+  state.reconnectAttempts++;
+  $('reconnect-banner').textContent = `Reconnecting... (attempt ${state.reconnectAttempts}/3)`;
+  $('reconnect-banner').classList.add('visible');
+
+  state.reconnectTimer = setTimeout(() => {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/ws?room=${state.roomId}`);
+
+    ws.onopen = () => {
+      state.ws = ws;
+      ws.onmessage = (e) => {
+        try { handleMessage(JSON.parse(e.data)); } catch {}
+      };
+      ws.onclose = () => onDisconnect();
+      // send rejoin
+      ws.send(JSON.stringify({ type: 'rejoin', name: state.name, password: state.password, room: state.roomId }));
+    };
+
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      if (state.reconnecting) attemptReconnect();
+    };
+  }, delay);
+}
+
+// --- wake lock ---
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      state.wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch {}
+}
+
+function releaseWakeLock() {
+  try { state.wakeLock?.release(); } catch {}
+  state.wakeLock = null;
+}
+
+// visibility change — check ws health
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.roomId) {
+    requestWakeLock();
+    if (state.ws?.readyState !== WebSocket.OPEN && !state.reconnecting) {
+      state.reconnecting = true;
+      state.reconnectAttempts = 0;
+      attemptReconnect();
+    }
+  }
+});
+
+// --- render ---
+function renderHeader() {
+  $('room-code').textContent = state.roomId;
+  const n = state.members.length;
+  $('member-count').textContent = `${n} inside`;
+  $('chat-info-text').textContent = `You are chatting with ${n === 1 ? '0 buddies' : (n - 1) + (n - 1 === 1 ? ' buddy' : ' buddies')}`;
+  $('btn-knock-down').hidden = !state.isHost;
+  $('btn-leave-room').hidden = state.isHost;
+  updateMenuLeave();
+}
+
+function renderMembers() {
+  $('buddy-count').textContent = state.members.length;
+  memberNamesEl.innerHTML = '';
+  state.members.forEach((name, i) => {
+    const isHost = i === 0;
+    const isMuted = state.mutedNames.has(name);
+    const el = document.createElement('div');
+    el.className = 'member-entry' + (isHost ? ' is-host' : '') + (isMuted ? ' is-muted' : '');
+
+    const icon = document.createElement('span');
+    icon.className = 'buddy-icon';
+    icon.style.background = buddyIconColor(name);
+
+    const dot = document.createElement('span');
+    dot.className = 'member-dot';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'member-name';
+    nameEl.textContent = name;
+
+    el.appendChild(icon);
+    el.appendChild(dot);
+
+    if (isHost) {
+      const badge = document.createElement('span');
+      badge.className = 'host-badge';
+      badge.textContent = '\u2605';
+      el.appendChild(badge);
+    }
+
+    el.appendChild(nameEl);
+    memberNamesEl.appendChild(el);
+  });
+}
+
+function addChat(from, text, style) {
+  if (state.mutedNames.has(from)) return;
+
+  const el = document.createElement('div');
+  el.className = 'msg';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'msg-name';
+  nameEl.style.color = nameColor(from);
+  nameEl.textContent = from;
+
+  const timeEl = document.createElement('span');
+  timeEl.className = 'msg-time';
+  timeEl.textContent = ` (${timeStr()})`;
+
+  const colon = document.createTextNode(': ');
+
+  // build formatted text
+  let textNode = document.createElement('span');
+  textNode.textContent = text;
+
+  if (style) {
+    if (style.color) textNode.style.color = style.color;
+    if (style.bold) { const b = document.createElement('b'); b.appendChild(textNode); textNode = b; }
+    if (style.italic) { const i = document.createElement('i'); i.appendChild(textNode); textNode = i; }
+    if (style.underline) { const u = document.createElement('u'); u.appendChild(textNode); textNode = u; }
+  }
+
+  const textWrap = document.createElement('span');
+  textWrap.className = 'msg-text';
+  textWrap.appendChild(textNode);
+
+  el.append(nameEl, timeEl, colon, textWrap);
+  messagesEl.appendChild(el);
+  scroll();
+}
+
+function addSystem(text) {
+  const el = document.createElement('div');
+  el.className = 'msg msg-system';
+
+  const label = document.createElement('span');
+  label.className = 'sys-label';
+  label.textContent = 'pillowtalk';
+
+  const rest = document.createTextNode(`: ${text}`);
+
+  el.append(label, rest);
+  messagesEl.appendChild(el);
+  scroll();
+}
+
+function scroll() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// --- events ---
+
+// home
+$('btn-setup').onclick = () => {
+  ensureAudio();
+  const name = nameInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
+  state.name = name;
+  localStorage.setItem('pillowfort-name', name);
+  show('setup');
+  $('setup-password').value = '';
+  $('setup-password').focus();
+};
+
+$('btn-join').onclick = () => {
+  ensureAudio();
+  const name = nameInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
+  state.name = name;
+  localStorage.setItem('pillowfort-name', name);
+  show('join');
+  $('join-room').value = '';
+  $('join-password').value = '';
+  $('join-room').focus();
+};
+
+nameInput.onkeydown = (e) => {
+  if (e.key === 'Enter') $('btn-setup').click();
+};
+
+// setup
+$('btn-create').onclick = () => {
+  const password = $('setup-password').value.trim();
+  if (!password) { $('setup-password').focus(); return; }
+  state.password = password;
+  const roomId = generateRoomId();
+  connect(roomId, () => send('set-up', { name: state.name, password }));
+};
+
+$('setup-password').onkeydown = (e) => {
+  if (e.key === 'Enter') $('btn-create').click();
+};
+
+$('btn-back-setup').onclick = () => show('home');
+
+// join
+$('btn-enter').onclick = () => {
+  const room = $('join-room').value.trim();
+  const password = $('join-password').value.trim();
+  if (!room) { $('join-room').focus(); return; }
+  if (!password) { $('join-password').focus(); return; }
+  state.password = password;
+  connect(room, () => send('join', { name: state.name, password, room }));
+};
+
+$('join-password').onkeydown = (e) => {
+  if (e.key === 'Enter') $('btn-enter').click();
+};
+
+$('btn-back-join').onclick = () => show('home');
+
+// chat
+$('btn-send').onclick = () => {
+  const text = msgInput.value.trim();
+  if (!text) return;
+  const style = {};
+  if (formatState.bold) style.bold = true;
+  if (formatState.italic) style.italic = true;
+  if (formatState.underline) style.underline = true;
+  if (formatState.color) style.color = formatState.color;
+  send('chat', { text, ...(Object.keys(style).length ? { style } : {}) });
+  sendSound();
+  msgInput.value = '';
+  msgInput.focus();
+};
+
+msgInput.onkeydown = (e) => {
+  if (e.key === 'Enter') $('btn-send').click();
+};
+
+msgInput.oninput = () => {
+  const now = Date.now();
+  if (now - lastTypingSent > 2000) {
+    send('typing');
+    lastTypingSent = now;
+  }
+};
+
+$('btn-knock-down').onclick = () => {
+  state.intentionalLeave = true;
+  send('knock-down');
+};
+
+$('btn-leave-room').onclick = () => {
+  state.intentionalLeave = true;
+  send('leave');
+  cleanup();
+  show('home');
+};
+
+// copy room code
+$('room-code').onclick = () => {
+  if (state.roomId) {
+    navigator.clipboard.writeText(state.roomId).then(showCopyToast);
+  }
+};
+
+// --- member picker ---
+function showMemberPicker(title, filterFn, onPick) {
+  const overlay = $('member-picker-overlay');
+  $('member-picker-title').textContent = title;
+  const body = $('member-picker-body');
+  body.innerHTML = '';
+  const filtered = state.members.filter(filterFn);
+  if (filtered.length === 0) {
+    body.innerHTML = '<div style="padding:8px;font-size:11px;color:#888;">No one to pick.</div>';
+  }
+  filtered.forEach(name => {
+    const item = document.createElement('div');
+    item.className = 'member-picker-item';
+    const icon = document.createElement('span');
+    icon.className = 'buddy-icon';
+    icon.style.background = buddyIconColor(name);
+    const label = document.createElement('span');
+    label.textContent = name;
+    item.append(icon, label);
+    item.onclick = () => {
+      overlay.classList.remove('open');
+      onPick(name);
+    };
+    body.appendChild(item);
+  });
+  overlay.classList.add('open');
+}
+
+$('member-picker-close').onclick = () => $('member-picker-overlay').classList.remove('open');
+$('member-picker-overlay').onclick = (e) => {
+  if (e.target === $('member-picker-overlay')) $('member-picker-overlay').classList.remove('open');
+};
+
+// --- toss pillow ---
+$('aim-btn-toss').onclick = () => {
+  if (!state.isHost) {
+    showToast('Only the host can toss the pillow');
+    return;
+  }
+  showMemberPicker('Toss Pillow to...', n => n !== state.name, (target) => {
+    send('toss-pillow', { target });
+    addSystem(`You tossed the pillow to ${target}!`);
+  });
+};
+
+// --- mute ---
+$('aim-btn-mute').onclick = () => {
+  showMemberPicker('Mute / Unmute', n => n !== state.name, (name) => {
+    if (state.mutedNames.has(name)) {
+      state.mutedNames.delete(name);
+      showToast(`Unmuted ${name}`);
+    } else {
+      state.mutedNames.add(name);
+      showToast(`Muted ${name}`);
+    }
+    renderMembers();
+  });
+};
+
+// --- AIM action bar ---
+$('aim-btn-info').onclick = () => {
+  if (state.roomId) {
+    showToast(`fort: ${state.roomId} \u00B7 ${state.members.length} inside`);
+  }
+};
+
+$('aim-btn-invite').onclick = () => {
+  if (state.roomId && state.password) {
+    const text = `pillowfort \u2014 fort: ${state.roomId} / password: ${state.password}`;
+    navigator.clipboard.writeText(text).then(showCopyToast);
+  } else if (state.roomId) {
+    navigator.clipboard.writeText(state.roomId).then(showCopyToast);
+  }
+};
+
+// --- format toolbar ---
+const fmtColors = ['#FF0000','#0000FF','#008000','#FF8C00','#800080','#000000','#FF69B4','#8B4513'];
+const emojis = ['\u{1F60A}','\u{1F602}','\u{1F60D}','\u{1F44D}','\u{1F44B}','\u{1F389}','\u{1F525}','\u{2764}\uFE0F'];
+
+// populate color palette
+(function() {
+  const pal = $('color-palette');
+  fmtColors.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-palette-swatch';
+    sw.style.background = c;
+    sw.onclick = (e) => {
+      e.stopPropagation();
+      formatState.color = formatState.color === c ? null : c;
+      $('color-swatch-display').style.background = formatState.color || '#FF0000';
+      pal.classList.remove('open');
+    };
+    pal.appendChild(sw);
+  });
+})();
+
+// populate emoji picker
+(function() {
+  const picker = $('emoji-picker');
+  emojis.forEach(em => {
+    const btn = document.createElement('span');
+    btn.className = 'emoji-pick';
+    btn.textContent = em;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      msgInput.value += em;
+      msgInput.focus();
+      picker.classList.remove('open');
+    };
+    picker.appendChild(btn);
+  });
+})();
+
+$('fmt-bold').onclick = () => {
+  formatState.bold = !formatState.bold;
+  $('fmt-bold').classList.toggle('active', formatState.bold);
+};
+
+$('fmt-italic').onclick = () => {
+  formatState.italic = !formatState.italic;
+  $('fmt-italic').classList.toggle('active', formatState.italic);
+};
+
+$('fmt-underline').onclick = () => {
+  formatState.underline = !formatState.underline;
+  $('fmt-underline').classList.toggle('active', formatState.underline);
+};
+
+$('fmt-color').onclick = (e) => {
+  e.stopPropagation();
+  $('emoji-picker').classList.remove('open');
+  $('color-palette').classList.toggle('open');
+};
+
+$('fmt-smiley').onclick = (e) => {
+  e.stopPropagation();
+  $('color-palette').classList.remove('open');
+  $('emoji-picker').classList.toggle('open');
+};
+
+// close popups on outside click
+document.addEventListener('click', () => {
+  $('color-palette').classList.remove('open');
+  $('emoji-picker').classList.remove('open');
+});
+
+// --- menu bar ---
+const menuItems = ['menu-file', 'menu-edit', 'menu-people'];
+let menuOpen = false;
+
+function closeAllMenus() {
+  menuItems.forEach(id => $(id).classList.remove('open'));
+  menuOpen = false;
+}
+
+menuItems.forEach(id => {
+  $(id).onclick = (e) => {
+    e.stopPropagation();
+    if ($(id).classList.contains('open')) {
+      closeAllMenus();
+    } else {
+      closeAllMenus();
+      $(id).classList.add('open');
+      menuOpen = true;
+    }
+  };
+  $(id).onmouseenter = () => {
+    if (menuOpen) {
+      closeAllMenus();
+      $(id).classList.add('open');
+      menuOpen = true;
+    }
+  };
+});
+
+document.addEventListener('click', () => closeAllMenus());
+
+// update File menu leave/knock item
+function updateMenuLeave() {
+  const el = $('menu-leave');
+  if (state.isHost) {
+    el.textContent = 'Knock Down Fort';
+  } else {
+    el.textContent = 'Leave Fort';
+  }
+}
+
+$('menu-save-chat').onclick = (e) => {
+  e.stopPropagation();
+  closeAllMenus();
+  const msgs = messagesEl.querySelectorAll('.msg');
+  let text = '';
+  msgs.forEach(m => { text += m.textContent + '\n'; });
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pillowfort-${state.roomId || 'chat'}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('menu-leave').onclick = (e) => {
+  e.stopPropagation();
+  closeAllMenus();
+  if (state.isHost) {
+    $('btn-knock-down').click();
+  } else {
+    $('btn-leave-room').click();
+  }
+};
+
+$('menu-copy-code').onclick = (e) => {
+  e.stopPropagation();
+  closeAllMenus();
+  if (state.roomId) {
+    navigator.clipboard.writeText(state.roomId).then(showCopyToast);
+  }
+};
+
+$('menu-clear-msgs').onclick = (e) => {
+  e.stopPropagation();
+  closeAllMenus();
+  messagesEl.innerHTML = '';
+  addSystem('Messages cleared.');
+};
+
+$('menu-toggle-buddies').onclick = (e) => {
+  e.stopPropagation();
+  closeAllMenus();
+  if (window.innerWidth <= 600) {
+    showMobileMemberOverlay();
+  } else {
+    const panel = document.querySelector('.member-panel');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  }
+};
+
+// --- mobile member overlay ---
+function showMobileMemberOverlay() {
+  const overlay = $('mobile-member-overlay');
+  const list = $('mobile-member-list');
+  $('mobile-buddy-count').textContent = state.members.length;
+  list.innerHTML = '';
+  state.members.forEach((name, i) => {
+    const isHost = i === 0;
+    const isMuted = state.mutedNames.has(name);
+    const el = document.createElement('div');
+    el.className = 'member-entry' + (isHost ? ' is-host' : '') + (isMuted ? ' is-muted' : '');
+
+    const icon = document.createElement('span');
+    icon.className = 'buddy-icon';
+    icon.style.background = buddyIconColor(name);
+
+    const dot = document.createElement('span');
+    dot.className = 'member-dot';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'member-name';
+    nameEl.textContent = name;
+
+    el.appendChild(icon);
+    el.appendChild(dot);
+
+    if (isHost) {
+      const badge = document.createElement('span');
+      badge.className = 'host-badge';
+      badge.textContent = '\u2605';
+      el.appendChild(badge);
+    }
+
+    el.appendChild(nameEl);
+    list.appendChild(el);
+  });
+  overlay.classList.add('open');
+}
+
+$('mobile-member-close').onclick = () => $('mobile-member-overlay').classList.remove('open');
+$('mobile-member-overlay').onclick = (e) => {
+  if (e.target === $('mobile-member-overlay')) $('mobile-member-overlay').classList.remove('open');
+};
+
+// buddy list collapse
+$('buddy-group-toggle').onclick = () => {
+  state.buddyListCollapsed = !state.buddyListCollapsed;
+  $('buddy-group-toggle').classList.toggle('collapsed', state.buddyListCollapsed);
+  memberNamesEl.classList.toggle('collapsed', state.buddyListCollapsed);
+};
+
+// host offer
+$('btn-catch').onclick = () => {
+  $('host-offer-dialog').style.display = 'none';
+  send('accept-host');
+};
+
+$('btn-duck').onclick = () => {
+  $('host-offer-dialog').style.display = 'none';
+  send('reject-host');
+};
+
+// knocked
+$('btn-home').onclick = () => show('home');
+
+// init
+nameInput.value = state.name;
+if (state.name) nameInput.select();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "pillowfort",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:local": "bun --watch server.ts",
+    "deploy": "wrangler deploy",
+    "start": "bun server.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "wrangler": "^3.99.0"
+  }
+}
