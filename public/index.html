@@ -932,6 +932,131 @@ body {
   100% { transform: scale(1); }
 }
 
+/* --- game overlay (shared) --- */
+.game-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.4);
+  align-items: center;
+  justify-content: center;
+}
+.game-overlay.open { display: flex; }
+
+.game-dialog {
+  background: #ECE9D8;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  min-width: 260px;
+  max-width: 340px;
+  animation: dialog-pop 0.2s ease-out;
+}
+
+@keyframes dialog-pop {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.game-dialog .title-bar { cursor: default; }
+.game-dialog-body { padding: 16px; text-align: center; font-size: 12px; color: #333; }
+.game-dialog-body .btn-row { margin-top: 14px; }
+
+/* --- vote banner --- */
+.vote-banner {
+  display: none;
+  background: linear-gradient(180deg, #FFF8E8, #F5E6C8);
+  border: 1px solid #C0A000;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 6px 10px;
+  font-size: 12px;
+  color: #333;
+  text-align: center;
+  animation: dialog-pop 0.3s ease-out;
+}
+.vote-banner.visible { display: block; }
+.vote-banner .vote-target { font-weight: bold; color: #B22222; }
+.vote-tally { font-size: 11px; color: #666; margin: 6px 0; }
+.vote-timer { font-size: 10px; color: #999; }
+
+/* --- rps picks --- */
+.rps-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  font-size: 36px;
+  border: 2px solid #ACA899;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  margin: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rps-pick:hover { border-color: #316AC5; background: #E8F0FE; }
+.rps-pick.selected { border-color: #316AC5; background: #D4E8FC; }
+
+/* --- ttt board --- */
+.ttt-board {
+  display: grid;
+  grid-template-columns: repeat(3, 60px);
+  grid-template-rows: repeat(3, 60px);
+  gap: 3px;
+  margin: 12px auto;
+  width: fit-content;
+  background: #333;
+  border-radius: 4px;
+  padding: 3px;
+}
+.ttt-cell {
+  width: 60px;
+  height: 60px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 2px;
+}
+.ttt-cell:hover { background: #F0F0F0; }
+.ttt-cell.x { color: #316AC5; }
+.ttt-cell.o { color: #B22222; }
+.ttt-cell.win { background: #FFD700; }
+
+/* --- saboteur --- */
+.sab-role-badge {
+  display: none;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+  margin-left: 6px;
+}
+.sab-role-badge.visible { display: inline-block; }
+.sab-role-badge.saboteur { background: #B22222; color: #fff; }
+.sab-role-badge.defender { background: #316AC5; color: #fff; }
+
+.sab-strike-btn {
+  display: none;
+  background: #B22222;
+  color: #fff;
+  border: 1px solid #800;
+  padding: 3px 10px;
+  font-size: 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: Tahoma, sans-serif;
+  animation: badge-pop 0.3s ease-out;
+}
+.sab-strike-btn.visible { display: inline-block; }
+.sab-strike-btn:hover { background: #CC3333; }
+
 /* --- breakout game canvas --- */
 #game-canvas {
   position: absolute;
@@ -1245,14 +1370,28 @@ body {
       </span>
     </div>
     <div class="aim-action-bar">
-      <button class="aim-action-btn" id="aim-btn-toss" title="Toss Pillow">&#x1F6CF; Toss Pillow</button>
+      <button class="aim-action-btn" id="aim-btn-toss" title="Toss Pillow">&#x1F6CF; Toss</button>
       <button class="aim-action-btn" id="aim-btn-mute" title="Mute">&#x1F507; Mute</button>
+      <button class="aim-action-btn" id="aim-btn-vote" title="Pillow Fight">&#x2694; Vote</button>
+      <button class="aim-action-btn" id="aim-btn-rps" title="Rock Paper Scissors">&#x270A; RPS</button>
+      <button class="aim-action-btn" id="aim-btn-ttt" title="Tic-Tac-Toe">&#x2B1C; TTT</button>
+      <button class="aim-action-btn" id="aim-btn-sab" title="Secret Saboteur">&#x1F575; Saboteur</button>
+      <button class="aim-action-btn" id="aim-btn-koth" title="Challenge the Host">&#x1F451; Dethrone</button>
       <button class="aim-action-btn" id="aim-btn-info" title="Info">&#x2139; Info</button>
       <button class="aim-action-btn" id="aim-btn-invite" title="Copy Invite">&#x2709; Invite</button>
     </div>
     <div class="chat-content">
       <div class="chat-main">
         <div class="chat-info-text" id="chat-info-text"></div>
+        <div class="vote-banner" id="vote-banner">
+          <div>&#x2694; <strong>PILLOW FIGHT!</strong> Vote to kick <span class="vote-target" id="vote-target-name"></span></div>
+          <div class="vote-tally" id="vote-tally"></div>
+          <div class="vote-timer" id="vote-timer"></div>
+          <div class="btn-row" id="vote-buttons">
+            <button class="xp-btn" id="vote-yes" style="background:linear-gradient(180deg,#fff,#D4E8D4);border-color:#060;">&#x2714; Kick</button>
+            <button class="xp-btn" id="vote-no" style="background:linear-gradient(180deg,#fff,#E8D4D4);border-color:#800;">&#x2718; Keep</button>
+          </div>
+        </div>
         <div id="messages"></div>
         <div id="typing-indicator"></div>
         <div class="format-toolbar">
@@ -1336,6 +1475,45 @@ body {
       <button class="mobile-member-close" id="mobile-member-close">&#x2715;</button>
     </div>
     <div class="mobile-member-list" id="mobile-member-list"></div>
+  </div>
+</div>
+
+<!-- rps overlay -->
+<div class="game-overlay" id="rps-overlay">
+  <div class="game-dialog">
+    <div class="title-bar"><div class="title-text">&#x270A; Rock Paper Scissors</div></div>
+    <div class="game-dialog-body" id="rps-body">
+      <div id="rps-prompt"></div>
+      <div id="rps-picks" style="margin:12px 0;"></div>
+      <div id="rps-waiting" style="display:none; color:#888; font-style:italic;">Waiting for opponent...</div>
+      <div id="rps-result-text" style="display:none; font-size:16px; font-weight:bold; margin:8px 0;"></div>
+      <div class="btn-row" id="rps-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ttt overlay -->
+<div class="game-overlay" id="ttt-overlay">
+  <div class="game-dialog" style="min-width:280px;">
+    <div class="title-bar"><div class="title-text">&#x2B1C; Tic-Tac-Toe</div></div>
+    <div class="game-dialog-body" id="ttt-body">
+      <div id="ttt-prompt"></div>
+      <div class="ttt-board" id="ttt-board"></div>
+      <div id="ttt-status" style="font-size:12px; margin-top:8px;"></div>
+      <div class="btn-row" id="ttt-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- saboteur vote overlay -->
+<div class="game-overlay" id="sab-vote-overlay">
+  <div class="game-dialog">
+    <div class="title-bar"><div class="title-text">&#x1F575; Saboteur Vote</div></div>
+    <div class="game-dialog-body" id="sab-vote-body">
+      <p>Who do you think is the saboteur?</p>
+      <div id="sab-vote-list" style="margin:10px 0;"></div>
+      <div id="sab-vote-timer" style="font-size:10px; color:#999;"></div>
+    </div>
   </div>
 </div>
 
@@ -1537,6 +1715,29 @@ function handleMessage(msg) {
     case 'knocked-down': onKnockedDown(msg); break;
     case 'typing':       onTypingReceived(msg); break;
     case 'draw':         onDrawReceived(msg); break;
+    // --- pvp games ---
+    case 'vote-started':   onVoteStarted(msg); break;
+    case 'vote-cast':      onVoteCast(msg); break;
+    case 'vote-result':    onVoteResult(msg); break;
+    case 'ejected':        onEjected(msg); break;
+    case 'rps-challenged': onRpsChallenged(msg); break;
+    case 'rps-pending':    break;
+    case 'rps-started':    onRpsStarted(msg); break;
+    case 'rps-declined':   onRpsDeclined(msg); break;
+    case 'rps-picked':     break;
+    case 'rps-result':     onRpsResult(msg); break;
+    case 'ttt-challenged': onTttChallenged(msg); break;
+    case 'ttt-pending':    break;
+    case 'ttt-started':    onTttStarted(msg); break;
+    case 'ttt-declined':   onTttDeclined(msg); break;
+    case 'ttt-update':     onTttUpdate(msg); break;
+    case 'sab-started':    onSabStarted(msg); break;
+    case 'sab-role':       onSabRole(msg); break;
+    case 'sab-vote-start': onSabVoteStart(msg); break;
+    case 'sab-vote-result':onSabVoteResult(msg); break;
+    case 'sab-strike':     onSabStrikeReceived(msg); break;
+    case 'koth-started':   onKothStarted(msg); break;
+    case 'koth-result':    onKothResult(msg); break;
     case 'error':        onError(msg); break;
   }
 }
@@ -3018,6 +3219,374 @@ function onDrawReceived(msg) {
 
   // remember last point for next batch
   _remoteDrawers[msg.from] = msg.pts[msg.pts.length - 1];
+}
+
+// ============ PILLOW FIGHT (vote to eject) ============
+
+$('aim-btn-vote').onclick = () => {
+  if (state.members.length < 3) return showToast('Need at least 3 people');
+  showMemberPicker('Vote to kick...', n => n !== state.name, (target) => {
+    send('start-vote', { target });
+  });
+};
+
+let voteTimer = null;
+function onVoteStarted(msg) {
+  addSystem(`\u2694 PILLOW FIGHT! ${msg.starter} wants to kick ${msg.target}!`);
+  $('vote-target-name').textContent = msg.target;
+  $('vote-tally').textContent = '';
+  $('vote-banner').classList.add('visible');
+
+  // show/hide vote buttons
+  const isTarget = msg.target === state.name;
+  $('vote-buttons').style.display = isTarget ? 'none' : '';
+
+  // countdown
+  let remaining = 30;
+  $('vote-timer').textContent = `${remaining}s remaining`;
+  clearInterval(voteTimer);
+  voteTimer = setInterval(() => {
+    remaining--;
+    $('vote-timer').textContent = `${remaining}s remaining`;
+    if (remaining <= 0) clearInterval(voteTimer);
+  }, 1000);
+}
+
+$('vote-yes').onclick = () => {
+  send('cast-vote', { vote: 'yes' });
+  $('vote-buttons').innerHTML = '<span style="color:#060;font-weight:bold;">Voted: Kick</span>';
+};
+
+$('vote-no').onclick = () => {
+  send('cast-vote', { vote: 'no' });
+  $('vote-buttons').innerHTML = '<span style="color:#800;font-weight:bold;">Voted: Keep</span>';
+};
+
+function onVoteCast(msg) {
+  $('vote-tally').textContent = `${msg.voter} voted`;
+}
+
+function onVoteResult(msg) {
+  clearInterval(voteTimer);
+  $('vote-banner').classList.remove('visible');
+  if (msg.ejected) {
+    addSystem(`\u{1F4A5} ${msg.target} was voted out! (${msg.yes}-${msg.no})`);
+  } else {
+    addSystem(`${msg.target} survives the pillow fight! (${msg.yes}-${msg.no})`);
+  }
+}
+
+function onEjected(msg) {
+  $('knock-reason').textContent = msg.reason || 'You were voted out!';
+  show('knocked');
+  doorClose();
+  cleanup();
+}
+
+// ============ ROCK PAPER SCISSORS ============
+
+const RPS_EMOJI = { rock: '\u{270A}', paper: '\u{1F590}', scissors: '\u{270C}\uFE0F' };
+let rpsState = null; // { p1, p2, koth }
+
+$('aim-btn-rps').onclick = () => {
+  showMemberPicker('Challenge to RPS...', n => n !== state.name, (target) => {
+    send('rps-challenge', { target });
+    addSystem(`You challenged ${target} to Rock Paper Scissors!`);
+  });
+};
+
+function onRpsChallenged(msg) {
+  const overlay = $('rps-overlay');
+  $('rps-prompt').textContent = `${msg.from} challenges you to RPS!`;
+  $('rps-picks').style.display = 'none';
+  $('rps-waiting').style.display = 'none';
+  $('rps-result-text').style.display = 'none';
+  $('rps-actions').innerHTML = '';
+  const acc = document.createElement('button');
+  acc.className = 'xp-btn xp-btn-primary';
+  acc.textContent = 'Accept';
+  acc.onclick = () => { send('rps-accept'); };
+  const dec = document.createElement('button');
+  dec.className = 'xp-btn';
+  dec.textContent = 'Decline';
+  dec.onclick = () => { send('rps-decline'); overlay.classList.remove('open'); };
+  $('rps-actions').append(acc, dec);
+  overlay.classList.add('open');
+}
+
+function showRpsPicks() {
+  $('rps-picks').style.display = 'block';
+  $('rps-picks').innerHTML = '';
+  $('rps-actions').innerHTML = '';
+  ['rock', 'paper', 'scissors'].forEach(pick => {
+    const btn = document.createElement('span');
+    btn.className = 'rps-pick';
+    btn.textContent = RPS_EMOJI[pick];
+    btn.title = pick;
+    btn.onclick = () => {
+      document.querySelectorAll('.rps-pick').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      send('rps-pick', { pick });
+      $('rps-waiting').style.display = 'block';
+    };
+    $('rps-picks').appendChild(btn);
+  });
+}
+
+function onRpsStarted(msg) {
+  rpsState = { p1: msg.p1, p2: msg.p2, koth: msg.koth };
+  addSystem(`\u{270A} ${msg.p1} vs ${msg.p2} — Rock Paper Scissors!${msg.koth ? ' (King of the Hill!)' : ''}`);
+  if (msg.p1 === state.name || msg.p2 === state.name) {
+    const overlay = $('rps-overlay');
+    const opponent = msg.p1 === state.name ? msg.p2 : msg.p1;
+    $('rps-prompt').textContent = `RPS vs ${opponent}${msg.koth ? ' \u{1F451} for the crown!' : ''} — pick your weapon!`;
+    $('rps-waiting').style.display = 'none';
+    $('rps-result-text').style.display = 'none';
+    overlay.classList.add('open');
+    showRpsPicks();
+  }
+}
+
+function onRpsDeclined(msg) {
+  $('rps-overlay').classList.remove('open');
+  addSystem(`${msg.from} declined the RPS challenge.`);
+}
+
+function onRpsResult(msg) {
+  const resultText = $('rps-result-text');
+  $('rps-picks').style.display = 'none';
+  $('rps-waiting').style.display = 'none';
+  resultText.style.display = 'block';
+
+  const line = `${msg.p1} ${RPS_EMOJI[msg.pick1]} vs ${RPS_EMOJI[msg.pick2]} ${msg.p2}`;
+  if (msg.winner) {
+    resultText.innerHTML = `${line}<br>${msg.winner} wins!${msg.koth ? ' \u{1F451}' : ''}`;
+    addSystem(`${line} \u2014 ${msg.winner} wins!${msg.koth ? ' \u{1F451}' : ''}`);
+  } else {
+    resultText.innerHTML = `${line}<br>Draw!`;
+    addSystem(`${line} \u2014 Draw!`);
+  }
+
+  $('rps-actions').innerHTML = '';
+  const close = document.createElement('button');
+  close.className = 'xp-btn';
+  close.textContent = 'OK';
+  close.onclick = () => $('rps-overlay').classList.remove('open');
+  $('rps-actions').appendChild(close);
+  rpsState = null;
+}
+
+// ============ TIC-TAC-TOE ============
+
+let tttState = null; // { p1, p2, myMark }
+
+$('aim-btn-ttt').onclick = () => {
+  showMemberPicker('Challenge to Tic-Tac-Toe...', n => n !== state.name, (target) => {
+    send('ttt-challenge', { target });
+    addSystem(`You challenged ${target} to Tic-Tac-Toe!`);
+  });
+};
+
+function onTttChallenged(msg) {
+  const overlay = $('ttt-overlay');
+  $('ttt-prompt').textContent = `${msg.from} challenges you to Tic-Tac-Toe!`;
+  $('ttt-board').innerHTML = '';
+  $('ttt-status').textContent = '';
+  $('ttt-actions').innerHTML = '';
+  const acc = document.createElement('button');
+  acc.className = 'xp-btn xp-btn-primary';
+  acc.textContent = 'Accept';
+  acc.onclick = () => { send('ttt-accept'); };
+  const dec = document.createElement('button');
+  dec.className = 'xp-btn';
+  dec.textContent = 'Decline';
+  dec.onclick = () => { send('ttt-decline'); overlay.classList.remove('open'); };
+  $('ttt-actions').append(acc, dec);
+  overlay.classList.add('open');
+}
+
+function onTttStarted(msg) {
+  addSystem(`\u2B1C ${msg.p1} (X) vs ${msg.p2} (O) — Tic-Tac-Toe!`);
+  if (msg.p1 === state.name || msg.p2 === state.name) {
+    tttState = { p1: msg.p1, p2: msg.p2, myMark: msg.p1 === state.name ? 'X' : 'O' };
+    $('ttt-overlay').classList.add('open');
+    $('ttt-actions').innerHTML = '';
+    renderTttBoard(msg.board, msg.turn, null, null);
+  }
+}
+
+function onTttDeclined(msg) {
+  $('ttt-overlay').classList.remove('open');
+  addSystem(`${msg.from} declined the Tic-Tac-Toe challenge.`);
+}
+
+function renderTttBoard(board, turn, winner, winCombo) {
+  if (!tttState) return;
+  const boardEl = $('ttt-board');
+  boardEl.innerHTML = '';
+  const currentMark = turn % 2 === 0 ? 'X' : 'O';
+  const myTurn = currentMark === tttState.myMark;
+  $('ttt-prompt').textContent = `${tttState.p1} (X) vs ${tttState.p2} (O)`;
+  $('ttt-status').textContent = winner ? '' : (myTurn ? 'Your turn!' : "Opponent's turn...");
+
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'ttt-cell' + (board[i] === 'X' ? ' x' : board[i] === 'O' ? ' o' : '');
+    cell.textContent = board[i] || '';
+    if (!board[i] && myTurn && !winner) {
+      cell.style.cursor = 'pointer';
+      cell.onclick = () => send('ttt-move', { cell: i });
+    }
+    boardEl.appendChild(cell);
+  }
+}
+
+function onTttUpdate(msg) {
+  if (!tttState) {
+    // spectator
+    if (msg.winner) addSystem(`\u2B1C ${msg.winner} wins Tic-Tac-Toe!`);
+    else if (msg.draw) addSystem('\u2B1C Tic-Tac-Toe ended in a draw!');
+    return;
+  }
+  renderTttBoard(msg.board, msg.turn, msg.winner, null);
+
+  if (msg.winner || msg.draw) {
+    if (msg.winner) {
+      const won = msg.winner === state.name;
+      $('ttt-status').textContent = won ? 'You win! \u{1F389}' : `${msg.winner} wins!`;
+      $('ttt-status').style.color = won ? '#060' : '#800';
+      addSystem(`\u2B1C ${msg.winner} wins Tic-Tac-Toe!`);
+    } else {
+      $('ttt-status').textContent = "It's a draw!";
+      $('ttt-status').style.color = '#666';
+      addSystem('\u2B1C Tic-Tac-Toe ended in a draw!');
+    }
+
+    // highlight winning cells
+    if (msg.winner) {
+      const board = msg.board;
+      const mark = tttState.myMark === 'X' && msg.winner === state.name ? 'X'
+                 : tttState.myMark === 'O' && msg.winner === state.name ? 'O'
+                 : tttState.myMark === 'X' ? 'O' : 'X';
+      const cells = $('ttt-board').children;
+      for (const combo of [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]) {
+        if (combo.every(i => board[i] === mark)) {
+          combo.forEach(i => cells[i].classList.add('win'));
+        }
+      }
+    }
+
+    $('ttt-actions').innerHTML = '';
+    const close = document.createElement('button');
+    close.className = 'xp-btn';
+    close.textContent = 'OK';
+    close.onclick = () => { $('ttt-overlay').classList.remove('open'); tttState = null; $('ttt-status').style.color = ''; };
+    $('ttt-actions').appendChild(close);
+  }
+}
+
+// ============ SECRET SABOTEUR ============
+
+let sabRole = null; // 'saboteur' | 'defender' | null
+
+$('aim-btn-sab').onclick = () => {
+  if (state.members.length < 4) return showToast('Need at least 4 people');
+  send('sab-start');
+};
+
+function onSabStarted(msg) {
+  addSystem(`\u{1F575} ${msg.starter} started Secret Saboteur mode! A saboteur lurks among you...`);
+  addSystem('The saboteur can strike at any time. Every 60s, you vote on who you think it is.');
+}
+
+function onSabRole(msg) {
+  sabRole = msg.role;
+  if (msg.role === 'saboteur') {
+    addSystem('\u{1F47F} YOU are the saboteur! Strike when the time is right, or stay hidden.');
+    showToast('You are the SABOTEUR!');
+    // show strike button in action bar
+    let btn = $('sab-strike-btn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'sab-strike-btn';
+      btn.className = 'sab-strike-btn visible';
+      btn.textContent = '\u{1F4A3} Strike!';
+      btn.onclick = () => { send('sab-strike'); btn.classList.remove('visible'); };
+      document.querySelector('.aim-action-bar').appendChild(btn);
+    } else {
+      btn.classList.add('visible');
+    }
+  } else {
+    addSystem('\u{1F6E1} You are a defender. Find the saboteur before they strike!');
+  }
+}
+
+function onSabVoteStart(msg) {
+  addSystem('\u{1F575} VOTE TIME! Who is the saboteur?');
+  const overlay = $('sab-vote-overlay');
+  const list = $('sab-vote-list');
+  list.innerHTML = '';
+  state.members.forEach(name => {
+    const btn = document.createElement('div');
+    btn.className = 'member-picker-item';
+    const icon = document.createElement('span');
+    icon.className = 'buddy-icon';
+    icon.style.background = buddyIconColor(name);
+    const label = document.createElement('span');
+    label.textContent = name;
+    btn.append(icon, label);
+    btn.onclick = () => {
+      send('sab-vote', { suspect: name });
+      overlay.classList.remove('open');
+      addSystem(`You voted for ${name}.`);
+    };
+    list.appendChild(btn);
+  });
+
+  let remaining = 30;
+  $('sab-vote-timer').textContent = `${remaining}s`;
+  const timer = setInterval(() => {
+    remaining--;
+    $('sab-vote-timer').textContent = `${remaining}s`;
+    if (remaining <= 0) clearInterval(timer);
+  }, 1000);
+
+  overlay.classList.add('open');
+}
+
+function onSabVoteResult(msg) {
+  $('sab-vote-overlay').classList.remove('open');
+  if (msg.wasSaboteur) {
+    addSystem(`\u{1F389} ${msg.accused} was the saboteur! The fort is safe!`);
+    sabRole = null;
+    const btn = $('sab-strike-btn');
+    if (btn) btn.classList.remove('visible');
+  } else {
+    addSystem(`\u274C ${msg.accused} was NOT the saboteur. The hunt continues...`);
+  }
+}
+
+function onSabStrikeReceived(msg) {
+  addSystem(`\u{1F4A5}\u{1F4A5}\u{1F4A5} ${msg.saboteur} was the SABOTEUR and struck! The fort trembles!`);
+  sabRole = null;
+  const btn = $('sab-strike-btn');
+  if (btn) btn.classList.remove('visible');
+}
+
+// ============ KING OF THE HILL ============
+
+$('aim-btn-koth').onclick = () => {
+  if (state.isHost) return showToast("You're already the host!");
+  send('koth-challenge');
+  addSystem('\u{1F451} You challenged the host for the crown!');
+};
+
+function onKothStarted(msg) {
+  addSystem(`\u{1F451} ${msg.challenger} challenges ${msg.host} for the crown! RPS duel!`);
+}
+
+function onKothResult(msg) {
+  addSystem(`\u{1F451} ${msg.winner} holds the crown! ${msg.loser} is defeated.`);
 }
 </script>
 </body>
