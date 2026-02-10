@@ -642,6 +642,32 @@ body {
 
 .chat-buttons .spacer { flex: 1; }
 
+.game-shortcuts {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.game-shortcut-btn {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-shortcut-btn:hover {
+  background: #E8E0D4;
+  border-color: #ACA899;
+}
+
 /* member panel */
 
 .member-panel {
@@ -1222,6 +1248,12 @@ body {
     flex-wrap: wrap;
   }
 
+  .game-shortcut-btn {
+    width: 32px;
+    height: 30px;
+    font-size: 16px;
+  }
+
   .chat-buttons .xp-btn {
     font-size: 12px;
     padding: 8px 12px;
@@ -1372,11 +1404,6 @@ body {
     <div class="aim-action-bar">
       <button class="aim-action-btn" id="aim-btn-toss" title="Toss Pillow">&#x1F6CF; Toss</button>
       <button class="aim-action-btn" id="aim-btn-mute" title="Mute">&#x1F507; Mute</button>
-      <button class="aim-action-btn" id="aim-btn-vote" title="Pillow Fight">&#x2694; Vote</button>
-      <button class="aim-action-btn" id="aim-btn-rps" title="Rock Paper Scissors">&#x270A; RPS</button>
-      <button class="aim-action-btn" id="aim-btn-ttt" title="Tic-Tac-Toe">&#x2B1C; TTT</button>
-      <button class="aim-action-btn" id="aim-btn-sab" title="Secret Saboteur">&#x1F575; Saboteur</button>
-      <button class="aim-action-btn" id="aim-btn-koth" title="Challenge the Host">&#x1F451; Dethrone</button>
       <button class="aim-action-btn" id="aim-btn-info" title="Info">&#x2139; Info</button>
       <button class="aim-action-btn" id="aim-btn-invite" title="Copy Invite">&#x2709; Invite</button>
     </div>
@@ -1413,6 +1440,13 @@ body {
           <input type="text" id="msg-input" placeholder="Type a message..." maxlength="2000" autocomplete="off">
           <div class="chat-buttons">
             <button class="xp-btn xp-btn-primary" id="btn-send">Send</button>
+            <div class="game-shortcuts">
+              <button class="game-shortcut-btn" id="aim-btn-vote" title="Pillow Fight">&#x2694;</button>
+              <button class="game-shortcut-btn" id="aim-btn-rps" title="Rock Paper Scissors">&#x270A;</button>
+              <button class="game-shortcut-btn" id="aim-btn-ttt" title="Tic-Tac-Toe">&#x2B1C;</button>
+              <button class="game-shortcut-btn" id="aim-btn-sab" title="Secret Saboteur">&#x1F575;</button>
+              <button class="game-shortcut-btn" id="aim-btn-koth" title="Dethrone">&#x1F451;</button>
+            </div>
             <div class="spacer"></div>
             <span id="member-count" style="font-size:11px; color:#666;"></span>
             <button class="xp-btn" id="btn-knock-down" hidden>Knock Down</button>
@@ -2615,7 +2649,7 @@ const breakoutGame = (() => {
   const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
   const PADDLE_H = 12, BALL_R = 6;
 
-  let bricks, paddle, ball, lives, running, animId, won, lost;
+  let bricks, paddle, ball, lives, running, animId, won, lost, score;
 
   function resize() {
     const rect = $('screen-chat').getBoundingClientRect();
@@ -2645,6 +2679,7 @@ const breakoutGame = (() => {
     paddle = { x: w / 2 - 40, y: h - barH, w: 80, h: PADDLE_H };
     ball = { x: w / 2, y: h - barH - 20, dx: 3, dy: -3 };
     lives = 3;
+    score = 0;
     won = false;
     lost = false;
   }
@@ -2696,12 +2731,14 @@ const breakoutGame = (() => {
     ctx.font = '11px Tahoma, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('\u2764'.repeat(lives), 8, 20);
+    ctx.textAlign = 'right';
+    ctx.fillText('Score: ' + score, w - 8, 20);
 
     if (won) {
       ctx.fillStyle = '#FFD700';
       ctx.font = 'bold 24px Tahoma, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('You win!', w / 2, h / 2);
+      ctx.fillText('You win! Score: ' + score, w / 2, h / 2);
       ctx.font = '12px Tahoma, sans-serif';
       ctx.fillStyle = '#fff';
       ctx.fillText('Click to play again', w / 2, h / 2 + 24);
@@ -2711,7 +2748,7 @@ const breakoutGame = (() => {
       ctx.fillStyle = '#FF6B6B';
       ctx.font = 'bold 24px Tahoma, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Game Over', w / 2, h / 2);
+      ctx.fillText('Game Over — Score: ' + score, w / 2, h / 2);
       ctx.font = '12px Tahoma, sans-serif';
       ctx.fillStyle = '#fff';
       ctx.fillText('Click to try again', w / 2, h / 2 + 24);
@@ -2747,6 +2784,7 @@ const breakoutGame = (() => {
       if (ball.x + BALL_R > b.x && ball.x - BALL_R < b.x + b.w &&
           ball.y + BALL_R > b.y && ball.y - BALL_R < b.y + b.h) {
         b.alive = false;
+        score++;
         ball.dy *= -1;
         beep(880, 0.03, 0, 0.03);
       }
@@ -2759,6 +2797,7 @@ const breakoutGame = (() => {
       beep(659, 0.1, 0.1, 0.06);
       beep(784, 0.1, 0.2, 0.06);
       beep(1047, 0.3, 0.3, 0.08);
+      send('chat', { text: '\uD83C\uDFAE cleared all 40 bricks in Breakout with ' + lives + ' lives remaining! \uD83C\uDFC6' });
       return;
     }
 
@@ -2769,6 +2808,7 @@ const breakoutGame = (() => {
         lost = true;
         beep(220, 0.3, 0, 0.08);
         beep(165, 0.4, 0.2, 0.08);
+        send('chat', { text: '\uD83C\uDFAE destroyed ' + score + '/40 bricks in Breakout before running out of lives' });
         return;
       } else {
         ball.x = w / 2;
@@ -3512,7 +3552,7 @@ function onSabRole(msg) {
       btn.className = 'sab-strike-btn visible';
       btn.textContent = '\u{1F4A3} Strike!';
       btn.onclick = () => { send('sab-strike'); btn.classList.remove('visible'); };
-      document.querySelector('.aim-action-bar').appendChild(btn);
+      document.querySelector('.game-shortcuts').appendChild(btn);
     } else {
       btn.classList.add('visible');
     }
