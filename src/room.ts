@@ -261,10 +261,12 @@ export class Room implements DurableObject {
     this.broadcast("host-offered", { name: msg.target }, targetWs);
   }
 
-  private onDraw(ws: WebSocket, msg: { color?: string; pts?: number[][] }) {
+  private onDraw(ws: WebSocket, msg: { color?: string; pts?: number[][]; s?: number }) {
     const a = this.att(ws);
     if (!a.name || !msg.pts?.length) return;
-    this.broadcast("draw", { from: a.name, color: msg.color, pts: msg.pts }, ws);
+    const payload: Record<string, unknown> = { from: a.name, color: msg.color, pts: msg.pts };
+    if (msg.s) payload.s = 1;
+    this.broadcast("draw", payload, ws);
   }
 
   private onAcceptHost(ws: WebSocket) {
