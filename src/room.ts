@@ -69,6 +69,7 @@ export class Room implements DurableObject {
         case "accept-host":  this.onAcceptHost(ws); break;
         case "reject-host":  await this.onRejectHost(ws); break;
         case "toss-pillow": this.onTossPillow(ws, msg); break;
+        case "draw":        this.onDraw(ws, msg); break;
       }
     } catch {}
   }
@@ -258,6 +259,12 @@ export class Room implements DurableObject {
     // send offer to specific target
     this.send(targetWs, "host-offer", { oldHost: a.name });
     this.broadcast("host-offered", { name: msg.target }, targetWs);
+  }
+
+  private onDraw(ws: WebSocket, msg: { color?: string; pts?: number[][] }) {
+    const a = this.att(ws);
+    if (!a.name || !msg.pts?.length) return;
+    this.broadcast("draw", { from: a.name, color: msg.color, pts: msg.pts }, ws);
   }
 
   private onAcceptHost(ws: WebSocket) {

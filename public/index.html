@@ -1536,6 +1536,7 @@ function handleMessage(msg) {
     case 'host-offered': break;
     case 'knocked-down': onKnockedDown(msg); break;
     case 'typing':       onTypingReceived(msg); break;
+    case 'draw':         onDrawReceived(msg); break;
     case 'error':        onError(msg); break;
   }
 }
@@ -2909,7 +2910,7 @@ const breakoutGame = (() => {
     cv.addEventListener('pointerleave', stop);
   });
 
-  // Also add drawing to chat screen (behind game canvas and window)
+  // Chat screen drawing — networked via WebSocket
   const chatScreen = $('screen-chat');
   const chatCv = document.createElement('canvas');
   chatCv.className = 'draw-canvas';
@@ -2919,6 +2920,8 @@ const breakoutGame = (() => {
   let drawing = false;
   const dCtx = chatCv.getContext('2d');
   let color = `hsl(${Math.floor(Math.random()*360)}, 80%, 65%)`;
+  let pendingPts = [];
+  let flushTimer = null;
 
   new ResizeObserver(() => {
     const r = chatScreen.getBoundingClientRect();
@@ -2926,30 +2929,65 @@ const breakoutGame = (() => {
     chatCv.height = r.height;
   }).observe(chatScreen);
 
+  function flushDraw() {
+    if (pendingPts.length > 0 && state.ws?.readyState === WebSocket.OPEN) {
+      send('draw', { color, pts: pendingPts });
+      pendingPts = [];
+    }
+    flushTimer = null;
+  }
+
   chatCv.addEventListener('pointerdown', (e) => {
     if (e.target !== chatCv) return;
     drawing = true;
     color = `hsl(${Math.floor(Math.random()*360)}, 80%, 65%)`;
-    dCtx.beginPath();
     const rect = chatCv.getBoundingClientRect();
-    dCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    dCtx.beginPath();
+    dCtx.moveTo(x * chatCv.width, y * chatCv.height);
     dCtx.strokeStyle = color;
     dCtx.lineWidth = 3;
     dCtx.lineCap = 'round';
     dCtx.lineJoin = 'round';
+    pendingPts = [[x, y]];
   });
 
   chatCv.addEventListener('pointermove', (e) => {
     if (!drawing) return;
     const rect = chatCv.getBoundingClientRect();
-    dCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    dCtx.lineTo(x * chatCv.width, y * chatCv.height);
     dCtx.stroke();
+    pendingPts.push([x, y]);
+    if (!flushTimer) flushTimer = setTimeout(flushDraw, 50);
   });
 
-  const stop = () => { drawing = false; };
-  chatCv.addEventListener('pointerup', stop);
-  chatCv.addEventListener('pointerleave', stop);
+  const stopDraw = () => {
+    if (drawing) { flushDraw(); drawing = false; }
+  };
+  chatCv.addEventListener('pointerup', stopDraw);
+  chatCv.addEventListener('pointerleave', stopDraw);
 })();
+
+// --- receive remote drawings ---
+function onDrawReceived(msg) {
+  const chatCv = document.querySelector('#screen-chat .draw-canvas');
+  if (!chatCv || !msg.pts?.length) return;
+  const ctx = chatCv.getContext('2d');
+  const w = chatCv.width, h = chatCv.height;
+  ctx.beginPath();
+  ctx.strokeStyle = msg.color || '#fff';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.moveTo(msg.pts[0][0] * w, msg.pts[0][1] * h);
+  for (let i = 1; i < msg.pts.length; i++) {
+    ctx.lineTo(msg.pts[i][0] * w, msg.pts[i][1] * h);
+  }
+  ctx.stroke();
+}
 </script>
 </body>
 </html>
