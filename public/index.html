@@ -2351,7 +2351,7 @@ const breakoutGame = (() => {
   const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
   const PADDLE_H = 12, BALL_R = 6;
 
-  let bricks, paddle, ball, lives, running, animId, won;
+  let bricks, paddle, ball, lives, running, animId, won, lost;
 
   function resize() {
     const rect = $('screen-chat').getBoundingClientRect();
@@ -2379,6 +2379,7 @@ const breakoutGame = (() => {
     ball = { x: w / 2, y: h - 50, dx: 3, dy: -3 };
     lives = 3;
     won = false;
+    lost = false;
   }
 
   function draw() {
@@ -2438,10 +2439,20 @@ const breakoutGame = (() => {
       ctx.fillStyle = '#fff';
       ctx.fillText('Click to play again', w / 2, h / 2 + 24);
     }
+
+    if (lost) {
+      ctx.fillStyle = '#FF6B6B';
+      ctx.font = 'bold 24px Tahoma, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', w / 2, h / 2);
+      ctx.font = '12px Tahoma, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Click to try again', w / 2, h / 2 + 24);
+    }
   }
 
   function update() {
-    if (won) return;
+    if (won || lost) return;
     const w = canvas.width, h = canvas.height;
     ball.x += ball.dx;
     ball.y += ball.dy;
@@ -2477,6 +2488,10 @@ const breakoutGame = (() => {
     // check win
     if (bricks.every(b => !b.alive)) {
       won = true;
+      beep(523, 0.1, 0, 0.06);
+      beep(659, 0.1, 0.1, 0.06);
+      beep(784, 0.1, 0.2, 0.06);
+      beep(1047, 0.3, 0.3, 0.08);
       return;
     }
 
@@ -2484,7 +2499,10 @@ const breakoutGame = (() => {
     if (ball.y - BALL_R > h) {
       lives--;
       if (lives <= 0) {
-        reset();
+        lost = true;
+        beep(220, 0.3, 0, 0.08);
+        beep(165, 0.4, 0.2, 0.08);
+        return;
       } else {
         ball.x = w / 2;
         ball.y = h - 50;
@@ -2505,7 +2523,7 @@ const breakoutGame = (() => {
     if (running) return;
     // defer to ensure canvas is visible and has dimensions
     requestAnimationFrame(() => {
-      if (!bricks || won || lives <= 0) reset();
+      if (!bricks || won || lost) reset();
       running = true;
       loop();
     });
@@ -2543,9 +2561,9 @@ const breakoutGame = (() => {
     if (keys['ArrowRight']) paddle.x = Math.min(canvas.width - paddle.w, paddle.x + 6);
   }, 16);
 
-  // click to restart after win
+  // click to restart after win/loss
   canvas.addEventListener('click', () => {
-    if (won) { reset(); }
+    if (won || lost) reset();
   });
 
   window.addEventListener('resize', () => {
