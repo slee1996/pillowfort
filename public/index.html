@@ -875,6 +875,49 @@ body {
 
 /* --- responsive --- */
 
+/* --- title button interactivity --- */
+.title-btn { cursor: pointer; }
+.title-btn:active {
+  background: linear-gradient(180deg, #1E60B0 0%, #1A4E90 50%, #163E78 100%);
+}
+.title-btn-close:active {
+  background: linear-gradient(180deg, #C4402A 0%, #A03020 50%, #882818 100%);
+}
+
+/* --- minimized windows --- */
+.window.minimized { height: auto; max-height: none; }
+.window.minimized > *:not(.title-bar) { display: none !important; }
+.chat-window.minimized { height: auto !important; max-height: none !important; }
+.chat-window.minimized > *:not(.title-bar) { display: none !important; }
+
+/* --- breakout game canvas --- */
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+}
+#screen-chat { position: relative; }
+#screen-chat .chat-window { z-index: 2; position: relative; }
+#screen-chat.game-visible #game-canvas { display: block; }
+
+/* --- draggable chat --- */
+.chat-window.dragging { transition: none; cursor: grabbing; }
+.chat-window { transition: transform 0.05s; }
+
+/* --- grab hand animation --- */
+.grab-hand {
+  position: absolute;
+  z-index: 10;
+  font-size: 32px;
+  pointer-events: none;
+  transition: none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.grab-hand.returning {
+  transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1), top 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 @media (max-width: 600px) {
   body {
     align-items: flex-start;
@@ -1028,6 +1071,12 @@ body {
     font-size: 12px;
     margin-left: auto;
   }
+
+  .title-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
 }
 </style>
 </head>
@@ -1123,6 +1172,7 @@ body {
 
 <!-- chat -->
 <div id="screen-chat" class="screen screen-chat">
+  <canvas id="game-canvas"></canvas>
   <div class="window chat-window">
     <div class="title-bar">
       <div class="title-text">
@@ -1130,9 +1180,9 @@ body {
         pillowfort &mdash; <span id="room-code" title="Click to copy fort flag" style="cursor:pointer; text-decoration:underline; text-decoration-style:dotted;"></span>
       </div>
       <div class="title-buttons">
-        <div class="title-btn">&#x2500;</div>
-        <div class="title-btn">&#x25A1;</div>
-        <div class="title-btn title-btn-close">&#x2715;</div>
+        <div class="title-btn" id="chat-btn-min">&#x2500;</div>
+        <div class="title-btn" id="chat-btn-max">&#x25A1;</div>
+        <div class="title-btn title-btn-close" id="chat-btn-close">&#x2715;</div>
       </div>
     </div>
     <div class="menu-bar" id="menu-bar">
@@ -2220,6 +2270,497 @@ if (pathRoom) {
 } else if (state.name) {
   nameInput.select();
 }
+
+// --- title bar button handlers ---
+
+// Close buttons on setup/join/knocked → go home
+document.querySelectorAll('#screen-setup .title-btn-close, #screen-join .title-btn-close, #screen-knocked .title-btn-close').forEach(btn => {
+  btn.onclick = () => show('home');
+});
+
+// Chat close
+$('chat-btn-close').onclick = () => {
+  if (state.isHost) {
+    state.intentionalLeave = true;
+    send('knock-down');
+  } else {
+    state.intentionalLeave = true;
+    send('leave');
+    cleanup();
+    show('home');
+  }
+};
+
+// Chat minimize
+$('chat-btn-min').onclick = () => {
+  const win = document.querySelector('.chat-window');
+  const screen = $('screen-chat');
+  win.classList.toggle('minimized');
+  if (win.classList.contains('minimized')) {
+    screen.classList.add('game-visible');
+    breakoutGame.start();
+  } else {
+    screen.classList.remove('game-visible');
+    breakoutGame.pause();
+  }
+};
+
+// Double-click title text to restore
+document.querySelector('.chat-window .title-text').ondblclick = () => {
+  const win = document.querySelector('.chat-window');
+  if (win.classList.contains('minimized')) {
+    win.classList.remove('minimized');
+    $('screen-chat').classList.remove('game-visible');
+    breakoutGame.pause();
+  }
+};
+
+// Minimize on other windows (setup/join/knocked/home)
+document.querySelectorAll('#screen-home .title-btn:not(.title-btn-close), #screen-setup .title-btn:not(.title-btn-close), #screen-join .title-btn:not(.title-btn-close), #screen-knocked .title-btn:not(.title-btn-close)').forEach(btn => {
+  // Only target the minimize button (─)
+  if (btn.textContent.trim() === '\u2500') {
+    btn.onclick = () => {
+      const win = btn.closest('.window');
+      win.classList.toggle('minimized');
+    };
+  }
+});
+
+// Double-click title text to restore on other windows
+document.querySelectorAll('#screen-home .title-text, #screen-setup .title-text, #screen-join .title-text, #screen-knocked .title-text').forEach(tt => {
+  tt.ondblclick = () => {
+    const win = tt.closest('.window');
+    if (win.classList.contains('minimized')) win.classList.remove('minimized');
+  };
+});
+
+// Chat maximize (fullscreen)
+$('chat-btn-max').onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+};
+
+document.addEventListener('fullscreenchange', () => {
+  $('chat-btn-max').innerHTML = document.fullscreenElement ? '&#x29C9;' : '&#x25A1;';
+});
+
+// --- Breakout Game ---
+const breakoutGame = (() => {
+  const canvas = $('game-canvas');
+  const ctx = canvas.getContext('2d');
+  const BRICK_COLORS = ['#FF6B6B','#FFA94D','#FFD43B','#69DB7C','#4DABF7','#9775FA','#F06595','#20C997'];
+  const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
+  const PADDLE_H = 12, BALL_R = 6;
+
+  let bricks, paddle, ball, lives, running, animId, won;
+
+  function resize() {
+    const rect = $('screen-chat').getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+
+  function reset() {
+    resize();
+    const w = canvas.width, h = canvas.height;
+    const brickW = (w - BRICK_PAD * (COLS + 1)) / COLS;
+    bricks = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        bricks.push({
+          x: BRICK_PAD + c * (brickW + BRICK_PAD),
+          y: 40 + r * (BRICK_H + BRICK_PAD),
+          w: brickW, h: BRICK_H,
+          color: BRICK_COLORS[r % BRICK_COLORS.length],
+          alive: true
+        });
+      }
+    }
+    paddle = { x: w / 2 - 40, y: h - 30, w: 80, h: PADDLE_H };
+    ball = { x: w / 2, y: h - 50, dx: 3, dy: -3 };
+    lives = 3;
+    won = false;
+  }
+
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // background
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, w, h);
+
+    // stars
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 137.5) % w, sy = (i * 97.3) % h;
+      ctx.globalAlpha = 0.3 + (i % 5) * 0.1;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    // bricks
+    bricks.forEach(b => {
+      if (!b.alive) return;
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.roundRect(b.x, b.y, b.w, b.h, 3);
+      ctx.fill();
+    });
+
+    // paddle
+    ctx.fillStyle = '#ECE9D8';
+    ctx.beginPath();
+    ctx.roundRect(paddle.x, paddle.y, paddle.w, paddle.h, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#ACA899';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // ball
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // HUD
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Tahoma, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('\u2764'.repeat(lives), 8, 20);
+
+    if (won) {
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 24px Tahoma, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('You win!', w / 2, h / 2);
+      ctx.font = '12px Tahoma, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Click to play again', w / 2, h / 2 + 24);
+    }
+  }
+
+  function update() {
+    if (won) return;
+    const w = canvas.width, h = canvas.height;
+    ball.x += ball.dx;
+    ball.y += ball.dy;
+
+    // wall bounce
+    if (ball.x - BALL_R <= 0 || ball.x + BALL_R >= w) ball.dx *= -1;
+    if (ball.y - BALL_R <= 0) ball.dy *= -1;
+
+    // paddle
+    if (ball.dy > 0 &&
+        ball.y + BALL_R >= paddle.y &&
+        ball.y + BALL_R <= paddle.y + paddle.h + 4 &&
+        ball.x >= paddle.x &&
+        ball.x <= paddle.x + paddle.w) {
+      ball.dy *= -1;
+      // angle based on where it hit
+      const hit = (ball.x - paddle.x) / paddle.w - 0.5;
+      ball.dx = hit * 6;
+      beep(520, 0.05, 0, 0.04);
+    }
+
+    // bricks
+    bricks.forEach(b => {
+      if (!b.alive) return;
+      if (ball.x + BALL_R > b.x && ball.x - BALL_R < b.x + b.w &&
+          ball.y + BALL_R > b.y && ball.y - BALL_R < b.y + b.h) {
+        b.alive = false;
+        ball.dy *= -1;
+        beep(880, 0.03, 0, 0.03);
+      }
+    });
+
+    // check win
+    if (bricks.every(b => !b.alive)) {
+      won = true;
+      return;
+    }
+
+    // lose ball
+    if (ball.y - BALL_R > h) {
+      lives--;
+      if (lives <= 0) {
+        reset();
+      } else {
+        ball.x = w / 2;
+        ball.y = h - 50;
+        ball.dx = 3 * (Math.random() > 0.5 ? 1 : -1);
+        ball.dy = -3;
+      }
+    }
+  }
+
+  function loop() {
+    if (!running) return;
+    update();
+    draw();
+    animId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (running) return;
+    if (!bricks || won || lives <= 0) reset();
+    running = true;
+    loop();
+  }
+
+  function pause() {
+    running = false;
+    cancelAnimationFrame(animId);
+  }
+
+  // mouse
+  canvas.addEventListener('mousemove', (e) => {
+    if (!running) return;
+    const rect = canvas.getBoundingClientRect();
+    paddle.x = e.clientX - rect.left - paddle.w / 2;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
+  });
+
+  // touch
+  canvas.addEventListener('touchmove', (e) => {
+    if (!running) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    paddle.x = e.touches[0].clientX - rect.left - paddle.w / 2;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
+  }, { passive: false });
+
+  // keys
+  const keys = {};
+  document.addEventListener('keydown', (e) => { keys[e.key] = true; });
+  document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+  setInterval(() => {
+    if (!running) return;
+    if (keys['ArrowLeft']) paddle.x = Math.max(0, paddle.x - 6);
+    if (keys['ArrowRight']) paddle.x = Math.min(canvas.width - paddle.w, paddle.x + 6);
+  }, 16);
+
+  // click to restart after win
+  canvas.addEventListener('click', () => {
+    if (won) { reset(); }
+  });
+
+  window.addEventListener('resize', () => {
+    if (running) resize();
+  });
+
+  return { start, pause, reset };
+})();
+
+// --- Draggable chat window with grab-hand ---
+(() => {
+  const chatWin = document.querySelector('.chat-window');
+  const screen = $('screen-chat');
+  let offsetX = 0, offsetY = 0;
+  let startX = 0, startY = 0;
+  let dragging = false;
+  let currentX = 0, currentY = 0;
+
+  const titleBar = chatWin.querySelector('.title-bar');
+
+  function onPointerDown(e) {
+    // ignore if clicking buttons
+    if (e.target.closest('.title-buttons')) return;
+    if (chatWin.classList.contains('minimized')) return;
+    dragging = true;
+    chatWin.classList.add('dragging');
+    startX = e.clientX - currentX;
+    startY = e.clientY - currentY;
+    e.preventDefault();
+  }
+
+  function onPointerMove(e) {
+    if (!dragging) return;
+    currentX = e.clientX - startX;
+    currentY = e.clientY - startY;
+    chatWin.style.transform = `translate(${currentX}px, ${currentY}px)`;
+  }
+
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    chatWin.classList.remove('dragging');
+
+    if (Math.abs(currentX) < 3 && Math.abs(currentY) < 3) {
+      currentX = 0; currentY = 0;
+      chatWin.style.transform = '';
+      return;
+    }
+
+    // spawn a grab hand
+    spawnGrabHand(currentX, currentY);
+  }
+
+  titleBar.addEventListener('pointerdown', onPointerDown);
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
+
+  function spawnGrabHand(dx, dy) {
+    const hand = document.createElement('div');
+    hand.className = 'grab-hand';
+    hand.textContent = '\u{1F91A}';
+
+    const screenRect = screen.getBoundingClientRect();
+    const winRect = chatWin.getBoundingClientRect();
+
+    // spawn from a random edge
+    const edge = Math.floor(Math.random() * 4);
+    let spawnX, spawnY;
+    switch(edge) {
+      case 0: spawnX = Math.random() * screenRect.width; spawnY = -40; break;
+      case 1: spawnX = screenRect.width + 10; spawnY = Math.random() * screenRect.height; break;
+      case 2: spawnX = Math.random() * screenRect.width; spawnY = screenRect.height + 10; break;
+      case 3: spawnX = -40; spawnY = Math.random() * screenRect.height; break;
+    }
+
+    hand.style.left = spawnX + 'px';
+    hand.style.top = spawnY + 'px';
+    screen.appendChild(hand);
+
+    // move hand to the window's current position (center of title bar)
+    const targetX = winRect.left - screenRect.left + winRect.width / 2 - 16;
+    const targetY = winRect.top - screenRect.top + 16;
+
+    requestAnimationFrame(() => {
+      hand.classList.add('returning');
+      hand.style.left = targetX + 'px';
+      hand.style.top = targetY + 'px';
+    });
+
+    // after hand arrives, drag window back
+    hand.addEventListener('transitionend', function grab() {
+      hand.removeEventListener('transitionend', grab);
+
+      // animate window back to origin
+      chatWin.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+      chatWin.style.transform = 'translate(0, 0)';
+      currentX = 0;
+      currentY = 0;
+
+      // hand follows back to center
+      const origRect = screen.getBoundingClientRect();
+      const cX = origRect.width / 2 - 16;
+      const cY = origRect.height / 2;
+      hand.style.left = cX + 'px';
+      hand.style.top = cY + 'px';
+
+      // cleanup after animation
+      setTimeout(() => {
+        chatWin.style.transition = '';
+        hand.style.transition = 'opacity 0.3s';
+        hand.style.opacity = '0';
+        setTimeout(() => hand.remove(), 300);
+      }, 650);
+    }, { once: true });
+  }
+})();
+
+// --- Background drawing canvas ---
+(() => {
+  const screens = ['screen-home', 'screen-setup', 'screen-join', 'screen-knocked'];
+  screens.forEach(screenId => {
+    const screen = $(screenId);
+    const cv = document.createElement('canvas');
+    cv.className = 'draw-canvas';
+    cv.style.cssText = 'position:absolute;inset:0;z-index:0;cursor:crosshair;';
+    screen.insertBefore(cv, screen.firstChild);
+
+    // ensure window sits above
+    const win = screen.querySelector('.window');
+    if (win) { win.style.position = 'relative'; win.style.zIndex = '1'; }
+
+    let drawing = false;
+    const dCtx = cv.getContext('2d');
+    const drawColor = () => {
+      const hue = Math.floor(Math.random() * 360);
+      return `hsl(${hue}, 80%, 65%)`;
+    };
+    let color = drawColor();
+
+    function resizeCanvas() {
+      const r = screen.getBoundingClientRect();
+      cv.width = r.width;
+      cv.height = r.height;
+    }
+
+    // defer first resize
+    new ResizeObserver(() => resizeCanvas()).observe(screen);
+
+    cv.addEventListener('pointerdown', (e) => {
+      if (e.target !== cv) return;
+      drawing = true;
+      color = drawColor();
+      dCtx.beginPath();
+      const rect = cv.getBoundingClientRect();
+      dCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+      dCtx.strokeStyle = color;
+      dCtx.lineWidth = 3;
+      dCtx.lineCap = 'round';
+      dCtx.lineJoin = 'round';
+    });
+
+    cv.addEventListener('pointermove', (e) => {
+      if (!drawing) return;
+      const rect = cv.getBoundingClientRect();
+      dCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      dCtx.stroke();
+    });
+
+    const stop = () => { drawing = false; };
+    cv.addEventListener('pointerup', stop);
+    cv.addEventListener('pointerleave', stop);
+  });
+
+  // Also add drawing to chat screen (behind game canvas and window)
+  const chatScreen = $('screen-chat');
+  const chatCv = document.createElement('canvas');
+  chatCv.className = 'draw-canvas';
+  chatCv.style.cssText = 'position:absolute;inset:0;z-index:0;cursor:crosshair;';
+  chatScreen.insertBefore(chatCv, chatScreen.firstChild);
+
+  let drawing = false;
+  const dCtx = chatCv.getContext('2d');
+  let color = `hsl(${Math.floor(Math.random()*360)}, 80%, 65%)`;
+
+  new ResizeObserver(() => {
+    const r = chatScreen.getBoundingClientRect();
+    chatCv.width = r.width;
+    chatCv.height = r.height;
+  }).observe(chatScreen);
+
+  chatCv.addEventListener('pointerdown', (e) => {
+    if (e.target !== chatCv) return;
+    drawing = true;
+    color = `hsl(${Math.floor(Math.random()*360)}, 80%, 65%)`;
+    dCtx.beginPath();
+    const rect = chatCv.getBoundingClientRect();
+    dCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    dCtx.strokeStyle = color;
+    dCtx.lineWidth = 3;
+    dCtx.lineCap = 'round';
+    dCtx.lineJoin = 'round';
+  });
+
+  chatCv.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const rect = chatCv.getBoundingClientRect();
+    dCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    dCtx.stroke();
+  });
+
+  const stop = () => { drawing = false; };
+  chatCv.addEventListener('pointerup', stop);
+  chatCv.addEventListener('pointerleave', stop);
+})();
 </script>
 </body>
 </html>
