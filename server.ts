@@ -29,6 +29,7 @@ interface Room {
   tttGame: { p1: string; p2: string; board: string[]; turn: number } | null;
   saboteur: string | null;
   saboteurActive: boolean;
+  sabStrikes: number;
   sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null;
   sabRoundTimer: ReturnType<typeof setTimeout> | null;
   kothGame: { challenger: string; host: string } | null;
@@ -48,6 +49,7 @@ const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
+const SAB_ROUND_DELAY_MS = process.env.NODE_ENV === "test" ? 500 : 60_000;
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 // --- helpers ---
@@ -143,6 +145,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
     tttGame: null,
     saboteur: null,
     saboteurActive: false,
+    sabStrikes: 0,
     sabVote: null,
     sabRoundTimer: null,
     kothGame: null,
@@ -586,6 +589,7 @@ function onSabStart(ws: any, d: WSData) {
   if (m.length < SABOTEUR_MIN_PLAYERS) return send(ws, "error", { message: `need at least ${SABOTEUR_MIN_PLAYERS} people` });
 
   room.saboteurActive = true;
+  room.sabStrikes = 0;
   room.saboteur = m[Math.floor(Math.random() * m.length)];
 
   broadcast(room, "sab-started", { starter: d.name });
@@ -605,7 +609,7 @@ function onSabStart(ws: any, d: WSData) {
 
 function scheduleSabVote(room: Room) {
   if (room.sabRoundTimer) clearTimeout(room.sabRoundTimer);
-  room.sabRoundTimer = setTimeout(() => startSabVote(room), 60_000);
+  room.sabRoundTimer = setTimeout(() => startSabVote(room), SAB_ROUND_DELAY_MS);
 }
 
 function startSabVote(room: Room) {
@@ -647,10 +651,17 @@ function resolveSabVote(room: Room) {
   });
 
   if (correct) {
+    const sabName = room.saboteur!;
     room.saboteurActive = false;
     room.saboteur = null;
     room.sabVote = null;
     if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
+
+    // auto-start pillow fight vote against the caught saboteur
+    if (!room.activeVote && members(room).length >= 3 && members(room).includes(sabName)) {
+      room.activeVote = { target: sabName, starter: sabName, yes: new Set(), no: new Set(), timer: setTimeout(() => resolveVote(room), VOTE_DURATION_MS) };
+      broadcast(room, "vote-started", { target: sabName, starter: "the fort", auto: true });
+    }
   } else {
     room.sabVote = null;
     scheduleSabVote(room);
@@ -662,12 +673,17 @@ function onSabStrike(ws: any, d: WSData) {
   const room = rooms.get(d.roomId);
   if (!room || !room.saboteurActive || d.name !== room.saboteur) return;
 
-  broadcast(room, "sab-strike", { saboteur: d.name });
+  room.sabStrikes++;
+  broadcast(room, "sab-strike", { saboteur: d.name, strikes: room.sabStrikes });
 
-  room.saboteurActive = false;
-  room.saboteur = null;
-  if (room.sabVote) { clearTimeout(room.sabVote.timer); room.sabVote = null; }
-  if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
+  if (room.sabStrikes >= 3) {
+    // fort knocked down!
+    room.saboteurActive = false;
+    room.saboteur = null;
+    if (room.sabVote) { clearTimeout(room.sabVote.timer); room.sabVote = null; }
+    if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
+    destroy(room, "the saboteur knocked the fort down!");
+  }
 }
 
 // --- KOTH ---

@@ -3549,7 +3549,7 @@ function onSabRole(msg) {
       btn.id = 'sab-strike-btn';
       btn.className = 'sab-strike-btn visible';
       btn.textContent = '\u{1F4A3} Strike!';
-      btn.onclick = () => { send('sab-strike'); btn.classList.remove('visible'); };
+      btn.onclick = () => { send('sab-strike'); btn.disabled = true; setTimeout(() => btn.disabled = false, 2000); };
       document.querySelector('.game-shortcuts').appendChild(btn);
     } else {
       btn.classList.add('visible');
@@ -3595,7 +3595,7 @@ function onSabVoteStart(msg) {
 function onSabVoteResult(msg) {
   $('sab-vote-overlay').classList.remove('open');
   if (msg.wasSaboteur) {
-    addSystem(`\u{1F389} ${msg.accused} was the saboteur! The fort is safe!`);
+    addSystem(`\u{1F389} ${msg.accused} was the saboteur! Pillow fight incoming...`);
     sabRole = null;
     const btn = $('sab-strike-btn');
     if (btn) btn.classList.remove('visible');
@@ -3605,10 +3605,17 @@ function onSabVoteResult(msg) {
 }
 
 function onSabStrikeReceived(msg) {
-  addSystem(`\u{1F4A5}\u{1F4A5}\u{1F4A5} ${msg.saboteur} was the SABOTEUR and struck! The fort trembles!`);
-  sabRole = null;
-  const btn = $('sab-strike-btn');
-  if (btn) btn.classList.remove('visible');
+  const s = msg.strikes || 1;
+  if (s >= 3) {
+    addSystem(`\u{1F4A5}\u{1F4A5}\u{1F4A5} STRIKE ${s}/3! ${msg.saboteur} destroyed the fort!`);
+    sabRole = null;
+    const btn = $('sab-strike-btn');
+    if (btn) btn.classList.remove('visible');
+  } else if (s === 2) {
+    addSystem(`\u{1F4A5}\u{1F4A5} STRIKE ${s}/3! ${msg.saboteur} struck again! The fort is crumbling!`);
+  } else {
+    addSystem(`\u{1F4A5} STRIKE ${s}/3! The fort trembles!`);
+  }
 }
 
 // ============ KING OF THE HILL ============

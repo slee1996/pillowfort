@@ -225,7 +225,7 @@ describe("Pillow Fight (Vote)", () => {
 // ---- Secret Saboteur ----
 
 describe("Secret Saboteur", () => {
-  it("start → roles assigned (1 saboteur, rest defenders) → saboteur strikes", async () => {
+  it("start → roles assigned (1 saboteur, rest defenders)", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
     const carol = await joinRoom(roomId, "carol");
@@ -248,11 +248,43 @@ describe("Secret Saboteur", () => {
     const defenders = roles.filter(r => r.role === "defender");
     expect(saboteurs.length).toBe(1);
     expect(defenders.length).toBe(3);
+  });
 
-    // Saboteur strikes
-    saboteurs[0].client.send({ type: "sab-strike" });
-    const strike = await host.waitFor("sab-strike");
-    expect(strike.saboteur).toBeDefined();
+  it("3 strikes → fort knocked down", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+
+    host.send({ type: "sab-start" });
+    await host.waitFor("sab-started");
+
+    const players = [host, bob, carol, dave];
+    const roles: { client: typeof host; role: string }[] = [];
+    for (const p of players) {
+      const roleMsg = await p.waitFor("sab-role");
+      roles.push({ client: p, role: roleMsg.role });
+    }
+
+    const saboteur = roles.find(r => r.role === "saboteur")!;
+
+    // Strike 1
+    saboteur.client.send({ type: "sab-strike" });
+    const s1 = await host.waitFor("sab-strike");
+    expect(s1.strikes).toBe(1);
+
+    // Strike 2
+    saboteur.client.send({ type: "sab-strike" });
+    const s2 = await host.waitFor("sab-strike");
+    expect(s2.strikes).toBe(2);
+
+    // Strike 3 → fort destroyed
+    saboteur.client.send({ type: "sab-strike" });
+    const s3 = await host.waitFor("sab-strike");
+    expect(s3.strikes).toBe(3);
+
+    const knockdown = await host.waitFor("knocked-down");
+    expect(knockdown.reason).toContain("saboteur");
   });
 
   it("need 4+ people → error with 3", async () => {
@@ -263,6 +295,44 @@ describe("Secret Saboteur", () => {
     host.send({ type: "sab-start" });
     const err = await host.waitFor("error");
     expect(err.message).toContain("need at least 4 people");
+  });
+
+  it("saboteur caught by vote → auto pillow fight vote starts", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+
+    host.send({ type: "sab-start" });
+    await host.waitFor("sab-started");
+
+    const players = [host, bob, carol, dave];
+    const names = ["alice", "bob", "carol", "dave"];
+    const roles: { client: typeof host; name: string; role: string }[] = [];
+    for (let i = 0; i < players.length; i++) {
+      const roleMsg = await players[i].waitFor("sab-role");
+      roles.push({ client: players[i], name: names[i], role: roleMsg.role });
+    }
+
+    const saboteur = roles.find(r => r.role === "saboteur")!;
+
+    // Wait for the sab vote round to start (500ms in test mode)
+    await host.waitFor("sab-vote-start");
+
+    // Everyone votes for the actual saboteur
+    for (const r of roles) {
+      r.client.send({ type: "sab-vote", suspect: saboteur.name });
+    }
+
+    // Should get sab-vote-result with wasSaboteur: true
+    const result = await host.waitFor("sab-vote-result");
+    expect(result.wasSaboteur).toBe(true);
+    expect(result.saboteur).toBe(saboteur.name);
+
+    // Auto pillow fight vote should start targeting the saboteur
+    const voteStarted = await host.waitFor("vote-started");
+    expect(voteStarted.target).toBe(saboteur.name);
+    expect(voteStarted.auto).toBe(true);
   });
 
   it("non-saboteur can't strike", async () => {

@@ -18,7 +18,7 @@ export async function startServer(): Promise<void> {
   _port = 10_000 + Math.floor(Math.random() * 50_000);
   _proc = Bun.spawn(["bun", "server.ts"], {
     cwd: import.meta.dir + "/..",
-    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999" },
+    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999", NODE_ENV: "test" },
     stdout: "ignore",
     stderr: "ignore",
   });

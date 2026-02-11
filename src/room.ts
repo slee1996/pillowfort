@@ -30,6 +30,7 @@ export class Room implements DurableObject {
   private tttGame: { p1: string; p2: string; board: string[]; turn: number } | null = null;
   private saboteur: string | null = null;
   private saboteurActive = false;
+  private sabStrikes = 0;
   private sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null = null;
   private sabRoundTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -481,6 +482,7 @@ export class Room implements DurableObject {
       return this.send(ws, "error", { message: `need at least ${SABOTEUR_MIN_PLAYERS} people` });
 
     this.saboteurActive = true;
+    this.sabStrikes = 0;
     // pick random saboteur
     this.saboteur = members[Math.floor(Math.random() * members.length)];
     this.log(`saboteur mode started — ${this.saboteur} is the saboteur`);
@@ -553,10 +555,18 @@ export class Room implements DurableObject {
 
     if (correct) {
       // saboteur caught!
+      const sabName = this.saboteur!;
       this.saboteurActive = false;
       this.saboteur = null;
       this.sabVote = null;
       if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
+
+      // auto-start pillow fight vote against the caught saboteur
+      if (!this.activeVote && this.getMembers().length >= 3 && this.getMembers().includes(sabName)) {
+        this.activeVote = { target: sabName, starter: sabName, yes: new Set(), no: new Set(), timer: setTimeout(() => this.resolveVote(), VOTE_DURATION_MS) };
+        this.broadcast("vote-started", { target: sabName, starter: "the fort", auto: true });
+        this.log(`auto pillow fight started against caught saboteur ${sabName}`);
+      }
     } else {
       this.sabVote = null;
       this.scheduleSabVote();
@@ -567,14 +577,18 @@ export class Room implements DurableObject {
     const a = this.att(ws);
     if (!a.name || !this.saboteurActive || a.name !== this.saboteur) return;
 
-    this.broadcast("sab-strike", { saboteur: a.name });
-    this.log(`saboteur ${a.name} struck!`);
+    this.sabStrikes++;
+    this.broadcast("sab-strike", { saboteur: a.name, strikes: this.sabStrikes });
+    this.log(`saboteur ${a.name} struck! (${this.sabStrikes}/3)`);
 
-    // end saboteur mode
-    this.saboteurActive = false;
-    this.saboteur = null;
-    if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
-    if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
+    if (this.sabStrikes >= 3) {
+      // fort knocked down!
+      this.saboteurActive = false;
+      this.saboteur = null;
+      if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
+      if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
+      this.destroyRoom("the saboteur knocked the fort down!");
+    }
   }
 
   // ============ KING OF THE HILL ============
