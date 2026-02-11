@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3C7DB5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>pillowfort</title>
 <style>
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { height: 100%; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overscroll-behavior: none; }
 
 body {
   font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
@@ -1165,6 +1168,7 @@ body {
     width: 100vw;
     height: 100vh;
     height: 100dvh;
+    height: var(--vvh, 100dvh);
     max-width: none;
     max-height: none;
     border-radius: 0;
@@ -1201,8 +1205,8 @@ body {
   }
 
   .aim-action-btn {
-    font-size: 9px;
-    padding: 2px 5px;
+    font-size: 11px;
+    padding: 6px 10px;
   }
 
   /* format toolbar compact */
@@ -1211,9 +1215,9 @@ body {
   }
 
   .format-btn {
-    width: 20px;
-    height: 18px;
-    font-size: 10px;
+    width: 32px;
+    height: 28px;
+    font-size: 12px;
   }
 
   /* messages area */
@@ -1347,6 +1351,15 @@ body {
   .emoji-picker { width: 180px; gap: 4px; padding: 6px; }
   .emoji-pick { width: 34px; height: 34px; font-size: 18px; }
 }
+
+@media (max-height: 420px) {
+  .format-toolbar { display: none; }
+  .title-bar { padding: 4px 10px; padding-top: max(4px, env(safe-area-inset-top, 4px)); }
+  .aim-action-bar { padding: 1px 4px; }
+  .aim-action-btn { font-size: 10px; padding: 2px 6px; }
+  #messages { padding: 6px 10px; }
+  .chat-input-wrap { padding: 4px 10px; padding-bottom: max(4px, env(safe-area-inset-bottom, 4px)); }
+}
 </style>
 </head>
 <body>
@@ -1374,7 +1387,7 @@ body {
       <div class="sign-on-divider"></div>
       <div class="xp-field">
         <label for="name-input">Screen Name</label>
-        <input type="text" id="name-input" class="xp-input" placeholder="Enter a screen name" maxlength="24" autocomplete="off">
+        <input type="text" id="name-input" class="xp-input" placeholder="Enter a screen name" maxlength="24" autocomplete="off" autocapitalize="off">
       </div>
       <div class="xp-checkbox-row" onclick="this.querySelector('.xp-checkbox').textContent = this.querySelector('.xp-checkbox').textContent ? '' : '\u2713'">
         <span class="xp-checkbox"></span>
@@ -1402,7 +1415,7 @@ body {
       <p style="font-size:12px; color:#333; margin-bottom:14px;">Pick a secret password. Share it with people you want to let inside.</p>
       <div class="xp-field">
         <label for="setup-password">Secret Password</label>
-        <input type="text" id="setup-password" class="xp-input" placeholder="Something only your friends know" maxlength="64" autocomplete="off">
+        <input type="text" id="setup-password" class="xp-input" placeholder="Something only your friends know" maxlength="64" autocomplete="off" autocorrect="off">
       </div>
       <div class="btn-row">
         <button class="xp-btn xp-btn-primary" id="btn-create">Build the Fort</button>
@@ -1425,11 +1438,11 @@ body {
       <p style="font-size:12px; color:#333; margin-bottom:14px;">Enter the fort flag and secret password you were given.</p>
       <div class="xp-field">
         <label for="join-room">Fort Flag</label>
-        <input type="text" id="join-room" class="xp-input" placeholder="6-character flag" maxlength="6" autocomplete="off">
+        <input type="text" id="join-room" class="xp-input" placeholder="6-character flag" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off">
       </div>
       <div class="xp-field">
         <label for="join-password">Secret Password</label>
-        <input type="text" id="join-password" class="xp-input" placeholder="The secret password" maxlength="64" autocomplete="off">
+        <input type="text" id="join-password" class="xp-input" placeholder="The secret password" maxlength="64" autocomplete="off" autocorrect="off">
       </div>
       <div class="btn-row">
         <button class="xp-btn xp-btn-primary" id="btn-enter">Join Fort</button>
@@ -1511,7 +1524,7 @@ body {
           </div>
         </div>
         <div class="chat-input-wrap">
-          <input type="text" id="msg-input" placeholder="Type a message..." maxlength="2000" autocomplete="off">
+          <input type="text" id="msg-input" placeholder="Type a message..." maxlength="2000" autocomplete="off" enterkeyhint="send">
           <div class="chat-buttons">
             <button class="xp-btn xp-btn-primary" id="btn-send">Send</button>
             <div class="game-shortcuts">
@@ -1650,6 +1663,13 @@ body {
 </div>
 
 <script>
+// --- visual viewport (virtual keyboard) ---
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    document.documentElement.style.setProperty('--vvh', window.visualViewport.height + 'px');
+  });
+}
+
 // --- sound ---
 let audioCtx;
 function ensureAudio() {
