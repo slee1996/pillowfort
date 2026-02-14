@@ -36,6 +36,7 @@ when the host leaves without knocking down the fort, a pillow gets thrown to a r
 - **10 minute idle timeout** — no messages for 10 minutes and the fort self-destructs
 - **typing indicators** — see who's whispering
 - **room-scoped presence** — set yourself as Available/Away (optionally with an away note) visible only to people inside your current fort
+- **room-key message encryption** — chat payload (text + style) is encrypted in-browser with AES-GCM (PBKDF2-derived key from fort password + room flag), bound to sender identity, with replay-drop in session; relay still sees metadata like sender/typing
 - **mobile responsive** — full-screen chat on mobile with safe area support
 - **AIM / Windows XP aesthetic** — title bars, buddy list, door sounds, the whole deal
 

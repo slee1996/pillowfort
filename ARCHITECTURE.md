@@ -114,7 +114,7 @@ limit (base name gets truncated if needed to fit the suffix).
 | `set-up`       | `{ name, password }`           | create a fort, become host    |
 | `join`         | `{ name, password, room }`     | enter an existing fort        |
 | `rejoin`       | `{ name, password, room }`     | reconnect within grace window |
-| `chat`         | `{ text }`                     | send a message                |
+| `chat`         | `{ text }` or `{ enc: { v, iv, ct } }` | send a message (plaintext fallback or encrypted payload; v2 encrypts text+style together) |
 | `knock-down`   | `{}`                           | host explicitly destroys fort |
 | `leave`        | `{}`                           | leave the fort                |
 | `typing`       | `{}`                           | typing indicator              |
@@ -129,7 +129,7 @@ limit (base name gets truncated if needed to fit the suffix).
 | `room-created`  | `{ room }`                    | confirms fort setup                 |
 | `joined`        | `{ room, members[], name, presence }`   | confirms entry (name may be suffixed)|
 | `rejoined`      | `{ room, members[], name, isHost, presence }` | reconnect success |
-| `message`       | `{ from, text }`              | chat message broadcast              |
+| `message`       | `{ from, text }` or `{ from, enc }` | chat message broadcast (relay does not decrypt `enc`; v2 decrypt uses sender-bound AAD) |
 | `member-joined` | `{ name, presence }`          | someone entered the fort            |
 | `member-left`   | `{ name }`                    | someone left the fort               |
 | `member-away`   | `{ name }`                    | someone temporarily disconnected     |
@@ -194,6 +194,7 @@ interface WSData {
 - **client-side room ID generation.** the room code is generated client-side (8 random alphanumeric chars)
   and passed to the server. on cloudflare, this becomes the durable object name.
 - **presence is room-scoped only.** available/away is visible only to members already inside the same fort; no cross-room or global presence index.
+- **chat encryption is room-key based.** message payload (text + style) can be end-to-end encrypted using a key derived from room ID + password, bound to sender identity via AES-GCM additional authenticated data, with basic replay-drop in-session; relay still sees metadata (sender/events/timing).
 
 ## prior art
 

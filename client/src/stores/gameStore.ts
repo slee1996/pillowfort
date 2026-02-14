@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus } from "../services/protocol";
+import { clearChatCryptoState } from "../services/chatCrypto";
 
 let msgId = 0;
 
@@ -271,7 +272,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ errorMessage: message, errorTimer: timer });
   },
 
-  cleanup: () =>
+  cleanup: () => {
+    clearChatCryptoState();
     set({
       roomId: null,
       password: null,
@@ -293,5 +295,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sabDetonateSignal: 0,
       unreadCount: 0,
       minimized: false,
-    }),
+    });
+  },
 }));

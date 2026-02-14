@@ -4,7 +4,7 @@ export type OutgoingMessage =
   | { type: "set-up"; name: string; password: string }
   | { type: "join"; name: string; password: string; room: string }
   | { type: "rejoin"; name: string; password: string; room: string }
-  | { type: "chat"; text: string; style?: ChatStyle }
+  | { type: "chat"; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "knock-down" }
   | { type: "typing" }
   | { type: "leave" }
@@ -34,7 +34,7 @@ export type IncomingMessage =
   | { type: "room-created"; room: string }
   | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence> }
   | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence> }
-  | { type: "message"; from: string; text: string; style?: ChatStyle }
+  | { type: "message"; from: string; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "member-joined"; name: string; presence?: MemberPresence }
   | { type: "member-left"; name: string }
   | { type: "member-away"; name: string }
@@ -84,6 +84,12 @@ export interface ChatStyle {
   italic?: boolean;
   underline?: boolean;
   color?: string;
+}
+
+export interface EncryptedChatPayload {
+  v: 1 | 2;
+  iv: string;
+  ct: string;
 }
 
 export type RpsPick = "rock" | "paper" | "scissors";

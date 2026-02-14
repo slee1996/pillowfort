@@ -27,6 +27,23 @@ const SAB_BOMB_MS = (() => {
 })();
 const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const MAX_ENC_B64_LEN = 4096;
+const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
+
+interface EncryptedChatPayload {
+  v: 1 | 2;
+  iv: string;
+  ct: string;
+}
+
+function sanitizeEncryptedChat(enc: any): EncryptedChatPayload | null {
+  if (!enc || (enc.v !== 1 && enc.v !== 2)) return null;
+  if (typeof enc.iv !== "string" || typeof enc.ct !== "string") return null;
+  if (!BASE64_RE.test(enc.iv) || !BASE64_RE.test(enc.ct)) return null;
+  if (enc.iv.length < 16 || enc.iv.length > 32) return null;
+  if (enc.ct.length < 16 || enc.ct.length > MAX_ENC_B64_LEN) return null;
+  return { v: enc.v, iv: enc.iv, ct: enc.ct };
+}
 
 export class Room implements DurableObject {
   private state: DurableObjectState;
@@ -276,8 +293,7 @@ export class Room implements DurableObject {
     this.resetIdle();
   }
 
-  private onChat(ws: WebSocket, msg: { text?: string }) {
-    if (!msg.text?.trim()) return;
+  private onChat(ws: WebSocket, msg: { text?: string; enc?: unknown }) {
     const a = this.att(ws);
     if (!a.name) return;
 
@@ -289,7 +305,15 @@ export class Room implements DurableObject {
     a.msgTimestamps.push(now);
     ws.serializeAttachment(a);
 
+    const enc = sanitizeEncryptedChat(msg.enc);
     const style = sanitizeStyle((msg as any).style);
+    if (enc) {
+      this.broadcast("message", { from: a.name, enc, ...(style ? { style } : {}) });
+      this.resetIdle();
+      return;
+    }
+
+    if (!msg.text?.trim()) return;
     this.broadcast("message", { from: a.name, text: msg.text.trim().slice(0, MAX_MSG_LEN), ...(style ? { style } : {}) });
     this.resetIdle();
   }

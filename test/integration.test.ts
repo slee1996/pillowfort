@@ -52,6 +52,17 @@ describe("Room lifecycle", () => {
     expect(guestMsg.from).toBe("alice");
     expect(guestMsg.text).toBe("hello fort");
   });
+
+  it("encrypted chat payload relays without plaintext", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const enc = { v: 2, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" };
+    host.send({ type: "chat", enc });
+    const msg = await bob.waitFor("message");
+    expect(msg.from).toBe("alice");
+    expect(msg.enc).toEqual(enc);
+    expect(msg.text).toBeUndefined();
+  });
 });
 
 // ---- Room-scoped presence ----

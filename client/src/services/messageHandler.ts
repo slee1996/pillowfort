@@ -2,10 +2,14 @@ import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
 import type { IncomingMessage } from "./protocol";
+import { decryptChatPayload } from "./chatCrypto";
 
 const SABOTEUR_EXPLOSION_MS = 1200;
 let sabBombInterval: ReturnType<typeof setInterval> | null = null;
 let sabBombEndsAt = 0;
+let warnedPlaintextChat = false;
+
+type IncomingChatMessage = Extract<IncomingMessage, { type: "message" }>;
 
 function stopSabBombCountdown() {
   if (sabBombInterval) {
@@ -40,6 +44,28 @@ function startSabBombCountdown(seconds: number, durationMs?: number) {
   };
   update();
   sabBombInterval = setInterval(update, 250);
+}
+
+async function handleEncryptedChatMessage(
+  msg: IncomingChatMessage,
+  roomId: string,
+  password: string
+) {
+  const current = useGameStore.getState();
+  const muted = current.mutedNames.has(msg.from);
+  if (muted) return;
+
+  const decrypted = msg.enc
+    ? await decryptChatPayload(roomId, password, msg.from, msg.enc, msg.style)
+    : null;
+  const text = (decrypted?.text || "[unable to decrypt message]").slice(0, 2000);
+
+  const now = useGameStore.getState();
+  if (now.roomId !== roomId) return;
+  if (now.mutedNames.has(msg.from)) return;
+
+  now.addChatMessage(msg.from, text, decrypted?.style);
+  playMsgSound();
 }
 
 export function handleMessage(msg: IncomingMessage) {
@@ -93,7 +119,18 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "message": {
-      if (!s.mutedNames.has(msg.from)) {
+      if (msg.enc) {
+        if (s.roomId && s.password) {
+          void handleEncryptedChatMessage(msg, s.roomId, s.password);
+        } else if (!s.mutedNames.has(msg.from)) {
+          s.addChatMessage(msg.from, "[encrypted message]", msg.style);
+          playMsgSound();
+        }
+      } else if (typeof msg.text === "string" && !s.mutedNames.has(msg.from)) {
+        if (!warnedPlaintextChat) {
+          warnedPlaintextChat = true;
+          s.addSystemMessage("Warning: Received plaintext chat from a legacy client.");
+        }
         s.addChatMessage(msg.from, msg.text, msg.style);
         playMsgSound();
       }

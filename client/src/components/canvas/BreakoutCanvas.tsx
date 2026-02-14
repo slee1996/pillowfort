@@ -1,6 +1,8 @@
 import { useRef, useEffect, useCallback } from "react";
 import { send } from "../../services/ws";
 import { beep } from "../../hooks/useSound";
+import { useGameStore } from "../../stores/gameStore";
+import { encryptChatPayload } from "../../services/chatCrypto";
 
 const BRICK_COLORS = ["#FF6B6B", "#FFA94D", "#FFD43B", "#69DB7C", "#4DABF7", "#9775FA", "#F06595", "#20C997"];
 const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
@@ -17,6 +19,16 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
   } | null>(null);
   const animRef = useRef<number>(0);
   const keysRef = useRef<Record<string, boolean>>({});
+
+  const sendBreakoutMessage = useCallback(async (text: string) => {
+    const { roomId, password, name } = useGameStore.getState();
+    if (!roomId || !password) return;
+    try {
+      const enc = await encryptChatPayload(roomId, password, name, text);
+      if (!enc) return;
+      send("chat", { enc });
+    } catch {}
+  }, []);
 
   const reset = useCallback(() => {
     const cv = canvasRef.current;
@@ -101,7 +113,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
             beep(659, 0.1, 0.1, 0.06);
             beep(784, 0.1, 0.2, 0.06);
             beep(1047, 0.3, 0.3, 0.08);
-            send("chat", { text: `🎮 cleared all 40 bricks in Breakout with ${s.lives} lives remaining! 🏆` });
+            void sendBreakoutMessage(`🎮 cleared all 40 bricks in Breakout with ${s.lives} lives remaining! 🏆`);
           }
 
           if (s.ball.y - BALL_R > h) {
@@ -110,7 +122,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
               s.lost = true;
               beep(220, 0.3, 0, 0.08);
               beep(165, 0.4, 0.2, 0.08);
-              send("chat", { text: `🎮 destroyed ${s.score}/40 bricks in Breakout before running out of lives` });
+              void sendBreakoutMessage(`🎮 destroyed ${s.score}/40 bricks in Breakout before running out of lives`);
             } else {
               s.ball.x = w / 2;
               s.ball.y = s.paddle.y - 20;
@@ -227,7 +239,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
     };
-  }, [active, reset]);
+  }, [active, reset, sendBreakoutMessage]);
 
   if (!active) return null;
 

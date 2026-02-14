@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
+import { encryptChatPayload } from "../../services/chatCrypto";
 import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
@@ -15,11 +16,30 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   const sabRole = useGameStore((s) => s.sabRole);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = inputRef.current?.value.trim();
     if (!text) return;
+
+    const roomId = useGameStore.getState().roomId;
+    const password = useGameStore.getState().password;
+    if (!roomId || !password) {
+      showToast("Room key unavailable.");
+      return;
+    }
+
     const style = useFormatStore.getState().getStyle();
-    send("chat", { text, ...(style ? { style } : {}) });
+    try {
+      const enc = await encryptChatPayload(roomId, password, name, text, style);
+      if (!enc) {
+        showToast("Encryption unavailable in this browser.");
+        return;
+      }
+      send("chat", { enc });
+    } catch {
+      showToast("Couldn't encrypt message.");
+      return;
+    }
+
     playSendSound();
     inputRef.current!.value = "";
     inputRef.current!.focus();
