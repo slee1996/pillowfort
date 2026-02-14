@@ -21,7 +21,7 @@ export default {
     }
 
     // room links: /abc123 → serve index.html
-    if (/^\/[a-z0-9]{6}$/.test(url.pathname)) {
+    if (/^\/[a-z0-9]{8}$/.test(url.pathname)) {
       return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
     }
 

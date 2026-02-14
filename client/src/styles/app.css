@@ -1,0 +1,97 @@
+@import "tailwindcss";
+@import "./xp-theme.css";
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+  font-size: 12px;
+  background: linear-gradient(180deg, #3C7DB5 0%, #1A4D7A 50%, #0D3558 100%);
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+/* Screens */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  body {
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .screen {
+    padding: 16px;
+    padding-top: env(safe-area-inset-top, 16px);
+  }
+
+  .screen-chat {
+    padding: 0;
+  }
+}
+
+/* Toast */
+.copy-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ECE9D8;
+  border: 1px solid #ACA899;
+  color: #333;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: Tahoma, Arial, sans-serif;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  border-radius: 3px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.copy-toast.visible { opacity: 1; }
+
+/* Error Banner */
+.error-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 8px 16px;
+  background: #FFF1A8;
+  border-bottom: 1px solid #C0A000;
+  color: #333;
+  font-size: 11px;
+  text-align: center;
+  z-index: 200;
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+/* Reconnect Banner */
+.reconnect-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 8px 16px;
+  background: #D4E8FC;
+  border-bottom: 1px solid #7FAACC;
+  color: #003C74;
+  font-size: 11px;
+  text-align: center;
+  z-index: 200;
+  font-family: Tahoma, Arial, sans-serif;
+}

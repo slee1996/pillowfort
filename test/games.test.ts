@@ -278,12 +278,14 @@ describe("Secret Saboteur", () => {
     const s2 = await host.waitFor("sab-strike");
     expect(s2.strikes).toBe(2);
 
-    // Strike 3 → fort destroyed
+    // Strike 3 → bomb countdown starts
     saboteur.client.send({ type: "sab-strike" });
     const s3 = await host.waitFor("sab-strike");
     expect(s3.strikes).toBe(3);
+    const bomb = await host.waitFor("sab-bomb-start");
+    expect(bomb.seconds).toBeGreaterThan(0);
 
-    const knockdown = await host.waitFor("knocked-down");
+    const knockdown = await host.waitFor("knocked-down", 5000);
     expect(knockdown.reason).toContain("saboteur");
   });
 

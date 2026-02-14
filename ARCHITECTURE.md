@@ -112,11 +112,13 @@ limit (base name gets truncated if needed to fit the suffix).
 | message        | payload                        | description                   |
 |----------------|--------------------------------|-------------------------------|
 | `set-up`       | `{ name, password }`           | create a fort, become host    |
-| `join`         | `{ name, password }`           | enter an existing fort        |
+| `join`         | `{ name, password, room }`     | enter an existing fort        |
+| `rejoin`       | `{ name, password, room }`     | reconnect within grace window |
 | `chat`         | `{ text }`                     | send a message                |
 | `knock-down`   | `{}`                           | host explicitly destroys fort |
 | `leave`        | `{}`                           | leave the fort                |
 | `typing`       | `{}`                           | typing indicator              |
+| `set-status`   | `{ status, awayText? }`        | set in-room presence (available/away) |
 | `accept-host`  | `{}`                           | accept the pillow (become host)|
 | `reject-host`  | `{}`                           | duck the pillow               |
 
@@ -125,10 +127,14 @@ limit (base name gets truncated if needed to fit the suffix).
 | message         | payload                       | description                         |
 |-----------------|-------------------------------|-------------------------------------|
 | `room-created`  | `{ room }`                    | confirms fort setup                 |
-| `joined`        | `{ room, members[], name }`   | confirms entry (name may be suffixed)|
+| `joined`        | `{ room, members[], name, presence }`   | confirms entry (name may be suffixed)|
+| `rejoined`      | `{ room, members[], name, isHost, presence }` | reconnect success |
 | `message`       | `{ from, text }`              | chat message broadcast              |
-| `member-joined` | `{ name }`                    | someone entered the fort            |
+| `member-joined` | `{ name, presence }`          | someone entered the fort            |
 | `member-left`   | `{ name }`                    | someone left the fort               |
+| `member-away`   | `{ name }`                    | someone temporarily disconnected     |
+| `member-back`   | `{ name }`                    | disconnected member returned         |
+| `member-status` | `{ name, status, awayText? }` | in-room presence update              |
 | `knocked-down`  | `{ reason }`                  | fort is being destroyed             |
 | `typing`        | `{ name }`                    | someone is whispering               |
 | `host-offer`    | `{ oldHost }`                 | you've been offered the pillow      |
@@ -145,6 +151,8 @@ interface WSData {
   hash: string;           // 4-char hex for server-side logging
   isHost: boolean;        // true if this socket is the host
   hostRejected: boolean;  // true if this user ducked during current offer round
+  status: "available" | "away"; // in-room presence only
+  awayText: string | null; // optional away note (in-room only)
   msgTimestamps: number[];// timestamps for message rate limiting
 }
 ```
@@ -166,9 +174,9 @@ interface WSData {
 |---------|------------|-------------------------|
 | server  | bun        | cloudflare workers      |
 | rooms   | in-memory  | durable objects         |
-| client  | vanilla js | vanilla js              |
+| client  | react + vite | react + vite          |
 | storage | none       | none (ephemeral DO)     |
-| build   | none       | wrangler                |
+| build   | vite       | vite + wrangler         |
 | styling | XP/AIM     | XP/AIM                  |
 
 ## design decisions
@@ -183,8 +191,9 @@ interface WSData {
 - **interactive host migration.** when the host leaves, the pillow gets thrown to a random guest.
   they can catch it (become host) or duck (pass it along). nobody is forced to be host.
 - **auto-suffixed names.** duplicate names get a number appended. funnier than rejecting.
-- **client-side room ID generation.** the room code is generated client-side (6 random alphanumeric chars)
+- **client-side room ID generation.** the room code is generated client-side (8 random alphanumeric chars)
   and passed to the server. on cloudflare, this becomes the durable object name.
+- **presence is room-scoped only.** available/away is visible only to members already inside the same fort; no cross-room or global presence index.
 
 ## prior art
 

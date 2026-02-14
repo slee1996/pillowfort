@@ -12,7 +12,7 @@ no accounts. no history. no database. when the fort comes down, it's gone foreve
 ## how it works
 
 1. **set up a fort** — pick a screen name and a secret password
-2. **share the code** — give the 6-character fort code + password to your friends
+2. **share the code** — give the 8-character fort code + password to your friends
 3. **hang out** — chat in real time, windows xp style
 4. **knock it down** — the host can destroy the fort at any time. poof, it's gone
 
@@ -35,6 +35,7 @@ when the host leaves without knocking down the fort, a pillow gets thrown to a r
 - **20 guest cap** — keeps forts small and personal
 - **10 minute idle timeout** — no messages for 10 minutes and the fort self-destructs
 - **typing indicators** — see who's whispering
+- **room-scoped presence** — set yourself as Available/Away (optionally with an away note) visible only to people inside your current fort
 - **mobile responsive** — full-screen chat on mobile with safe area support
 - **AIM / Windows XP aesthetic** — title bars, buddy list, door sounds, the whole deal
 
@@ -86,8 +87,9 @@ production uses Cloudflare Workers for the entry point and a Durable Object per 
 
 ```
 pillowfort/
-├── public/
-│   └── index.html        # the entire client (html + css + js, single file)
+├── client/               # React + Vite client
+│   ├── src/              # screens, stores, components, styles
+│   └── dist/             # built static assets served by server.ts
 ├── src/
 │   ├── index.ts           # cloudflare worker entry point (routes /ws to durable objects)
 │   └── room.ts            # durable object — one instance per room
@@ -102,6 +104,6 @@ pillowfort/
 |---------|-----------|--------------------------------|
 | server  | bun       | cloudflare workers             |
 | rooms   | in-memory | durable objects (one per room) |
-| client  | vanilla js | vanilla js                    |
+| client  | react + vite | react + vite                |
 | storage | none      | none (durable object memory only) |
-| build   | none      | wrangler                       |
+| build   | vite      | vite + wrangler                |

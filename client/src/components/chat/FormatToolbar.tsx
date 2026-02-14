@@ -1,0 +1,112 @@
+import { useState, useRef, useEffect } from "react";
+import { useFormatStore } from "../../stores/formatStore";
+
+const FMT_COLORS = ["#FF0000", "#0000FF", "#008000", "#FF8C00", "#800080", "#000000", "#FF69B4", "#8B4513"];
+const EMOJIS = ["😊", "😂", "😍", "👍", "👋", "🎉", "🔥", "❤️"];
+
+export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string) => void }) {
+  const { bold, italic, underline, color, toggleBold, toggleItalic, toggleUnderline, setColor } = useFormatStore();
+  const [colorOpen, setColorOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const colorRef = useRef<HTMLDivElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = () => {
+      setColorOpen(false);
+      setEmojiOpen(false);
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, []);
+
+  return (
+    <div className="format-toolbar">
+      <button
+        className={`format-btn ${bold ? "active" : ""}`}
+        onClick={toggleBold}
+        title="Bold"
+      >
+        <b>B</b>
+      </button>
+      <button
+        className={`format-btn ${italic ? "active" : ""}`}
+        onClick={toggleItalic}
+        title="Italic"
+      >
+        <i>I</i>
+      </button>
+      <button
+        className={`format-btn ${underline ? "active" : ""}`}
+        onClick={toggleUnderline}
+        title="Underline"
+      >
+        <u>U</u>
+      </button>
+
+      <div className="format-sep" />
+
+      <div className="relative" ref={colorRef}>
+        <button
+          className="format-btn"
+          title="Font Color"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEmojiOpen(false);
+            setColorOpen(!colorOpen);
+          }}
+        >
+          <div
+            className="w-3 h-3 border border-[#888]"
+            style={{ background: color || "#FF0000" }}
+          />
+        </button>
+        <div className={`color-palette ${colorOpen ? "open" : ""}`}>
+          {FMT_COLORS.map((c) => (
+            <div
+              key={c}
+              className="color-palette-swatch"
+              style={{ background: c }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setColor(color === c ? null : c);
+                setColorOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="format-sep" />
+
+      <div className="relative" ref={emojiRef}>
+        <button
+          className="format-btn text-sm"
+          title="Insert Smiley"
+          onClick={(e) => {
+            e.stopPropagation();
+            setColorOpen(false);
+            setEmojiOpen(!emojiOpen);
+          }}
+        >
+          ☺
+        </button>
+        <div className={`emoji-picker ${emojiOpen ? "open" : ""}`}>
+          {EMOJIS.map((em) => (
+            <span
+              key={em}
+              className="emoji-pick"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInsertEmoji(em);
+                setEmojiOpen(false);
+              }}
+            >
+              {em}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

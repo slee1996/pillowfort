@@ -14,7 +14,7 @@ afterAll(stopServer);
 describe("Room lifecycle", () => {
   it("create room → room-created with 6-char ID", async () => {
     const { roomId } = await createRoom();
-    expect(roomId).toMatch(/^[a-z0-9]{6}$/);
+    expect(roomId).toMatch(/^[a-z0-9]{8}$/);
   });
 
   it("join room → joined with members list", async () => {
@@ -51,6 +51,44 @@ describe("Room lifecycle", () => {
     expect(hostMsg.text).toBe("hello fort");
     expect(guestMsg.from).toBe("alice");
     expect(guestMsg.text).toBe("hello fort");
+  });
+});
+
+// ---- Room-scoped presence ----
+
+describe("Presence (room-scoped)", () => {
+  it("set-status broadcasts to members in same room", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "set-status", status: "away", awayText: "coffee break" });
+
+    const toHost = await host.waitFor("member-status");
+    const toBob = await bob.waitFor("member-status");
+    expect(toHost.name).toBe("alice");
+    expect(toHost.status).toBe("away");
+    expect(toHost.awayText).toBe("coffee break");
+    expect(toBob.name).toBe("alice");
+    expect(toBob.status).toBe("away");
+    expect(toBob.awayText).toBe("coffee break");
+  });
+
+  it("presence does not leak across rooms", async () => {
+    const roomA = await createRoom("alice");
+    const roomB = await createRoom("zoe");
+    const bob = await joinRoom(roomA.roomId, "bob");
+    const yan = await joinRoom(roomB.roomId, "yan");
+
+    roomA.host.send({ type: "set-status", status: "away", awayText: "brb" });
+    const sameRoom = await bob.waitFor("member-status");
+    expect(sameRoom.name).toBe("alice");
+    expect(sameRoom.status).toBe("away");
+
+    // Keep room B active, then assert no cross-room status messages appeared.
+    roomB.host.send({ type: "chat", text: "ping" });
+    await yan.waitFor("message");
+    const leaks = yan.messages.filter((m) => m.type === "member-status");
+    expect(leaks.length).toBe(0);
   });
 });
 

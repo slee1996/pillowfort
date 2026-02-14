@@ -17,7 +17,7 @@ describe("Happy path: 3-user chat session", () => {
     alice.send({ type: "set-up", name: "alice", password: "fort123" });
     const created = await alice.waitFor("room-created");
     const roomId = created.room;
-    expect(roomId).toMatch(/^[a-z0-9]{6}$/);
+    expect(roomId).toMatch(/^[a-z0-9]{8}$/);
 
     // 2. User B joins
     const bob = await connectClient();
@@ -70,7 +70,7 @@ describe("Happy path: 3-user chat session", () => {
 
 describe("Invite link flow", () => {
   it("GET /:roomId returns HTML", async () => {
-    const res = await fetch(`http://localhost:${getPort()}/abc123`);
+    const res = await fetch(`http://localhost:${getPort()}/abc12345`);
     expect(res.status).toBe(200);
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");

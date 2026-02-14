@@ -9,6 +9,8 @@ interface WSData {
   isHost: boolean;
   hostRejected: boolean;
   name: string;
+  status: "available" | "away";
+  awayText: string | null;
   hash: string;
   ip: string;
   msgTimestamps: number[];
@@ -22,7 +24,14 @@ interface Room {
   idleTimer: ReturnType<typeof setTimeout>;
   pendingOldHost: string | null;
   tossPillowFrom: string | null;
-  disconnected: Map<string, { name: string; wasHost: boolean; timer: ReturnType<typeof setTimeout>; ip: string }>;
+  disconnected: Map<string, {
+    name: string;
+    wasHost: boolean;
+    status: "available" | "away";
+    awayText: string | null;
+    timer: ReturnType<typeof setTimeout>;
+    ip: string;
+  }>;
   // game state
   activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout> } | null;
   rpsGame: { p1: string; p2: string; pick1?: string; pick2?: string } | null;
@@ -32,6 +41,7 @@ interface Room {
   sabStrikes: number;
   sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null;
   sabRoundTimer: ReturnType<typeof setTimeout> | null;
+  sabBombTimer: ReturnType<typeof setTimeout> | null;
   kothGame: { challenger: string; host: string } | null;
 }
 
@@ -50,14 +60,22 @@ const VOTE_DURATION_MS = 30_000;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
 const SAB_ROUND_DELAY_MS = process.env.NODE_ENV === "test" ? 500 : 60_000;
+const SAB_BOMB_MS_RAW = parseInt(process.env.SAB_BOMB_MS || (process.env.NODE_ENV === "test" ? "1200" : "10000"));
+const SAB_BOMB_MS = Number.isFinite(SAB_BOMB_MS_RAW) && SAB_BOMB_MS_RAW > 0 ? SAB_BOMB_MS_RAW : 10_000;
+const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 // --- helpers ---
 
 function rid(): string {
-  const c = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let id = "";
-  for (let i = 0; i < 6; i++) id += c[Math.floor(Math.random() * c.length)];
+  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
+  const c = "bcdfghjklmnprstvwz0123456789";
+  const v = "o0ua";
+  const all = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const soft = "rln";
+  const hard = "xksz";
+  const [a, b] = Math.random() < 0.5 ? [soft, hard] : [hard, soft];
+  const id = pick(c) + pick(v) + pick(a) + pick(c) + pick(v) + pick(b) + pick(all) + pick(all);
   return rooms.has(id) ? rid() : id;
 }
 
@@ -79,6 +97,25 @@ function members(room: Room): string[] {
   return m;
 }
 
+function memberPresence(d: WSData): { status: "available" | "away"; awayText?: string } {
+  const p: { status: "available" | "away"; awayText?: string } = { status: d.status || "available" };
+  if (d.status === "away" && d.awayText) p.awayText = d.awayText;
+  return p;
+}
+
+function roomPresence(room: Room): Record<string, { status: "available" | "away"; awayText?: string }> {
+  const out: Record<string, { status: "available" | "away"; awayText?: string }> = {};
+  if (room.host) {
+    const d = room.host.ws.data as WSData;
+    if (room.host.name) out[room.host.name] = memberPresence(d);
+  }
+  for (const [ws, name] of room.guests) {
+    const d = ws.data as WSData;
+    if (name) out[name] = memberPresence(d);
+  }
+  return out;
+}
+
 function resetIdle(room: Room) {
   clearTimeout(room.idleTimer);
   room.idleTimer = setTimeout(() => destroy(room, "the fort went quiet for too long"), IDLE_MS);
@@ -86,6 +123,10 @@ function resetIdle(room: Room) {
 
 function destroy(room: Room, reason: string) {
   clearTimeout(room.idleTimer);
+  if (room.sabBombTimer) {
+    clearTimeout(room.sabBombTimer);
+    room.sabBombTimer = null;
+  }
   // clear all grace timers
   for (const [, disc] of room.disconnected) clearTimeout(disc.timer);
   room.disconnected.clear();
@@ -126,6 +167,8 @@ function onSetUp(ws: any, d: WSData, msg: any) {
   d.roomId = id;
   d.isHost = true;
   d.name = msg.name.trim().slice(0, MAX_NAME_LEN);
+  d.status = "available";
+  d.awayText = null;
 
   const ts = roomCreationByIP.get(d.ip) || [];
   ts.push(Date.now());
@@ -148,6 +191,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
     sabStrikes: 0,
     sabVote: null,
     sabRoundTimer: null,
+    sabBombTimer: null,
     kothGame: null,
   };
 
@@ -171,10 +215,12 @@ function onJoin(ws: any, d: WSData, msg: any) {
   d.roomId = room.id;
   d.isHost = false;
   d.name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), new Set(members(room)));
+  d.status = "available";
+  d.awayText = null;
 
   room.guests.set(ws, d.name);
-  send(ws, "joined", { room: room.id, members: members(room), name: d.name });
-  broadcast(room, "member-joined", { name: d.name }, ws);
+  send(ws, "joined", { room: room.id, members: members(room), name: d.name, presence: roomPresence(room) });
+  broadcast(room, "member-joined", { name: d.name, presence: memberPresence(d) }, ws);
   resetIdle(room);
 }
 
@@ -203,6 +249,28 @@ function onTyping(ws: any, d: WSData) {
   const room = rooms.get(d.roomId);
   if (!room) return;
   broadcast(room, "typing", { name: d.name }, ws);
+}
+
+function onSetStatus(ws: any, d: WSData, msg: any) {
+  if (!d.roomId || !d.name) return;
+  const room = rooms.get(d.roomId);
+  if (!room) return;
+  if (msg.status !== "available" && msg.status !== "away") return;
+
+  d.status = msg.status;
+  if (d.status === "away") {
+    const text = typeof msg.awayText === "string" ? msg.awayText.trim().slice(0, 120) : "";
+    d.awayText = text || null;
+  } else {
+    d.awayText = null;
+  }
+
+  broadcast(room, "member-status", {
+    name: d.name,
+    status: d.status,
+    awayText: d.awayText,
+  });
+  resetIdle(room);
 }
 
 function offerHost(room: Room, oldHostName: string) {
@@ -354,7 +422,7 @@ function onDisconnect(ws: any, d: WSData) {
     }
   }, GRACE_MS);
 
-  room.disconnected.set(name, { name, wasHost, timer, ip: d.ip });
+  room.disconnected.set(name, { name, wasHost, status: d.status, awayText: d.awayText, timer, ip: d.ip });
   d.roomId = null;
 }
 
@@ -375,6 +443,8 @@ function onRejoin(ws: any, d: WSData, msg: any) {
 
     d.roomId = room.id;
     d.name = disc.name;
+    d.status = disc.status || "available";
+    d.awayText = disc.awayText || null;
 
     if (disc.wasHost && !room.host) {
       d.isHost = true;
@@ -384,7 +454,7 @@ function onRejoin(ws: any, d: WSData, msg: any) {
       room.guests.set(ws, d.name);
     }
 
-    send(ws, "rejoined", { room: room.id, members: members(room), name: d.name, isHost: d.isHost });
+    send(ws, "rejoined", { room: room.id, members: members(room), name: d.name, isHost: d.isHost, presence: roomPresence(room) });
     broadcast(room, "member-back", { name: d.name }, ws);
     resetIdle(room);
   } else {
@@ -677,12 +747,19 @@ function onSabStrike(ws: any, d: WSData) {
   broadcast(room, "sab-strike", { saboteur: d.name, strikes: room.sabStrikes });
 
   if (room.sabStrikes >= 3) {
-    // fort knocked down!
+    // The saboteur plants a bomb. Let chat continue during countdown.
     room.saboteurActive = false;
     room.saboteur = null;
     if (room.sabVote) { clearTimeout(room.sabVote.timer); room.sabVote = null; }
     if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
-    destroy(room, "the saboteur knocked the fort down!");
+    if (room.sabBombTimer) clearTimeout(room.sabBombTimer);
+    broadcast(room, "sab-bomb-start", { saboteur: d.name, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
+    room.sabBombTimer = setTimeout(() => {
+      room.sabBombTimer = null;
+      // Room may already be gone (host manual knockdown, etc.)
+      if (!rooms.has(room.id)) return;
+      destroy(room, "the saboteur's bomb exploded!");
+    }, SAB_BOMB_MS);
   }
 }
 
@@ -753,7 +830,17 @@ Bun.serve({
       const ip = server.requestIP(req)?.address || "unknown";
       const roomParam = url.searchParams.get("room") || "";
       const ok = server.upgrade(req, {
-        data: { roomId: roomParam || null, isHost: false, hostRejected: false, name: "", hash: Math.random().toString(16).slice(2, 6), ip, msgTimestamps: [] } satisfies WSData,
+        data: {
+          roomId: roomParam || null,
+          isHost: false,
+          hostRejected: false,
+          name: "",
+          status: "available",
+          awayText: null,
+          hash: Math.random().toString(16).slice(2, 6),
+          ip,
+          msgTimestamps: [],
+        } satisfies WSData,
       });
       return ok ? undefined : new Response("upgrade failed", { status: 400 });
     }
@@ -762,12 +849,12 @@ Bun.serve({
     if (url.pathname.includes("..")) return new Response("forbidden", { status: 403 });
 
     // room links: /abc123 → serve index.html
-    if (/^\/[a-z0-9]{6}$/.test(url.pathname)) {
-      return new Response(Bun.file("./public/index.html"));
+    if (/^\/[a-z0-9]{8}$/.test(url.pathname)) {
+      return new Response(Bun.file("./client/dist/index.html"));
     }
 
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
-    const file = Bun.file(`./public${path}`);
+    const file = Bun.file(`./client/dist${path}`);
     return (await file.exists()) ? new Response(file) : new Response("not found", { status: 404 });
   },
 
@@ -784,6 +871,7 @@ Bun.serve({
           case "chat":         onChat(ws, d, msg); break;
           case "knock-down":   onKnockDown(ws, d); break;
           case "typing":       onTyping(ws, d); break;
+          case "set-status":   onSetStatus(ws, d, msg); break;
           case "leave":        onLeave(ws, d); break;
           case "accept-host":  onAcceptHost(ws, d); break;
           case "reject-host":  onRejectHost(ws, d); break;

@@ -41,7 +41,7 @@ async function createFort(page: Page, name: string): Promise<string> {
   // room-code text gets set asynchronously after ws response
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
-    return el && el.textContent && el.textContent.length >= 6;
+    return el && el.textContent && el.textContent.length >= 8;
   });
   return page.locator("#room-code").innerText();
 }

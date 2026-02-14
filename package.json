@@ -2,14 +2,21 @@
   "name": "pillowfort",
   "version": "0.0.1",
   "scripts": {
-    "dev": "wrangler dev",
-    "dev:local": "bun --watch server.ts",
-    "deploy": "wrangler deploy",
+    "dev": "bun --watch server.ts",
+    "dev:client": "cd client && npx vite",
+    "build": "cd client && npx vite build",
+    "deploy": "cd client && npx vite build && cd .. && npx wrangler deploy",
     "start": "bun server.ts",
     "test": "bun test"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",
+    "@playwright/test": "^1.58.2",
+    "playwright": "^1.58.2",
     "wrangler": "^3.99.0"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.421",
+    "remotion": "4.0.421"
   }
 }

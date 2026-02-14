@@ -6,6 +6,8 @@ interface WSData {
   hash: string;
   isHost: boolean;
   hostRejected: boolean;
+  status: "available" | "away";
+  awayText: string | null;
   msgTimestamps: number[];
 }
 
@@ -15,6 +17,15 @@ const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
+const SAB_BOMB_MS = (() => {
+  try {
+    const raw = parseInt(process.env.SAB_BOMB_MS || (process.env.NODE_ENV === "test" ? "1200" : "10000"));
+    return Number.isFinite(raw) && raw > 0 ? raw : 10_000;
+  } catch {
+    return 10_000;
+  }
+})();
+const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 export class Room implements DurableObject {
@@ -22,7 +33,13 @@ export class Room implements DurableObject {
   private password: string | null = null;
   private roomId: string = "";
   private tossPillowFrom: string | null = null;
-  private disconnected: Map<string, { name: string; wasHost: boolean; timer: ReturnType<typeof setTimeout> }> = new Map();
+  private disconnected: Map<string, {
+    name: string;
+    wasHost: boolean;
+    status: "available" | "away";
+    awayText: string | null;
+    timer: ReturnType<typeof setTimeout>;
+  }> = new Map();
 
   // --- game state ---
   private activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -33,6 +50,7 @@ export class Room implements DurableObject {
   private sabStrikes = 0;
   private sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null = null;
   private sabRoundTimer: ReturnType<typeof setTimeout> | null = null;
+  private sabBombTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
@@ -64,7 +82,7 @@ export class Room implements DurableObject {
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
     const hash = Math.random().toString(16).slice(2, 6);
-    server.serializeAttachment({ name: "", hash, isHost: false, hostRejected: false, msgTimestamps: [] } as WSData);
+    server.serializeAttachment({ name: "", hash, isHost: false, hostRejected: false, status: "available", awayText: null, msgTimestamps: [] } as WSData);
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -80,6 +98,7 @@ export class Room implements DurableObject {
         case "knock-down":   await this.onKnockDown(ws); break;
         case "leave":        await this.onLeave(ws); break;
         case "typing":       this.onTyping(ws); break;
+        case "set-status":   this.onSetStatus(ws, msg); break;
         case "accept-host":  this.onAcceptHost(ws); break;
         case "reject-host":  await this.onRejectHost(ws); break;
         case "toss-pillow": this.onTossPillow(ws, msg); break;
@@ -114,7 +133,15 @@ export class Room implements DurableObject {
   // --- helpers ---
 
   private att(ws: WebSocket): WSData {
-    return (ws.deserializeAttachment() || { name: "", hash: "0000", isHost: false, hostRejected: false, msgTimestamps: [] }) as WSData;
+    return (ws.deserializeAttachment() || {
+      name: "",
+      hash: "0000",
+      isHost: false,
+      hostRejected: false,
+      status: "available",
+      awayText: null,
+      msgTimestamps: [],
+    }) as WSData;
   }
 
   private tag(a: WSData): string {
@@ -151,6 +178,21 @@ export class Room implements DurableObject {
     return names;
   }
 
+  private presenceOf(a: WSData): { status: "available" | "away"; awayText?: string } {
+    const p: { status: "available" | "away"; awayText?: string } = { status: a.status || "available" };
+    if (a.status === "away" && a.awayText) p.awayText = a.awayText;
+    return p;
+  }
+
+  private getPresenceMap(): Record<string, { status: "available" | "away"; awayText?: string }> {
+    const out: Record<string, { status: "available" | "away"; awayText?: string }> = {};
+    for (const w of this.state.getWebSockets()) {
+      const a = this.att(w);
+      if (a.name) out[a.name] = this.presenceOf(a);
+    }
+    return out;
+  }
+
   private resetIdle() {
     this.state.storage.setAlarm(Date.now() + IDLE_MS);
   }
@@ -158,6 +200,10 @@ export class Room implements DurableObject {
   private async destroyRoom(reason: string) {
     const count = this.state.getWebSockets().length;
     this.log(`destroying (${count} connected) — ${reason}`);
+    if (this.sabBombTimer) {
+      clearTimeout(this.sabBombTimer);
+      this.sabBombTimer = null;
+    }
     // clear all grace timers
     for (const [, disc] of this.disconnected) clearTimeout(disc.timer);
     this.disconnected.clear();
@@ -184,7 +230,15 @@ export class Room implements DurableObject {
     await this.state.storage.put("password", this.password);
 
     const prev = this.att(ws);
-    const data: WSData = { name, hash: prev.hash, isHost: true, hostRejected: false, msgTimestamps: [] };
+    const data: WSData = {
+      name,
+      hash: prev.hash,
+      isHost: true,
+      hostRejected: false,
+      status: "available",
+      awayText: null,
+      msgTimestamps: [],
+    };
     ws.serializeAttachment(data);
 
     this.log(`created by ${this.tag(data)}`);
@@ -206,11 +260,19 @@ export class Room implements DurableObject {
 
     const name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), new Set(this.getMembers()));
     const prev = this.att(ws);
-    ws.serializeAttachment({ name, hash: prev.hash, isHost: false, hostRejected: false, msgTimestamps: [] } as WSData);
+    ws.serializeAttachment({
+      name,
+      hash: prev.hash,
+      isHost: false,
+      hostRejected: false,
+      status: "available",
+      awayText: null,
+      msgTimestamps: [],
+    } as WSData);
 
     this.log(`${name}#${prev.hash} joined (${this.getMembers().length} members)`);
-    this.send(ws, "joined", { room: this.roomId, members: this.getMembers(), name });
-    this.broadcast("member-joined", { name }, ws);
+    this.send(ws, "joined", { room: this.roomId, members: this.getMembers(), name, presence: this.getPresenceMap() });
+    this.broadcast("member-joined", { name, presence: this.presenceOf(this.att(ws)) }, ws);
     this.resetIdle();
   }
 
@@ -248,6 +310,24 @@ export class Room implements DurableObject {
     const a = this.att(ws);
     if (!a.name) return;
     this.broadcast("typing", { name: a.name }, ws);
+  }
+
+  private onSetStatus(ws: WebSocket, msg: { status?: string; awayText?: string }) {
+    const a = this.att(ws);
+    if (!a.name) return;
+    if (msg.status !== "available" && msg.status !== "away") return;
+
+    a.status = msg.status;
+    if (a.status === "away") {
+      const text = typeof msg.awayText === "string" ? msg.awayText.trim().slice(0, 120) : "";
+      a.awayText = text || null;
+    } else {
+      a.awayText = null;
+    }
+    ws.serializeAttachment(a);
+
+    this.broadcast("member-status", { name: a.name, status: a.status, awayText: a.awayText });
+    this.resetIdle();
   }
 
   private async offerHost(oldHostName: string) {
@@ -582,12 +662,17 @@ export class Room implements DurableObject {
     this.log(`saboteur ${a.name} struck! (${this.sabStrikes}/3)`);
 
     if (this.sabStrikes >= 3) {
-      // fort knocked down!
+      // The saboteur plants a bomb. Let chat continue during countdown.
       this.saboteurActive = false;
       this.saboteur = null;
       if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
       if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
-      this.destroyRoom("the saboteur knocked the fort down!");
+      if (this.sabBombTimer) clearTimeout(this.sabBombTimer);
+      this.broadcast("sab-bomb-start", { saboteur: a.name, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
+      this.sabBombTimer = setTimeout(() => {
+        this.sabBombTimer = null;
+        this.destroyRoom("the saboteur's bomb exploded!");
+      }, SAB_BOMB_MS);
     }
   }
 
@@ -745,7 +830,7 @@ export class Room implements DurableObject {
       }
     }, GRACE_MS);
 
-    this.disconnected.set(name, { name, wasHost, timer });
+    this.disconnected.set(name, { name, wasHost, status: a.status, awayText: a.awayText, timer });
 
     // clear from websocket attachment so they don't count as active
     a.name = "";
@@ -770,10 +855,18 @@ export class Room implements DurableObject {
       const name = disc.name;
       const prev = this.att(ws);
       const isHost = disc.wasHost && !this.getHost();
-      ws.serializeAttachment({ name, hash: prev.hash, isHost, hostRejected: false, msgTimestamps: [] } as WSData);
+      ws.serializeAttachment({
+        name,
+        hash: prev.hash,
+        isHost,
+        hostRejected: false,
+        status: disc.status || "available",
+        awayText: disc.awayText || null,
+        msgTimestamps: [],
+      } as WSData);
 
       this.log(`${name} rejoined (wasHost=${disc.wasHost}, isHost=${isHost})`);
-      this.send(ws, "rejoined", { room: this.roomId, members: this.getMembers(), name, isHost });
+      this.send(ws, "rejoined", { room: this.roomId, members: this.getMembers(), name, isHost, presence: this.getPresenceMap() });
       this.broadcast("member-back", { name }, ws);
       this.resetIdle();
     } else {
