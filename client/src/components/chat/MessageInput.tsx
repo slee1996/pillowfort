@@ -53,7 +53,7 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   (window as any).__pfMsgInput = inputRef;
 
   return (
-    <div className="shrink-0 bg-[#ECE9D8] p-2 flex flex-col gap-1.5 max-sm:px-2.5 max-sm:pb-[max(8px,env(safe-area-inset-bottom,8px))] max-sm:gap-2">
+    <div className="shrink-0 bg-[#ECE9D8] px-3 py-2.5 flex flex-col gap-2 max-sm:px-2.5 max-sm:pb-[max(8px,env(safe-area-inset-bottom,8px))] max-sm:gap-2">
       <input
         type="text"
         id="msg-input"
@@ -66,8 +66,8 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         onKeyDown={(e) => e.key === "Enter" && handleSend()}
         onInput={handleInput}
       />
-      <div className="flex gap-1.5 items-center flex-wrap max-sm:gap-1.5">
-        <Button id="btn-send" primary onClick={handleSend} className="max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-4">
+      <div className="flex gap-2 items-center flex-wrap max-sm:gap-1.5">
+        <Button id="btn-send" primary onClick={handleSend} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-4">
           Send
         </Button>
         <div className="flex gap-0.5 items-center max-sm:order-2">
@@ -93,11 +93,11 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         <div className="flex-1 max-sm:hidden" />
         <span className="text-[11px] text-[#666] max-sm:ml-auto max-sm:order-3">{members.length} inside</span>
         {isHost ? (
-          <Button id="btn-knock-down" onClick={handleKnockDown} className="max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
+          <Button id="btn-knock-down" onClick={handleKnockDown} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
             Knock Down
           </Button>
         ) : (
-          <Button id="btn-leave-room" onClick={handleLeave} className="max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
+          <Button id="btn-leave-room" onClick={handleLeave} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
             Leave Fort
           </Button>
         )}

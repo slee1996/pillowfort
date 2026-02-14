@@ -241,7 +241,7 @@ export function ChatScreen() {
             <ActionBar onPickerOpen={handlePickerOpen} />
 
             <div className="flex flex-1 min-h-0">
-              <div className="flex-1 flex flex-col min-w-0">
+              <div className="flex-1 flex flex-col min-w-0 px-2.5 pb-2 max-sm:px-1.5 max-sm:pb-1.5">
                 <div className="bg-white px-2.5 py-1 text-[11px] text-[#888] border-b border-[#E8E8E8] italic shrink-0">
                   {chatInfoText}
                 </div>

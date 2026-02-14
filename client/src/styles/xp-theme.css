@@ -499,7 +499,7 @@
   background: #B22222;
   color: #fff;
   border: 1px solid #800;
-  padding: 3px 10px;
+  padding: 4px 12px;
   font-size: 10px;
   border-radius: 3px;
   cursor: pointer;
@@ -952,8 +952,8 @@
 /* --- Game Shortcut Buttons --- */
 
 .game-shortcut-btn {
-  width: 26px;
-  height: 24px;
+  width: 30px;
+  height: 28px;
   padding: 0;
   border: 1px solid transparent;
   background: transparent;
