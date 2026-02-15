@@ -16,11 +16,11 @@ export function TttOverlay() {
   if (ttt.phase === "challenged" && ttt.challengedBy) {
     return (
       <div className="game-overlay">
-        <div className="game-dialog" style={{ minWidth: 280 }}>
+        <div className="game-dialog game-dialog-wide">
           <div className="xp-title-bar"><div className="xp-title-text">⬜ Tic-Tac-Toe</div></div>
           <div className="game-dialog-body">
             <div>{ttt.challengedBy} challenges you to Tic-Tac-Toe!</div>
-            <div className="flex gap-2 mt-3.5 justify-center">
+            <div className="auth-actions game-actions">
               <Button primary onClick={() => send("ttt-accept")}>Accept</Button>
               <Button onClick={() => { send("ttt-decline"); close(); }}>Decline</Button>
             </div>
@@ -62,7 +62,7 @@ export function TttOverlay() {
 
   return (
     <div className="game-overlay">
-      <div className="game-dialog" style={{ minWidth: 280 }}>
+      <div className="game-dialog game-dialog-wide">
         <div className="xp-title-bar"><div className="xp-title-text">⬜ Tic-Tac-Toe</div></div>
         <div className="game-dialog-body">
           <div>{ttt.p1} (X) vs {ttt.p2} (O)</div>
@@ -80,9 +80,9 @@ export function TttOverlay() {
               </div>
             ))}
           </div>
-          <div className="text-xs mt-2" style={{ color: statusColor }}>{statusText}</div>
+          <div className="ttt-status" style={{ color: statusColor }}>{statusText}</div>
           {isResult && (
-            <div className="flex gap-2 mt-3.5 justify-center">
+            <div className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>
             </div>
           )}

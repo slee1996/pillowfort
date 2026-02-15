@@ -25,7 +25,7 @@ export function BuddyPanel() {
         onClick={() => setCollapsed(!collapsed)}
       >
         <span
-          className="text-[8px] inline-block transition-transform"
+          className="buddy-group-caret"
           style={{ transform: collapsed ? "rotate(-90deg)" : undefined }}
         >
           ▼
@@ -33,7 +33,7 @@ export function BuddyPanel() {
         Inside ({members.length})
       </div>
       {!collapsed && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="buddy-list">
           {members.map((name, i) => (
             <MemberEntry
               key={name}

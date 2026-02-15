@@ -46,7 +46,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
 
       <div className="format-sep" />
 
-      <div className="relative" ref={colorRef}>
+      <div className="format-popover-anchor" ref={colorRef}>
         <button
           className="format-btn"
           title="Font Color"
@@ -57,7 +57,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
           }}
         >
           <div
-            className="w-3 h-3 border border-[#888]"
+            className="format-color-preview"
             style={{ background: color || "#FF0000" }}
           />
         </button>
@@ -79,9 +79,9 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
 
       <div className="format-sep" />
 
-      <div className="relative" ref={emojiRef}>
+      <div className="format-popover-anchor" ref={emojiRef}>
         <button
-          className="format-btn text-sm"
+          className="format-btn format-btn-emoji"
           title="Insert Smiley"
           onClick={(e) => {
             e.stopPropagation();

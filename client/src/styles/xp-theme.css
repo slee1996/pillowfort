@@ -77,6 +77,105 @@
 
 .xp-window-body { padding: 20px; }
 
+.auth-window {
+  width: 340px;
+  max-width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-note {
+  color: #333;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.home-brand {
+  text-align: center;
+  padding-top: 16px;
+  padding-bottom: 4px;
+}
+
+.home-logo-wrap {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-title {
+  color: #003C74;
+  font-size: 22px;
+  letter-spacing: 2px;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-weight: bold;
+}
+
+.home-tagline {
+  color: #666;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.home-divider {
+  height: 1px;
+  margin: 14px 0;
+  background: linear-gradient(90deg, transparent, #ACA899, transparent);
+}
+
+.home-version {
+  color: #999;
+  text-align: center;
+  font-size: 10px;
+  margin-top: 10px;
+  padding-bottom: 2px;
+}
+
+.notice-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.notice-icon-wrap,
+.host-offer-icon-wrap {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.host-offer-icon-wrap {
+  color: #333;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.notice-text {
+  color: #333;
+  font-size: 12px;
+  line-height: 1.625;
+}
+
+.notice-subtext {
+  color: #666;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
 /* --- XP Inputs --- */
 
 .xp-field { margin-bottom: 14px; }
@@ -262,6 +361,60 @@
   background: #D6D2C2;
 }
 
+.chat-window {
+  position: relative;
+  z-index: 2;
+  width: 92vw;
+  max-width: 780px;
+  height: 85vh;
+  max-height: 620px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-window-minimized {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  top: auto;
+  right: auto;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  border-radius: 6px;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+}
+
+.chat-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.chat-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 8px;
+}
+
+.room-code {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.chat-info-bar {
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid #E8E8E8;
+  color: #888;
+  font-size: 11px;
+  font-style: italic;
+  padding: 4px 10px;
+}
+
 /* --- Format Toolbar --- */
 
 .format-toolbar {
@@ -306,6 +459,16 @@
   background: #ACA899;
   margin: 0 3px;
 }
+
+.format-popover-anchor { position: relative; }
+
+.format-color-preview {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #888;
+}
+
+.format-btn-emoji { font-size: 14px; }
 
 /* --- Color Palette --- */
 
@@ -417,6 +580,29 @@
   animation: xp-dialog-pop 0.3s ease-out;
 }
 
+.vote-target-name {
+  color: #B22222;
+  font-weight: bold;
+}
+
+.vote-status {
+  color: #666;
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.vote-choice {
+  font-weight: bold;
+}
+
+.vote-choice.yes { color: #060; }
+.vote-choice.no { color: #800; }
+
+.vote-remaining {
+  color: #999;
+  font-size: 10px;
+}
+
 /* --- Saboteur Vote Banner --- */
 
 .sab-vote-banner {
@@ -429,6 +615,10 @@
   color: #333;
   text-align: center;
   animation: xp-dialog-pop 0.3s ease-out;
+}
+
+.sab-vote-options {
+  margin: 8px 0;
 }
 
 /* --- RPS Picks --- */
@@ -449,6 +639,30 @@
 }
 .rps-pick:hover { border-color: #316AC5; background: #E8F0FE; }
 .rps-pick.selected { border-color: #316AC5; background: #D4E8FC; }
+
+.rps-picks {
+  margin: 12px 0;
+}
+
+.rps-status-waiting {
+  margin: 12px 0;
+  color: #888;
+  font-style: italic;
+}
+
+.rps-result-text {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 8px 0;
+}
+
+.game-actions {
+  margin-top: 14px;
+}
+
+.game-dialog-wide {
+  min-width: 280px;
+}
 
 /* --- TTT Board --- */
 
@@ -481,6 +695,11 @@
 .ttt-cell.x { color: #316AC5; }
 .ttt-cell.o { color: #B22222; }
 .ttt-cell.win { background: #FFD700; }
+
+.ttt-status {
+  font-size: 12px;
+  margin-top: 8px;
+}
 
 /* --- Saboteur UI --- */
 
@@ -795,6 +1014,111 @@
   100% { transform: scale(1); }
 }
 
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  padding: 12px 14px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chat-message {
+  margin-bottom: 2px;
+  overflow-wrap: break-word;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chat-message-system {
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+.chat-system-label {
+  color: #999;
+  font-weight: bold;
+}
+
+.chat-system-text {
+  color: #888;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.chat-sender {
+  font-weight: bold;
+}
+
+.chat-timestamp {
+  color: #888;
+  font-size: 11px;
+}
+
+.chat-content {
+  font-size: 13px;
+}
+
+.typing-indicator {
+  flex-shrink: 0;
+  min-height: 18px;
+  background: #fff;
+  border-top: 1px solid #F0F0F0;
+  color: #888;
+  font-size: 11px;
+  padding: 0 10px;
+}
+
+.message-input-wrap {
+  flex-shrink: 0;
+  background: #ECE9D8;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-input-field {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  padding: 6px;
+}
+
+.message-input-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.message-game-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.message-controls-spacer {
+  flex: 1;
+}
+
+.message-members-count {
+  color: #666;
+  font-size: 11px;
+}
+
+.message-btn {
+  padding: 6px 16px;
+}
+
+.message-btn-send {
+  margin-left: 2px;
+}
+
+.message-btn-leave {
+  margin-right: 2px;
+}
+
 /* --- Member Panel --- */
 
 .member-panel {
@@ -830,6 +1154,17 @@
 }
 
 .buddy-group-header:hover { background: #F0F0F0; }
+
+.buddy-group-caret {
+  display: inline-block;
+  font-size: 8px;
+  transition: transform 0.15s ease;
+}
+
+.buddy-list {
+  flex: 1;
+  overflow-y: auto;
+}
 
 .member-entry {
   padding: 3px 10px 3px 20px;
@@ -904,6 +1239,12 @@
 
 .member-picker-body { padding: 8px; }
 
+.member-picker-empty {
+  padding: 8px;
+  font-size: 11px;
+  color: #888;
+}
+
 .member-picker-item {
   padding: 6px 10px;
   display: flex;
@@ -918,6 +1259,69 @@
 .member-picker-item:hover {
   background: #316AC5;
   color: #fff;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-window {
+  width: 340px;
+  max-width: 100%;
+}
+
+.mobile-buddy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-buddy-card {
+  width: 260px;
+  max-height: 70vh;
+  background: #ECE9D8;
+  border-radius: 8px 8px 4px 4px;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-buddy-header {
+  background: #ECE9D8;
+  border-bottom: 1px solid #ACA899;
+  color: #333;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-buddy-close {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.mobile-buddy-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
 }
 
 /* --- Minimized Windows --- */
@@ -947,6 +1351,12 @@
   inset: 0;
   z-index: 1;
   touch-action: none;
+}
+
+.fullscreen-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
 /* --- Game Shortcut Buttons --- */
@@ -998,6 +1408,29 @@
     font-size: 14px;
   }
 
+  .chat-window {
+    width: 100vw;
+    max-width: none;
+    height: var(--vvh, 100dvh);
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .chat-window-minimized {
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+  }
+
+  .chat-column {
+    padding: 0 6px 6px;
+  }
+
+  .chat-info-bar {
+    padding: 4px 10px;
+  }
+
   .member-panel { display: none; }
 
   .xp-menu-bar { font-size: 10px; padding: 2px 4px; }
@@ -1033,6 +1466,58 @@
   .emoji-picker { width: 180px; gap: 4px; padding: 6px; }
   .emoji-pick { width: 34px; height: 34px; font-size: 18px; }
   .game-shortcut-btn { width: 32px; height: 30px; font-size: 16px; }
+
+  .message-list {
+    padding: 10px 12px;
+  }
+
+  .typing-indicator {
+    padding: 0 10px;
+  }
+
+  .message-input-wrap {
+    gap: 8px;
+    padding: 10px 10px max(8px, env(safe-area-inset-bottom, 8px));
+  }
+
+  .message-input-field {
+    font-size: 16px;
+    padding: 10px;
+  }
+
+  .message-input-controls {
+    gap: 6px;
+  }
+
+  .message-input-controls .xp-btn {
+    flex: none;
+    min-width: 0;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .message-game-controls {
+    order: 2;
+  }
+
+  .message-controls-spacer {
+    display: none;
+  }
+
+  .message-members-count {
+    order: 3;
+    margin-left: auto;
+  }
+
+  .message-btn-send {
+    order: 4;
+    margin-left: 2px;
+  }
+
+  .message-btn-leave {
+    order: 1;
+    margin-right: 2px;
+  }
 }
 
 @media (max-height: 420px) {

@@ -18,20 +18,20 @@ export function MobileBuddyOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[90] bg-black/40 flex items-center justify-center"
+      className="mobile-buddy-overlay"
       onClick={(e) => e.target === e.currentTarget && setOpen(false)}
     >
-      <div className="bg-[#ECE9D8] rounded-t-lg rounded-b overflow-hidden shadow-xl w-[260px] max-h-[70vh] flex flex-col">
-        <div className="bg-[#ECE9D8] p-1.5 px-2.5 font-bold text-[11px] text-[#333] border-b border-[#ACA899] flex items-center justify-between">
+      <div className="mobile-buddy-card">
+        <div className="mobile-buddy-header">
           <span>Buddies ({members.length})</span>
           <button
-            className="bg-transparent border-none text-sm cursor-pointer text-[#666] p-0 px-0.5"
+            className="mobile-buddy-close"
             onClick={() => setOpen(false)}
           >
             ✕
           </button>
         </div>
-        <div className="overflow-y-auto p-1 flex-1">
+        <div className="mobile-buddy-list">
           {members.map((name, i) => (
             <MemberEntry
               key={name}

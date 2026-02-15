@@ -120,7 +120,7 @@ export function DrawCanvas() {
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 z-0"
+      className="fullscreen-canvas"
       style={{ cursor: "crosshair" }}
     />
   );

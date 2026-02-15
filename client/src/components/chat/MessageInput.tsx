@@ -73,7 +73,7 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   (window as any).__pfMsgInput = inputRef;
 
   return (
-    <div className="shrink-0 bg-[#ECE9D8] px-3 py-2.5 flex flex-col gap-2 max-sm:px-2.5 max-sm:pb-[max(8px,env(safe-area-inset-bottom,8px))] max-sm:gap-2">
+    <div className="message-input-wrap">
       <input
         type="text"
         id="msg-input"
@@ -82,15 +82,15 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         maxLength={2000}
         autoComplete="off"
         enterKeyHint="send"
-        className="xp-input font-[Arial,Helvetica,sans-serif] !text-[13px] !p-1.5 max-sm:!text-base max-sm:!p-2.5"
+        className="xp-input message-input-field"
         onKeyDown={(e) => e.key === "Enter" && handleSend()}
         onInput={handleInput}
       />
-      <div className="flex gap-2 items-center flex-wrap max-sm:gap-1.5">
-        <Button id="btn-send" primary onClick={handleSend} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-4">
+      <div className="message-input-controls">
+        <Button id="btn-send" primary onClick={handleSend} className="message-btn message-btn-send">
           Send
         </Button>
-        <div className="flex gap-0.5 items-center max-sm:order-2">
+        <div className="message-game-controls">
           <button className="game-shortcut-btn" title="Pillow Fight" onClick={() => {
             if (members.length < 3) return showToast("Need at least 3 people");
             onPickerOpen("vote");
@@ -110,14 +110,14 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
             <button className="sab-strike-btn" onClick={handleSabStrike}>💣 Strike!</button>
           )}
         </div>
-        <div className="flex-1 max-sm:hidden" />
-        <span className="text-[11px] text-[#666] max-sm:ml-auto max-sm:order-3">{members.length} inside</span>
+        <div className="message-controls-spacer" />
+        <span id="member-count" className="message-members-count">{members.length} inside</span>
         {isHost ? (
-          <Button id="btn-knock-down" onClick={handleKnockDown} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
+          <Button id="btn-knock-down" onClick={handleKnockDown} className="message-btn message-btn-leave">
             Knock Down
           </Button>
         ) : (
-          <Button id="btn-leave-room" onClick={handleLeave} className="!px-4 !py-1.5 max-sm:!text-xs max-sm:!py-2 max-sm:!px-3 max-sm:flex-none max-sm:order-1">
+          <Button id="btn-leave-room" onClick={handleLeave} className="message-btn message-btn-leave">
             Leave Fort
           </Button>
         )}

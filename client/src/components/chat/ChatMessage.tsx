@@ -4,9 +4,9 @@ import { nameColor } from "../../utils/nameColor";
 export function ChatMessage({ msg }: { msg: ChatMsg }) {
   if (msg.kind === "system") {
     return (
-      <div className="mb-0.5 break-words">
-        <span className="font-bold text-[#999]">pillowtalk</span>
-        <span className="text-[#888] text-xs italic">: {msg.text}</span>
+      <div className="chat-message chat-message-system">
+        <span className="chat-system-label">pillowtalk</span>
+        <span className="chat-system-text">: {msg.text}</span>
       </div>
     );
   }
@@ -24,13 +24,13 @@ export function ChatMessage({ msg }: { msg: ChatMsg }) {
   }
 
   return (
-    <div className="mb-0.5 break-words font-[Arial,Helvetica,sans-serif] text-[13px] leading-[1.45]">
-      <span className="font-bold" style={{ color: nameColor(msg.from!) }}>
+    <div className="chat-message">
+      <span className="chat-sender" style={{ color: nameColor(msg.from!) }}>
         {msg.from}
       </span>
-      <span className="text-[#888] text-[11px]"> ({msg.timestamp})</span>
+      <span className="chat-timestamp"> ({msg.timestamp})</span>
       {": "}
-      <span className="text-[13px]">{textContent}</span>
+      <span className="chat-content">{textContent}</span>
     </div>
   );
 }

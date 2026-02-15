@@ -22,7 +22,7 @@ export async function startServer(): Promise<void> {
     stdout: "ignore",
     stderr: "ignore",
   });
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 120; i++) {
     try {
       const res = await fetch(`http://localhost:${_port}/`);
       if (res.ok) return;

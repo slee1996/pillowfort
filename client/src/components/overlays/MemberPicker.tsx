@@ -24,7 +24,7 @@ export function MemberPicker({ title, members, onPick, onClose }: MemberPickerPr
         </div>
         <div className="member-picker-body">
           {members.length === 0 ? (
-            <div className="p-2 text-[11px] text-[#888]">No one to pick.</div>
+            <div className="member-picker-empty">No one to pick.</div>
           ) : (
             members.map((name) => (
               <div

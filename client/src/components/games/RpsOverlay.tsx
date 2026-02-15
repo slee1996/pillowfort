@@ -21,7 +21,7 @@ export function RpsOverlay() {
           <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
             <div>{rps.challengedBy} challenges you to RPS!</div>
-            <div className="flex gap-2 mt-3.5 justify-center">
+            <div className="auth-actions game-actions">
               <Button primary onClick={() => send("rps-accept")}>Accept</Button>
               <Button onClick={() => { send("rps-decline"); close(); }}>Decline</Button>
             </div>
@@ -41,7 +41,7 @@ export function RpsOverlay() {
           <div className="game-dialog-body">
             <div>RPS vs {opponent}{rps.koth ? " 👑 for the crown!" : ""} — pick your weapon!</div>
             {!rps.myPick ? (
-              <div className="my-3">
+              <div className="rps-picks">
                 {(["rock", "paper", "scissors"] as RpsPick[]).map((pick) => (
                   <span
                     key={pick}
@@ -57,7 +57,7 @@ export function RpsOverlay() {
                 ))}
               </div>
             ) : (
-              <div className="my-3 text-[#888] italic">Waiting for opponent...</div>
+              <div className="rps-status-waiting">Waiting for opponent...</div>
             )}
           </div>
         </div>
@@ -74,10 +74,10 @@ export function RpsOverlay() {
         <div className="game-dialog">
           <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
-            <div className="text-base font-bold my-2">
+            <div className="rps-result-text">
               {line}<br />{winner ? `${winner} wins!${rps.koth ? " 👑" : ""}` : "Draw!"}
             </div>
-            <div className="flex gap-2 mt-3.5 justify-center">
+            <div className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>
             </div>
           </div>

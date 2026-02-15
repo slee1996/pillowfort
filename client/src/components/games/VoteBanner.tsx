@@ -39,17 +39,17 @@ export function VoteBanner() {
 
   return (
     <div className="vote-banner">
-      <div>⚔ <strong>PILLOW FIGHT!</strong> Vote to kick <span className="font-bold text-[#B22222]">{vote.target}</span></div>
-      <div className="text-[11px] text-[#666] my-1.5">
+      <div>⚔ <strong>PILLOW FIGHT!</strong> Vote to kick <span className="vote-target-name">{vote.target}</span></div>
+      <div className="vote-status">
         {myVote ? (
-          <span className={`font-bold ${myVote === "yes" ? "text-[#060]" : "text-[#800]"}`}>
+          <span className={`vote-choice ${myVote === "yes" ? "yes" : "no"}`}>
             Voted: {myVote === "yes" ? "Kick" : "Keep"}
           </span>
         ) : null}
       </div>
-      <div className="text-[10px] text-[#999]">{remaining}s remaining</div>
+      <div className="vote-remaining">{remaining}s remaining</div>
       {!isTarget && !myVote && (
-        <div className="flex gap-2 mt-3 justify-center">
+        <div className="auth-actions">
           <Button
             onClick={() => castVote("yes")}
             style={{ background: "linear-gradient(180deg,#fff,#D4E8D4)", borderColor: "#060" }}

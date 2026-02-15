@@ -75,6 +75,18 @@ open http://localhost:3000
 
 the local server uses Bun's native WebSocket support. no cloudflare, no durable objects — just a single process holding rooms in memory.
 
+## design snapshot tests
+
+```bash
+# runs visual baselines for home/setup/join/chat (desktop + mobile)
+bun run test:design-snapshots
+
+# optional: run against an already-running app URL
+PF_BASE_URL=http://localhost:3000 bun run test:design-snapshots
+```
+
+first run writes baselines to `test/__snapshots__/design/`. later runs compare pixel diffs and fail if UI drift exceeds threshold.
+
 ## deploying to cloudflare
 
 ```bash

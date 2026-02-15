@@ -7,7 +7,8 @@
     "build": "cd client && npx vite build",
     "deploy": "cd client && npx vite build && cd .. && npx wrangler deploy",
     "start": "bun server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:design-snapshots": "bun test test/design-snapshots.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",

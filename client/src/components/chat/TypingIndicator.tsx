@@ -19,7 +19,7 @@ export function TypingIndicator() {
   }, []);
 
   return (
-    <div className="text-[11px] text-[#888] px-2.5 min-h-[18px] bg-white border-t border-[#F0F0F0] shrink-0">
+    <div className="typing-indicator">
       {text}
     </div>
   );

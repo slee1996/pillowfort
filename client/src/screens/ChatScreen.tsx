@@ -175,11 +175,7 @@ export function ChatScreen() {
       <BreakoutCanvas active={minimized} />
 
       <DraggableWindow
-        className={`xp-window flex flex-col
-          w-[92vw] max-w-[780px] h-[85vh] max-h-[620px]
-          max-sm:w-screen max-sm:h-[var(--vvh,100dvh)] max-sm:max-w-none max-sm:max-h-none max-sm:rounded-none
-          ${minimized ? "!h-auto !max-h-none !w-auto !max-w-none absolute bottom-3 left-3 !top-auto !right-auto rounded-md shadow-xl" : ""}
-          relative z-[2] ${sabFrameFx}`}
+        className={`xp-window chat-window ${minimized ? "chat-window-minimized" : ""} ${sabFrameFx}`}
         minimized={minimized}
         titleBarRef={titleBarRef}
       >
@@ -215,7 +211,7 @@ export function ChatScreen() {
               pillowfort —{" "}
               <span
                 id="room-code"
-                className="cursor-pointer underline decoration-dotted"
+                className="room-code"
                 title="Click to copy fort flag"
                 onClick={handleCopyRoom}
               >
@@ -240,9 +236,9 @@ export function ChatScreen() {
             <MenuBar />
             <ActionBar onPickerOpen={handlePickerOpen} />
 
-            <div className="flex flex-1 min-h-0">
-              <div className="flex-1 flex flex-col min-w-0 px-2.5 pb-2 max-sm:px-1.5 max-sm:pb-1.5">
-                <div className="bg-white px-2.5 py-1 text-[11px] text-[#888] border-b border-[#E8E8E8] italic shrink-0">
+            <div className="chat-main">
+              <div className="chat-column">
+                <div className="chat-info-bar">
                   {chatInfoText}
                 </div>
 

@@ -39,11 +39,11 @@ export function SetupScreen() {
       <BackgroundCanvas />
       <Window
         title="Set Up a Fort"
-        className="w-[340px] max-w-full relative z-[1]"
+        className="auth-window"
         buttons={[{ label: "✕", close: true, onClick: () => setScreen("home") }]}
       >
         <div className="xp-window-body">
-          <p className="text-xs text-[#333] mb-3.5">
+          <p className="auth-note">
             Pick a secret password. Share it with people you want to let inside.
           </p>
           <Input
@@ -57,7 +57,7 @@ export function SetupScreen() {
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             autoFocus
           />
-          <div className="flex gap-2 mt-3 justify-center">
+          <div className="auth-actions">
             <Button id="btn-create" primary onClick={handleCreate}>
               Build the Fort
             </Button>

@@ -14,20 +14,20 @@ export function KnockedScreen() {
       <BackgroundCanvas />
       <Window
         title="pillowfort"
-        className="w-[340px] max-w-full relative z-[1]"
+        className="auth-window"
         buttons={[{ label: "✕", close: true, onClick: () => setScreen("home") }]}
       >
         <div className="xp-window-body">
-          <div className="flex items-start gap-3.5 mb-4">
-            <div className="w-8 h-8 shrink-0 flex items-center justify-center">
+          <div className="notice-row">
+            <div className="notice-icon-wrap">
               <LogoIcon size={32} />
             </div>
-            <div className="text-xs leading-relaxed text-[#333]">
+            <div className="notice-text">
               <strong>Fort has been knocked down.</strong>
-              <p className="text-[#666] text-[11px] mt-1.5">{reason}</p>
+              <p className="notice-subtext">{reason}</p>
             </div>
           </div>
-          <div className="flex gap-2 mt-3 justify-center">
+          <div className="auth-actions">
             <Button id="btn-home" primary onClick={() => setScreen("home")}>
               OK
             </Button>

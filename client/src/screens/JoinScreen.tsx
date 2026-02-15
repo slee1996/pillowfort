@@ -44,11 +44,11 @@ export function JoinScreen() {
       <BackgroundCanvas />
       <Window
         title="Join a Fort"
-        className="w-[340px] max-w-full relative z-[1]"
+        className="auth-window"
         buttons={[{ label: "✕", close: true, onClick: () => setScreen("home") }]}
       >
         <div className="xp-window-body">
-          <p className="text-xs text-[#333] mb-3.5">
+          <p className="auth-note">
             Enter the fort flag and secret password you were given.
           </p>
           <Input
@@ -71,7 +71,7 @@ export function JoinScreen() {
             ref={passwordRef}
             onKeyDown={(e) => e.key === "Enter" && handleJoin()}
           />
-          <div className="flex gap-2 mt-3 justify-center">
+          <div className="auth-actions">
             <Button id="btn-enter" primary onClick={handleJoin}>
               Join Fort
             </Button>

@@ -34,7 +34,7 @@ export function SabVoteBanner() {
   return (
     <div className="sab-vote-banner">
       <div>🕵 <strong>SABOTEUR VOTE!</strong> Who is the saboteur?</div>
-      <div className="my-2">
+      <div className="sab-vote-options">
         {members.map((name) => (
           <div
             key={name}
@@ -46,7 +46,7 @@ export function SabVoteBanner() {
           </div>
         ))}
       </div>
-      <div className="text-[10px] text-[#999]">{remaining}s</div>
+      <div className="vote-remaining">{remaining}s</div>
     </div>
   );
 }

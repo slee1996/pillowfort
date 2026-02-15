@@ -16,7 +16,7 @@ export function MessageList() {
     <div
       id="messages"
       ref={ref}
-      className="flex-1 overflow-y-auto bg-white px-3.5 py-3 max-sm:px-3 max-sm:py-2.5 font-[Arial,Helvetica,sans-serif] text-[13px] leading-[1.45]"
+      className="message-list"
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />
