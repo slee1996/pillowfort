@@ -42,6 +42,11 @@ body {
 
   .screen-chat {
     padding: 0;
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: var(--vvh, 100dvh);
+    align-items: flex-start;
+    justify-content: flex-start;
   }
 }
 

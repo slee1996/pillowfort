@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
@@ -16,6 +16,22 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   const members = useGameStore((s) => s.members);
   const sabRole = useGameStore((s) => s.sabRole);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 600px)").matches);
+  const disableRoomAction = isMobile && inputFocused;
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 600px)");
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    try {
+      media.addEventListener("change", sync);
+      return () => media.removeEventListener("change", sync);
+    } catch {
+      media.addListener(sync);
+      return () => media.removeListener(sync);
+    }
+  }, []);
 
   const handleSend = async () => {
     const text = inputRef.current?.value.trim();
@@ -64,11 +80,13 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   };
 
   const handleKnockDown = () => {
+    if (disableRoomAction) return;
     useGameStore.getState().setIntentionalLeave(true);
     send("knock-down");
   };
 
   const handleLeave = () => {
+    if (disableRoomAction) return;
     useGameStore.getState().setIntentionalLeave(true);
     send("leave");
     useGameStore.getState().cleanup();
@@ -95,6 +113,8 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         className="xp-input message-input-field"
         onKeyDown={(e) => e.key === "Enter" && handleSend()}
         onInput={handleInput}
+        onFocus={() => setInputFocused(true)}
+        onBlur={() => setInputFocused(false)}
       />
       <div className="message-input-controls">
         <Button id="btn-send" primary onClick={handleSend} className="message-btn message-btn-send">
@@ -122,11 +142,21 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         </div>
         <div className="message-controls-spacer" />
         {isHost ? (
-          <Button id="btn-knock-down" onClick={handleKnockDown} className="message-btn message-btn-leave">
+          <Button
+            id="btn-knock-down"
+            onClick={handleKnockDown}
+            className="message-btn message-btn-leave"
+            disabled={disableRoomAction}
+          >
             Knock Down
           </Button>
         ) : (
-          <Button id="btn-leave-room" onClick={handleLeave} className="message-btn message-btn-leave">
+          <Button
+            id="btn-leave-room"
+            onClick={handleLeave}
+            className="message-btn message-btn-leave"
+            disabled={disableRoomAction}
+          >
             Leave Fort
           </Button>
         )}
