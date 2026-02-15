@@ -33,7 +33,7 @@ interface Room {
     ip: string;
   }>;
   // game state
-  activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout> } | null;
+  activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout>; auto?: boolean } | null;
   rpsGame: { p1: string; p2: string; pick1?: string; pick2?: string } | null;
   tttGame: { p1: string; p2: string; board: string[]; turn: number } | null;
   saboteur: string | null;
@@ -43,6 +43,30 @@ interface Room {
   sabRoundTimer: ReturnType<typeof setTimeout> | null;
   sabBombTimer: ReturnType<typeof setTimeout> | null;
   kothGame: { challenger: string; host: string } | null;
+  activeGame: GameQueueItem | null;
+  gameQueue: GameQueueItem[];
+  leaderboards: RoomLeaderboards;
+}
+
+interface RoomLeaderboards {
+  pillowFight: Record<string, number>;
+  rps: Record<string, number>;
+  ttt: Record<string, number>;
+  saboteur: Record<string, number>;
+  koth: Record<string, number>;
+}
+
+type QueueGameKind = "vote" | "rps" | "ttt" | "saboteur" | "koth";
+
+interface GameQueueItem {
+  kind: QueueGameKind;
+  by: string;
+  target?: string;
+}
+
+interface RoomGameQueue {
+  current: GameQueueItem | null;
+  queue: GameQueueItem[];
 }
 
 // --- state (memory only, never persisted) ---
@@ -133,6 +157,100 @@ function sanitizeEncryptedChat(enc: any): EncryptedChatPayload | null {
   return { v: enc.v, iv: enc.iv, ct: enc.ct };
 }
 
+function createLeaderboards(): RoomLeaderboards {
+  return {
+    pillowFight: {},
+    rps: {},
+    ttt: {},
+    saboteur: {},
+    koth: {},
+  };
+}
+
+function emitLeaderboards(room: Room, exclude?: any) {
+  broadcast(room, "leaderboards", { leaderboards: room.leaderboards }, exclude);
+}
+
+function bumpLeaderboard(room: Room, game: keyof RoomLeaderboards, name: string, amount = 1) {
+  if (!name) return;
+  room.leaderboards[game][name] = (room.leaderboards[game][name] || 0) + amount;
+}
+
+function gameQueueSnapshot(room: Room): RoomGameQueue {
+  return {
+    current: room.activeGame ? { ...room.activeGame } : null,
+    queue: room.gameQueue.map((q) => ({ ...q })),
+  };
+}
+
+function emitGameQueue(room: Room, exclude?: any) {
+  broadcast(room, "game-queue", { gameQueue: gameQueueSnapshot(room) }, exclude);
+}
+
+function sameGameRequest(a: GameQueueItem, b: GameQueueItem): boolean {
+  return a.kind === b.kind && a.by === b.by && (a.target || "") === (b.target || "");
+}
+
+function queueGame(room: Room, req: GameQueueItem, ws?: any): boolean {
+  if (room.activeGame && sameGameRequest(room.activeGame, req)) return false;
+  if (room.gameQueue.some((q) => sameGameRequest(q, req))) return false;
+  room.gameQueue.push(req);
+  emitGameQueue(room);
+  if (ws) send(ws, "game-queued", { ...req, position: room.gameQueue.length });
+  return true;
+}
+
+function setActiveGame(room: Room, current: GameQueueItem | null) {
+  room.activeGame = current;
+  emitGameQueue(room);
+}
+
+function drainGameQueue(room: Room) {
+  if (room.activeGame) return;
+  while (room.gameQueue.length > 0) {
+    const req = room.gameQueue.shift()!;
+    const nowMembers = members(room);
+    if (!nowMembers.includes(req.by)) continue;
+    if (req.target && !nowMembers.includes(req.target)) continue;
+    let started = false;
+    switch (req.kind) {
+      case "vote":
+        started = !!(req.target && startVote(room, req.by, req.target));
+        break;
+      case "rps":
+        started = !!(req.target && startRps(room, req.by, req.target));
+        break;
+      case "ttt":
+        started = !!(req.target && startTtt(room, req.by, req.target));
+        break;
+      case "saboteur":
+        started = startSaboteur(room, req.by);
+        break;
+      case "koth":
+        started = startKoth(room, req.by);
+        break;
+    }
+    if (started) return;
+  }
+  emitGameQueue(room);
+}
+
+function clearActiveGame(room: Room, drain = true) {
+  if (!room.activeGame) return;
+  room.activeGame = null;
+  emitGameQueue(room);
+  if (drain) drainGameQueue(room);
+}
+
+function pruneGameQueue(room: Room) {
+  const nowMembers = new Set(members(room));
+  const next = room.gameQueue.filter((q) => nowMembers.has(q.by) && (!q.target || nowMembers.has(q.target)));
+  if (next.length !== room.gameQueue.length) {
+    room.gameQueue = next;
+    emitGameQueue(room);
+  }
+}
+
 function resetIdle(room: Room) {
   clearTimeout(room.idleTimer);
   room.idleTimer = setTimeout(() => destroy(room, "the fort went quiet for too long"), IDLE_MS);
@@ -210,10 +328,13 @@ function onSetUp(ws: any, d: WSData, msg: any) {
     sabRoundTimer: null,
     sabBombTimer: null,
     kothGame: null,
+    activeGame: null,
+    gameQueue: [],
+    leaderboards: createLeaderboards(),
   };
 
   rooms.set(id, room);
-  send(ws, "room-created", { room: id });
+  send(ws, "room-created", { room: id, leaderboards: room.leaderboards, gameQueue: gameQueueSnapshot(room) });
 }
 
 function onJoin(ws: any, d: WSData, msg: any) {
@@ -236,7 +357,14 @@ function onJoin(ws: any, d: WSData, msg: any) {
   d.awayText = null;
 
   room.guests.set(ws, d.name);
-  send(ws, "joined", { room: room.id, members: members(room), name: d.name, presence: roomPresence(room) });
+  send(ws, "joined", {
+    room: room.id,
+    members: members(room),
+    name: d.name,
+    presence: roomPresence(room),
+    leaderboards: room.leaderboards,
+    gameQueue: gameQueueSnapshot(room),
+  });
   broadcast(room, "member-joined", { name: d.name, presence: memberPresence(d) }, ws);
   resetIdle(room);
 }
@@ -416,6 +544,7 @@ function removeMember(ws: any, d: WSData, room: Room) {
     room.guests.delete(ws);
     broadcast(room, "member-left", { name: d.name });
   }
+  pruneGameQueue(room);
 }
 
 function onDisconnect(ws: any, d: WSData) {
@@ -438,6 +567,7 @@ function onDisconnect(ws: any, d: WSData) {
   const timer = setTimeout(() => {
     room.disconnected.delete(name);
     broadcast(room, "member-left", { name });
+    pruneGameQueue(room);
     if (wasHost) {
       if (room.guests.size === 0 && !room.host) {
         destroy(room, "host left and the fort is empty");
@@ -479,7 +609,15 @@ function onRejoin(ws: any, d: WSData, msg: any) {
       room.guests.set(ws, d.name);
     }
 
-    send(ws, "rejoined", { room: room.id, members: members(room), name: d.name, isHost: d.isHost, presence: roomPresence(room) });
+    send(ws, "rejoined", {
+      room: room.id,
+      members: members(room),
+      name: d.name,
+      isHost: d.isHost,
+      presence: roomPresence(room),
+      leaderboards: room.leaderboards,
+      gameQueue: gameQueueSnapshot(room),
+    });
     broadcast(room, "member-back", { name: d.name }, ws);
     resetIdle(room);
   } else {
@@ -502,19 +640,122 @@ function getHostWs(room: Room): any | null {
   return room.host ? room.host.ws : null;
 }
 
+function startVote(
+  room: Room,
+  starter: string,
+  target: string,
+  opts?: { auto?: boolean; starterLabel?: string }
+): boolean {
+  if (room.activeVote) return false;
+  if (!opts?.auto && starter === target) return false;
+  const m = members(room);
+  if (!m.includes(target)) return false;
+  if (!opts?.auto && !m.includes(starter)) return false;
+  if (m.length < 3) return false;
+
+  room.activeVote = {
+    target,
+    starter,
+    yes: opts?.auto ? new Set() : new Set([starter]),
+    no: new Set(),
+    auto: !!opts?.auto,
+    timer: setTimeout(() => resolveVote(room), VOTE_DURATION_MS),
+  };
+  setActiveGame(room, { kind: "vote", by: starter, target });
+  broadcast(room, "vote-started", {
+    target,
+    starter: opts?.starterLabel || starter,
+    ...(opts?.auto ? { auto: true } : {}),
+  });
+  return true;
+}
+
+function startRps(room: Room, p1: string, p2: string): boolean {
+  if (room.rpsGame) return false;
+  const m = members(room);
+  if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
+  const tw = findWs(room, p2);
+  if (!tw) return false;
+  room.rpsGame = { p1, p2 };
+  setActiveGame(room, { kind: "rps", by: p1, target: p2 });
+  send(tw, "rps-challenged", { from: p1 });
+  broadcast(room, "rps-pending", { p1, p2 });
+  return true;
+}
+
+function startTtt(room: Room, p1: string, p2: string): boolean {
+  if (room.tttGame) return false;
+  const m = members(room);
+  if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
+  const tw = findWs(room, p2);
+  if (!tw) return false;
+  room.tttGame = { p1, p2, board: Array(9).fill(""), turn: 0 };
+  setActiveGame(room, { kind: "ttt", by: p1, target: p2 });
+  send(tw, "ttt-challenged", { from: p1 });
+  broadcast(room, "ttt-pending", { p1, p2 });
+  return true;
+}
+
+function startSaboteur(room: Room, starter: string): boolean {
+  if (room.saboteurActive) return false;
+  const m = members(room);
+  if (!m.includes(starter)) return false;
+  if (m.length < SABOTEUR_MIN_PLAYERS) return false;
+
+  room.saboteurActive = true;
+  room.sabStrikes = 0;
+  room.saboteur = m[Math.floor(Math.random() * m.length)];
+  setActiveGame(room, { kind: "saboteur", by: starter });
+
+  broadcast(room, "sab-started", { starter });
+  const sabWs = findWs(room, room.saboteur);
+  if (sabWs) send(sabWs, "sab-role", { role: "saboteur" });
+  for (const name of m) {
+    if (name !== room.saboteur) {
+      const w = findWs(room, name);
+      if (w) send(w, "sab-role", { role: "defender" });
+    }
+  }
+  scheduleSabVote(room);
+  return true;
+}
+
+function startKoth(room: Room, challenger: string): boolean {
+  const cw = findWs(room, challenger);
+  if (!cw) return false;
+  const cd = cw.data as WSData;
+  if (cd.isHost) return false;
+  if (room.rpsGame) return false;
+  const hostWs = getHostWs(room);
+  if (!hostWs || !room.host) return false;
+  const hostName = room.host.name;
+
+  room.kothGame = { challenger, host: hostName };
+  room.rpsGame = { p1: challenger, p2: hostName };
+  setActiveGame(room, { kind: "koth", by: challenger, target: hostName });
+  broadcast(room, "koth-started", { challenger, host: hostName });
+  broadcast(room, "rps-started", { p1: challenger, p2: hostName, koth: true });
+  return true;
+}
+
 // --- vote (pillow fight) ---
 
 function onStartVote(ws: any, d: WSData, msg: any) {
   if (!d.roomId || !d.name || !msg.target) return;
   const room = rooms.get(d.roomId);
   if (!room) return;
-  if (room.activeVote) return send(ws, "error", { message: "a vote is already in progress" });
   if (msg.target === d.name) return send(ws, "error", { message: "you can't vote yourself out" });
   if (!members(room).includes(msg.target)) return;
   if (members(room).length < 3) return send(ws, "error", { message: "need at least 3 people to start a vote" });
+  if (room.activeGame) {
+    queueGame(room, { kind: "vote", by: d.name, target: msg.target }, ws);
+    return;
+  }
+  if (room.activeVote) return send(ws, "error", { message: "a vote is already in progress" });
 
-  room.activeVote = { target: msg.target, starter: d.name, yes: new Set([d.name]), no: new Set(), timer: setTimeout(() => resolveVote(room), VOTE_DURATION_MS) };
-  broadcast(room, "vote-started", { target: msg.target, starter: d.name });
+  if (!startVote(room, d.name, msg.target)) {
+    send(ws, "error", { message: "could not start vote right now" });
+  }
 }
 
 function onCastVote(ws: any, d: WSData, msg: any) {
@@ -537,9 +778,14 @@ function onCastVote(ws: any, d: WSData, msg: any) {
 function resolveVote(room: Room) {
   if (!room.activeVote) return;
   clearTimeout(room.activeVote.timer);
-  const { target, yes, no } = room.activeVote;
+  const { target, yes, no, starter, auto } = room.activeVote;
   const ejected = yes.size > no.size;
   broadcast(room, "vote-result", { target, yes: yes.size, no: no.size, ejected });
+  if (!auto) {
+    if (ejected) bumpLeaderboard(room, "pillowFight", starter);
+    else bumpLeaderboard(room, "pillowFight", target);
+    emitLeaderboards(room);
+  }
 
   if (ejected) {
     const tw = findWs(room, target);
@@ -556,8 +802,10 @@ function resolveVote(room: Room) {
       }
     }
     broadcast(room, "member-left", { name: target });
+    pruneGameQueue(room);
   }
   room.activeVote = null;
+  clearActiveGame(room);
 }
 
 // --- RPS ---
@@ -566,13 +814,15 @@ function onRpsChallenge(ws: any, d: WSData, msg: any) {
   if (!d.roomId || !d.name || !msg.target || d.name === msg.target) return;
   const room = rooms.get(d.roomId);
   if (!room) return;
+  if (room.activeGame) {
+    queueGame(room, { kind: "rps", by: d.name, target: msg.target }, ws);
+    return;
+  }
   if (room.rpsGame) return send(ws, "error", { message: "a duel is already in progress" });
-  const tw = findWs(room, msg.target);
-  if (!tw) return;
-
-  room.rpsGame = { p1: d.name, p2: msg.target };
-  send(tw, "rps-challenged", { from: d.name });
-  broadcast(room, "rps-pending", { p1: d.name, p2: msg.target });
+  if (!findWs(room, msg.target)) return;
+  if (!startRps(room, d.name, msg.target)) {
+    send(ws, "error", { message: "could not start RPS right now" });
+  }
 }
 
 function onRpsAccept(ws: any, d: WSData) {
@@ -588,6 +838,8 @@ function onRpsDecline(ws: any, d: WSData) {
   if (!room || !room.rpsGame || d.name !== room.rpsGame.p2) return;
   broadcast(room, "rps-declined", { from: d.name });
   room.rpsGame = null;
+  if (room.kothGame) room.kothGame = null;
+  clearActiveGame(room);
 }
 
 function onRpsPick(ws: any, d: WSData, msg: any) {
@@ -611,9 +863,18 @@ function onRpsPick(ws: any, d: WSData, msg: any) {
     }
     const isKoth = !!room.kothGame;
     broadcast(room, "rps-result", { p1, p2, pick1, pick2, winner, koth: isKoth || undefined });
+    if (winner) {
+      bumpLeaderboard(room, "rps", winner);
+      emitLeaderboards(room);
+    }
     room.rpsGame = null;
     if (isKoth && winner) resolveKoth(room, winner);
-    else if (isKoth) room.kothGame = null;
+    else if (isKoth) {
+      room.kothGame = null;
+      clearActiveGame(room);
+    } else {
+      clearActiveGame(room);
+    }
   }
 }
 
@@ -623,13 +884,15 @@ function onTttChallenge(ws: any, d: WSData, msg: any) {
   if (!d.roomId || !d.name || !msg.target || d.name === msg.target) return;
   const room = rooms.get(d.roomId);
   if (!room) return;
+  if (room.activeGame) {
+    queueGame(room, { kind: "ttt", by: d.name, target: msg.target }, ws);
+    return;
+  }
   if (room.tttGame) return send(ws, "error", { message: "a game is already in progress" });
-  const tw = findWs(room, msg.target);
-  if (!tw) return;
-
-  room.tttGame = { p1: d.name, p2: msg.target, board: Array(9).fill(""), turn: 0 };
-  send(tw, "ttt-challenged", { from: d.name });
-  broadcast(room, "ttt-pending", { p1: d.name, p2: msg.target });
+  if (!findWs(room, msg.target)) return;
+  if (!startTtt(room, d.name, msg.target)) {
+    send(ws, "error", { message: "could not start Tic-Tac-Toe right now" });
+  }
 }
 
 function onTttAccept(ws: any, d: WSData) {
@@ -645,6 +908,7 @@ function onTttDecline(ws: any, d: WSData) {
   if (!room || !room.tttGame || d.name !== room.tttGame.p2) return;
   broadcast(room, "ttt-declined", { from: d.name });
   room.tttGame = null;
+  clearActiveGame(room);
 }
 
 function onTttMove(ws: any, d: WSData, msg: any) {
@@ -670,7 +934,14 @@ function onTttMove(ws: any, d: WSData, msg: any) {
   const draw = !winner && g.board.every(c => c);
 
   broadcast(room, "ttt-update", { board: g.board, turn: g.turn, lastMove: msg.cell, winner, draw });
-  if (winner || draw) room.tttGame = null;
+  if (winner) {
+    bumpLeaderboard(room, "ttt", winner);
+    emitLeaderboards(room);
+  }
+  if (winner || draw) {
+    room.tttGame = null;
+    clearActiveGame(room);
+  }
 }
 
 // --- Saboteur ---
@@ -682,24 +953,13 @@ function onSabStart(ws: any, d: WSData) {
   if (room.saboteurActive) return send(ws, "error", { message: "saboteur mode is already active" });
   const m = members(room);
   if (m.length < SABOTEUR_MIN_PLAYERS) return send(ws, "error", { message: `need at least ${SABOTEUR_MIN_PLAYERS} people` });
-
-  room.saboteurActive = true;
-  room.sabStrikes = 0;
-  room.saboteur = m[Math.floor(Math.random() * m.length)];
-
-  broadcast(room, "sab-started", { starter: d.name });
-
-  // privately assign roles
-  const sabWs = findWs(room, room.saboteur);
-  if (sabWs) send(sabWs, "sab-role", { role: "saboteur" });
-  for (const name of m) {
-    if (name !== room.saboteur) {
-      const w = findWs(room, name);
-      if (w) send(w, "sab-role", { role: "defender" });
-    }
+  if (room.activeGame) {
+    queueGame(room, { kind: "saboteur", by: d.name }, ws);
+    return;
   }
-
-  scheduleSabVote(room);
+  if (!startSaboteur(room, d.name)) {
+    send(ws, "error", { message: "could not start Saboteur right now" });
+  }
 }
 
 function scheduleSabVote(room: Room) {
@@ -747,15 +1007,21 @@ function resolveSabVote(room: Room) {
 
   if (correct) {
     const sabName = room.saboteur!;
+    for (const defender of members(room)) {
+      if (defender !== sabName) bumpLeaderboard(room, "saboteur", defender);
+    }
+    emitLeaderboards(room);
     room.saboteurActive = false;
     room.saboteur = null;
     room.sabVote = null;
     if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
 
     // auto-start pillow fight vote against the caught saboteur
+    clearActiveGame(room, false);
     if (!room.activeVote && members(room).length >= 3 && members(room).includes(sabName)) {
-      room.activeVote = { target: sabName, starter: sabName, yes: new Set(), no: new Set(), timer: setTimeout(() => resolveVote(room), VOTE_DURATION_MS) };
-      broadcast(room, "vote-started", { target: sabName, starter: "the fort", auto: true });
+      startVote(room, sabName, sabName, { auto: true, starterLabel: "the fort" });
+    } else {
+      drainGameQueue(room);
     }
   } else {
     room.sabVote = null;
@@ -773,6 +1039,8 @@ function onSabStrike(ws: any, d: WSData) {
 
   if (room.sabStrikes >= 3) {
     // The saboteur plants a bomb. Let chat continue during countdown.
+    bumpLeaderboard(room, "saboteur", d.name);
+    emitLeaderboards(room);
     room.saboteurActive = false;
     room.saboteur = null;
     if (room.sabVote) { clearTimeout(room.sabVote.timer); room.sabVote = null; }
@@ -795,15 +1063,15 @@ function onKothChallenge(ws: any, d: WSData) {
   const room = rooms.get(d.roomId);
   if (!room) return;
   if (d.isHost) return send(ws, "error", { message: "only non-hosts can challenge" });
+  if (!room.host) return;
+  if (room.activeGame) {
+    queueGame(room, { kind: "koth", by: d.name, target: room.host.name }, ws);
+    return;
+  }
   if (room.rpsGame) return send(ws, "error", { message: "a duel is already in progress" });
-  const hostWs = getHostWs(room);
-  if (!hostWs || !room.host) return;
-  const hostName = room.host.name;
-
-  room.kothGame = { challenger: d.name, host: hostName };
-  room.rpsGame = { p1: d.name, p2: hostName };
-  broadcast(room, "koth-started", { challenger: d.name, host: hostName });
-  broadcast(room, "rps-started", { p1: d.name, p2: hostName, koth: true });
+  if (!startKoth(room, d.name)) {
+    send(ws, "error", { message: "could not start KOTH right now" });
+  }
 }
 
 function resolveKoth(room: Room, winner: string) {
@@ -825,11 +1093,16 @@ function resolveKoth(room: Room, winner: string) {
       (challWs.data as WSData).isHost = true;
       room.host = { ws: challWs, name: challenger };
     }
+    bumpLeaderboard(room, "koth", challenger);
+    emitLeaderboards(room);
     broadcast(room, "new-host", { name: challenger });
     broadcast(room, "koth-result", { winner: challenger, loser: host });
   } else {
+    bumpLeaderboard(room, "koth", host);
+    emitLeaderboards(room);
     broadcast(room, "koth-result", { winner: host, loser: challenger });
   }
+  clearActiveGame(room);
 }
 
 // --- draw passthrough ---

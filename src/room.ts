@@ -36,6 +36,37 @@ interface EncryptedChatPayload {
   ct: string;
 }
 
+interface RoomLeaderboards {
+  pillowFight: Record<string, number>;
+  rps: Record<string, number>;
+  ttt: Record<string, number>;
+  saboteur: Record<string, number>;
+  koth: Record<string, number>;
+}
+
+type QueueGameKind = "vote" | "rps" | "ttt" | "saboteur" | "koth";
+
+interface GameQueueItem {
+  kind: QueueGameKind;
+  by: string;
+  target?: string;
+}
+
+interface RoomGameQueue {
+  current: GameQueueItem | null;
+  queue: GameQueueItem[];
+}
+
+function createLeaderboards(): RoomLeaderboards {
+  return {
+    pillowFight: {},
+    rps: {},
+    ttt: {},
+    saboteur: {},
+    koth: {},
+  };
+}
+
 function sanitizeEncryptedChat(enc: any): EncryptedChatPayload | null {
   if (!enc || (enc.v !== 1 && enc.v !== 2)) return null;
   if (typeof enc.iv !== "string" || typeof enc.ct !== "string") return null;
@@ -59,7 +90,7 @@ export class Room implements DurableObject {
   }> = new Map();
 
   // --- game state ---
-  private activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
+  private activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout>; auto?: boolean } | null = null;
   private rpsGame: { p1: string; p2: string; pick1?: string; pick2?: string } | null = null;
   private tttGame: { p1: string; p2: string; board: string[]; turn: number } | null = null;
   private saboteur: string | null = null;
@@ -68,6 +99,9 @@ export class Room implements DurableObject {
   private sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null = null;
   private sabRoundTimer: ReturnType<typeof setTimeout> | null = null;
   private sabBombTimer: ReturnType<typeof setTimeout> | null = null;
+  private activeGame: GameQueueItem | null = null;
+  private gameQueue: GameQueueItem[] = [];
+  private leaderboards: RoomLeaderboards = createLeaderboards();
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
@@ -176,6 +210,90 @@ export class Room implements DurableObject {
     }
   }
 
+  private emitLeaderboards(exclude?: WebSocket) {
+    this.broadcast("leaderboards", { leaderboards: this.leaderboards }, exclude);
+  }
+
+  private gameQueueSnapshot(): RoomGameQueue {
+    return {
+      current: this.activeGame ? { ...this.activeGame } : null,
+      queue: this.gameQueue.map((q) => ({ ...q })),
+    };
+  }
+
+  private emitGameQueue(exclude?: WebSocket) {
+    this.broadcast("game-queue", { gameQueue: this.gameQueueSnapshot() }, exclude);
+  }
+
+  private sameGameRequest(a: GameQueueItem, b: GameQueueItem): boolean {
+    return a.kind === b.kind && a.by === b.by && (a.target || "") === (b.target || "");
+  }
+
+  private queueGame(req: GameQueueItem, ws?: WebSocket): boolean {
+    if (this.activeGame && this.sameGameRequest(this.activeGame, req)) return false;
+    if (this.gameQueue.some((q) => this.sameGameRequest(q, req))) return false;
+    this.gameQueue.push(req);
+    this.emitGameQueue();
+    if (ws) this.send(ws, "game-queued", { ...req, position: this.gameQueue.length });
+    return true;
+  }
+
+  private setActiveGame(current: GameQueueItem | null) {
+    this.activeGame = current;
+    this.emitGameQueue();
+  }
+
+  private clearActiveGame(drain = true) {
+    if (!this.activeGame) return;
+    this.activeGame = null;
+    this.emitGameQueue();
+    if (drain) this.drainGameQueue();
+  }
+
+  private pruneGameQueue() {
+    const nowMembers = new Set(this.getMembers());
+    const next = this.gameQueue.filter((q) => nowMembers.has(q.by) && (!q.target || nowMembers.has(q.target)));
+    if (next.length !== this.gameQueue.length) {
+      this.gameQueue = next;
+      this.emitGameQueue();
+    }
+  }
+
+  private drainGameQueue() {
+    if (this.activeGame) return;
+    while (this.gameQueue.length > 0) {
+      const req = this.gameQueue.shift()!;
+      const nowMembers = this.getMembers();
+      if (!nowMembers.includes(req.by)) continue;
+      if (req.target && !nowMembers.includes(req.target)) continue;
+      let started = false;
+      switch (req.kind) {
+        case "vote":
+          started = !!(req.target && this.startVote(req.by, req.target));
+          break;
+        case "rps":
+          started = !!(req.target && this.startRps(req.by, req.target));
+          break;
+        case "ttt":
+          started = !!(req.target && this.startTtt(req.by, req.target));
+          break;
+        case "saboteur":
+          started = this.startSaboteur(req.by);
+          break;
+        case "koth":
+          started = this.startKoth(req.by);
+          break;
+      }
+      if (started) return;
+    }
+    this.emitGameQueue();
+  }
+
+  private bumpLeaderboard(game: keyof RoomLeaderboards, name: string, amount = 1) {
+    if (!name) return;
+    this.leaderboards[game][name] = (this.leaderboards[game][name] || 0) + amount;
+  }
+
   private getHost(): WebSocket | null {
     for (const w of this.state.getWebSockets()) {
       if (this.att(w).isHost) return w;
@@ -259,7 +377,7 @@ export class Room implements DurableObject {
     ws.serializeAttachment(data);
 
     this.log(`created by ${this.tag(data)}`);
-    this.send(ws, "room-created", { room: this.roomId });
+    this.send(ws, "room-created", { room: this.roomId, leaderboards: this.leaderboards, gameQueue: this.gameQueueSnapshot() });
     this.resetIdle();
   }
 
@@ -288,7 +406,14 @@ export class Room implements DurableObject {
     } as WSData);
 
     this.log(`${name}#${prev.hash} joined (${this.getMembers().length} members)`);
-    this.send(ws, "joined", { room: this.roomId, members: this.getMembers(), name, presence: this.getPresenceMap() });
+    this.send(ws, "joined", {
+      room: this.roomId,
+      members: this.getMembers(),
+      name,
+      presence: this.getPresenceMap(),
+      leaderboards: this.leaderboards,
+      gameQueue: this.gameQueueSnapshot(),
+    });
     this.broadcast("member-joined", { name, presence: this.presenceOf(this.att(ws)) }, ws);
     this.resetIdle();
   }
@@ -402,19 +527,123 @@ export class Room implements DurableObject {
     this.broadcast("draw", payload, ws);
   }
 
+  private startVote(
+    starter: string,
+    target: string,
+    opts?: { auto?: boolean; starterLabel?: string }
+  ): boolean {
+    if (this.activeVote) return false;
+    if (!opts?.auto && starter === target) return false;
+    const m = this.getMembers();
+    if (!m.includes(target)) return false;
+    if (!opts?.auto && !m.includes(starter)) return false;
+    if (m.length < 3) return false;
+
+    this.activeVote = {
+      target,
+      starter,
+      yes: opts?.auto ? new Set() : new Set([starter]),
+      no: new Set(),
+      auto: !!opts?.auto,
+      timer: setTimeout(() => this.resolveVote(), VOTE_DURATION_MS),
+    };
+    this.setActiveGame({ kind: "vote", by: starter, target });
+    this.broadcast("vote-started", {
+      target,
+      starter: opts?.starterLabel || starter,
+      ...(opts?.auto ? { auto: true } : {}),
+    });
+    return true;
+  }
+
+  private startRps(p1: string, p2: string): boolean {
+    if (this.rpsGame) return false;
+    const m = this.getMembers();
+    if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
+    const tw = this.findWs(p2);
+    if (!tw) return false;
+    this.rpsGame = { p1, p2 };
+    this.setActiveGame({ kind: "rps", by: p1, target: p2 });
+    this.send(tw, "rps-challenged", { from: p1 });
+    this.broadcast("rps-pending", { p1, p2 });
+    return true;
+  }
+
+  private startTtt(p1: string, p2: string): boolean {
+    if (this.tttGame) return false;
+    const m = this.getMembers();
+    if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
+    const tw = this.findWs(p2);
+    if (!tw) return false;
+    this.tttGame = { p1, p2, board: Array(9).fill(""), turn: 0 };
+    this.setActiveGame({ kind: "ttt", by: p1, target: p2 });
+    this.send(tw, "ttt-challenged", { from: p1 });
+    this.broadcast("ttt-pending", { p1, p2 });
+    return true;
+  }
+
+  private startSaboteur(starter: string): boolean {
+    if (this.saboteurActive) return false;
+    const members = this.getMembers();
+    if (!members.includes(starter)) return false;
+    if (members.length < SABOTEUR_MIN_PLAYERS) return false;
+
+    this.saboteurActive = true;
+    this.sabStrikes = 0;
+    this.saboteur = members[Math.floor(Math.random() * members.length)];
+    this.setActiveGame({ kind: "saboteur", by: starter });
+    this.log(`saboteur mode started — ${this.saboteur} is the saboteur`);
+
+    this.broadcast("sab-started", { starter });
+    const sabWs = this.findWs(this.saboteur);
+    if (sabWs) this.send(sabWs, "sab-role", { role: "saboteur" });
+    for (const w of this.state.getWebSockets()) {
+      const d = this.att(w);
+      if (d.name && d.name !== this.saboteur) this.send(w, "sab-role", { role: "defender" });
+    }
+    this.scheduleSabVote();
+    return true;
+  }
+
+  private startKoth(challenger: string): boolean {
+    const cw = this.findWs(challenger);
+    if (!cw) return false;
+    const cd = this.att(cw);
+    if (cd.isHost) return false;
+    if (this.rpsGame) return false;
+    const hostWs = this.getHost();
+    if (!hostWs) return false;
+    const hostName = this.att(hostWs).name;
+    if (!hostName) return false;
+
+    this.kothGame = { challenger, host: hostName };
+    this.rpsGame = { p1: challenger, p2: hostName };
+    this.setActiveGame({ kind: "koth", by: challenger, target: hostName });
+    this.broadcast("koth-started", { challenger, host: hostName });
+    this.broadcast("rps-started", { p1: challenger, p2: hostName, koth: true });
+    this.log(`${challenger} challenged ${hostName} for the crown`);
+    return true;
+  }
+
   // ============ PILLOW FIGHT (vote to eject) ============
 
   private onStartVote(ws: WebSocket, msg: { target?: string }) {
     const a = this.att(ws);
     if (!a.name || !msg.target) return;
-    if (this.activeVote) return this.send(ws, "error", { message: "a vote is already in progress" });
     if (msg.target === a.name) return this.send(ws, "error", { message: "you can't vote yourself out" });
     if (!this.getMembers().includes(msg.target)) return;
     if (this.getMembers().length < 3) return this.send(ws, "error", { message: "need at least 3 people to start a vote" });
+    if (this.activeGame) {
+      this.queueGame({ kind: "vote", by: a.name, target: msg.target }, ws);
+      return;
+    }
+    if (this.activeVote) return this.send(ws, "error", { message: "a vote is already in progress" });
 
-    this.activeVote = { target: msg.target, starter: a.name, yes: new Set([a.name]), no: new Set(), timer: setTimeout(() => this.resolveVote(), VOTE_DURATION_MS) };
-    this.broadcast("vote-started", { target: msg.target, starter: a.name });
-    this.log(`${a.name} started vote to eject ${msg.target}`);
+    if (this.startVote(a.name, msg.target)) {
+      this.log(`${a.name} started vote to eject ${msg.target}`);
+    } else {
+      this.send(ws, "error", { message: "could not start vote right now" });
+    }
   }
 
   private onCastVote(ws: WebSocket, msg: { vote?: string }) {
@@ -437,10 +666,15 @@ export class Room implements DurableObject {
   private resolveVote() {
     if (!this.activeVote) return;
     clearTimeout(this.activeVote.timer);
-    const { target, yes, no } = this.activeVote;
+    const { target, yes, no, starter, auto } = this.activeVote;
     const ejected = yes.size > no.size;
     this.broadcast("vote-result", { target, yes: yes.size, no: no.size, ejected });
     this.log(`vote result: ${target} ${ejected ? "ejected" : "stays"} (${yes.size}-${no.size})`);
+    if (!auto) {
+      if (ejected) this.bumpLeaderboard("pillowFight", starter);
+      else this.bumpLeaderboard("pillowFight", target);
+      this.emitLeaderboards();
+    }
 
     if (ejected) {
       // kick the target
@@ -453,8 +687,10 @@ export class Room implements DurableObject {
         }
       }
       this.broadcast("member-left", { name: target });
+      this.pruneGameQueue();
     }
     this.activeVote = null;
+    this.clearActiveGame();
   }
 
   // ============ ROCK PAPER SCISSORS ============
@@ -469,14 +705,17 @@ export class Room implements DurableObject {
   private onRpsChallenge(ws: WebSocket, msg: { target?: string }) {
     const a = this.att(ws);
     if (!a.name || !msg.target || a.name === msg.target) return;
+    if (this.activeGame) {
+      this.queueGame({ kind: "rps", by: a.name, target: msg.target }, ws);
+      return;
+    }
     if (this.rpsGame) return this.send(ws, "error", { message: "a duel is already in progress" });
-    const tw = this.findWs(msg.target);
-    if (!tw) return;
-
-    this.rpsGame = { p1: a.name, p2: msg.target };
-    this.send(tw, "rps-challenged", { from: a.name });
-    this.broadcast("rps-pending", { p1: a.name, p2: msg.target });
-    this.log(`${a.name} challenged ${msg.target} to RPS`);
+    if (!this.findWs(msg.target)) return;
+    if (this.startRps(a.name, msg.target)) {
+      this.log(`${a.name} challenged ${msg.target} to RPS`);
+    } else {
+      this.send(ws, "error", { message: "could not start RPS right now" });
+    }
   }
 
   private onRpsAccept(ws: WebSocket) {
@@ -490,6 +729,8 @@ export class Room implements DurableObject {
     if (!this.rpsGame || a.name !== this.rpsGame.p2) return;
     this.broadcast("rps-declined", { from: a.name });
     this.rpsGame = null;
+    if (this.kothGame) this.kothGame = null;
+    this.clearActiveGame();
   }
 
   private onRpsPick(ws: WebSocket, msg: { pick?: string }) {
@@ -513,9 +754,18 @@ export class Room implements DurableObject {
       const isKoth = !!this.kothGame;
       this.broadcast("rps-result", { p1, p2, pick1, pick2, winner, koth: isKoth || undefined });
       this.log(`RPS: ${p1}(${pick1}) vs ${p2}(${pick2}) → ${winner || "draw"}`);
+      if (winner) {
+        this.bumpLeaderboard("rps", winner);
+        this.emitLeaderboards();
+      }
       this.rpsGame = null;
       if (isKoth && winner) this.resolveKoth(winner);
-      else if (isKoth) this.kothGame = null; // draw = no change
+      else if (isKoth) {
+        this.kothGame = null; // draw = no change
+        this.clearActiveGame();
+      } else {
+        this.clearActiveGame();
+      }
     }
   }
 
@@ -524,13 +774,15 @@ export class Room implements DurableObject {
   private onTttChallenge(ws: WebSocket, msg: { target?: string }) {
     const a = this.att(ws);
     if (!a.name || !msg.target || a.name === msg.target) return;
+    if (this.activeGame) {
+      this.queueGame({ kind: "ttt", by: a.name, target: msg.target }, ws);
+      return;
+    }
     if (this.tttGame) return this.send(ws, "error", { message: "a game is already in progress" });
-    const tw = this.findWs(msg.target);
-    if (!tw) return;
-
-    this.tttGame = { p1: a.name, p2: msg.target, board: Array(9).fill(""), turn: 0 };
-    this.send(tw, "ttt-challenged", { from: a.name });
-    this.broadcast("ttt-pending", { p1: a.name, p2: msg.target });
+    if (!this.findWs(msg.target)) return;
+    if (!this.startTtt(a.name, msg.target)) {
+      this.send(ws, "error", { message: "could not start Tic-Tac-Toe right now" });
+    }
   }
 
   private onTttAccept(ws: WebSocket) {
@@ -544,6 +796,7 @@ export class Room implements DurableObject {
     if (!this.tttGame || a.name !== this.tttGame.p2) return;
     this.broadcast("ttt-declined", { from: a.name });
     this.tttGame = null;
+    this.clearActiveGame();
   }
 
   private onTttMove(ws: WebSocket, msg: { cell?: number }) {
@@ -569,9 +822,14 @@ export class Room implements DurableObject {
     const draw = !winner && g.board.every(c => c);
 
     this.broadcast("ttt-update", { board: g.board, turn: g.turn, lastMove: msg.cell, winner, draw });
+    if (winner) {
+      this.bumpLeaderboard("ttt", winner);
+      this.emitLeaderboards();
+    }
     if (winner || draw) {
       this.log(`TTT: ${g.p1} vs ${g.p2} → ${winner ? winner + " wins" : "draw"}`);
       this.tttGame = null;
+      this.clearActiveGame();
     }
   }
 
@@ -584,28 +842,13 @@ export class Room implements DurableObject {
     const members = this.getMembers();
     if (members.length < SABOTEUR_MIN_PLAYERS)
       return this.send(ws, "error", { message: `need at least ${SABOTEUR_MIN_PLAYERS} people` });
-
-    this.saboteurActive = true;
-    this.sabStrikes = 0;
-    // pick random saboteur
-    this.saboteur = members[Math.floor(Math.random() * members.length)];
-    this.log(`saboteur mode started — ${this.saboteur} is the saboteur`);
-
-    // tell everyone the mode started
-    this.broadcast("sab-started", { starter: a.name });
-
-    // privately tell the saboteur
-    const sabWs = this.findWs(this.saboteur);
-    if (sabWs) this.send(sabWs, "sab-role", { role: "saboteur" });
-
-    // tell everyone else they're a defender
-    for (const w of this.state.getWebSockets()) {
-      const d = this.att(w);
-      if (d.name && d.name !== this.saboteur) this.send(w, "sab-role", { role: "defender" });
+    if (this.activeGame) {
+      this.queueGame({ kind: "saboteur", by: a.name }, ws);
+      return;
     }
-
-    // schedule first vote round
-    this.scheduleSabVote();
+    if (!this.startSaboteur(a.name)) {
+      this.send(ws, "error", { message: "could not start Saboteur right now" });
+    }
   }
 
   private scheduleSabVote() {
@@ -660,16 +903,22 @@ export class Room implements DurableObject {
     if (correct) {
       // saboteur caught!
       const sabName = this.saboteur!;
+      for (const defender of this.getMembers()) {
+        if (defender !== sabName) this.bumpLeaderboard("saboteur", defender);
+      }
+      this.emitLeaderboards();
       this.saboteurActive = false;
       this.saboteur = null;
       this.sabVote = null;
       if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
 
       // auto-start pillow fight vote against the caught saboteur
+      this.clearActiveGame(false);
       if (!this.activeVote && this.getMembers().length >= 3 && this.getMembers().includes(sabName)) {
-        this.activeVote = { target: sabName, starter: sabName, yes: new Set(), no: new Set(), timer: setTimeout(() => this.resolveVote(), VOTE_DURATION_MS) };
-        this.broadcast("vote-started", { target: sabName, starter: "the fort", auto: true });
+        this.startVote(sabName, sabName, { auto: true, starterLabel: "the fort" });
         this.log(`auto pillow fight started against caught saboteur ${sabName}`);
+      } else {
+        this.drainGameQueue();
       }
     } else {
       this.sabVote = null;
@@ -687,6 +936,8 @@ export class Room implements DurableObject {
 
     if (this.sabStrikes >= 3) {
       // The saboteur plants a bomb. Let chat continue during countdown.
+      this.bumpLeaderboard("saboteur", a.name);
+      this.emitLeaderboards();
       this.saboteurActive = false;
       this.saboteur = null;
       if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
@@ -707,16 +958,16 @@ export class Room implements DurableObject {
   private onKothChallenge(ws: WebSocket) {
     const a = this.att(ws);
     if (!a.name || a.isHost) return this.send(ws, "error", { message: "only non-hosts can challenge" });
-    if (this.rpsGame) return this.send(ws, "error", { message: "a duel is already in progress" });
     const hostWs = this.getHost();
     if (!hostWs) return;
-    const hostName = this.att(hostWs).name;
-
-    this.kothGame = { challenger: a.name, host: hostName };
-    this.rpsGame = { p1: a.name, p2: hostName };
-    this.broadcast("koth-started", { challenger: a.name, host: hostName });
-    this.broadcast("rps-started", { p1: a.name, p2: hostName, koth: true });
-    this.log(`${a.name} challenged ${hostName} for the crown`);
+    if (this.activeGame) {
+      this.queueGame({ kind: "koth", by: a.name, target: this.att(hostWs).name }, ws);
+      return;
+    }
+    if (this.rpsGame) return this.send(ws, "error", { message: "a duel is already in progress" });
+    if (!this.startKoth(a.name)) {
+      this.send(ws, "error", { message: "could not start KOTH right now" });
+    }
   }
 
   // Called from RPS result to swap host if challenger wins
@@ -731,13 +982,18 @@ export class Room implements DurableObject {
       const challWs = this.findWs(challenger);
       if (hostWs) { const d = this.att(hostWs); d.isHost = false; hostWs.serializeAttachment(d); }
       if (challWs) { const d = this.att(challWs); d.isHost = true; challWs.serializeAttachment(d); }
+      this.bumpLeaderboard("koth", challenger);
+      this.emitLeaderboards();
       this.broadcast("new-host", { name: challenger });
       this.broadcast("koth-result", { winner: challenger, loser: host });
       this.log(`KOTH: ${challenger} dethroned ${host}`);
     } else {
+      this.bumpLeaderboard("koth", host);
+      this.emitLeaderboards();
       this.broadcast("koth-result", { winner: host, loser: challenger });
       this.log(`KOTH: ${host} defended the crown`);
     }
+    this.clearActiveGame();
   }
 
   private onAcceptHost(ws: WebSocket) {
@@ -818,10 +1074,12 @@ export class Room implements DurableObject {
       }
 
       this.broadcast("member-left", { name: a.name });
+      this.pruneGameQueue();
       await this.offerHost(a.name);
     } else {
       this.log(`${this.tag(a)} left (${this.getMembers().length - 1} remaining)`);
       this.broadcast("member-left", { name: a.name }, ws);
+      this.pruneGameQueue();
       try { ws.close(1000, "left"); } catch {}
     }
   }
@@ -841,6 +1099,7 @@ export class Room implements DurableObject {
     const timer = setTimeout(async () => {
       this.disconnected.delete(name);
       this.broadcast("member-left", { name });
+      this.pruneGameQueue();
       if (wasHost) {
         const guests = this.state.getWebSockets().filter(w => {
           const d = this.att(w);
@@ -890,7 +1149,15 @@ export class Room implements DurableObject {
       } as WSData);
 
       this.log(`${name} rejoined (wasHost=${disc.wasHost}, isHost=${isHost})`);
-      this.send(ws, "rejoined", { room: this.roomId, members: this.getMembers(), name, isHost, presence: this.getPresenceMap() });
+      this.send(ws, "rejoined", {
+        room: this.roomId,
+        members: this.getMembers(),
+        name,
+        isHost,
+        presence: this.getPresenceMap(),
+        leaderboards: this.leaderboards,
+        gameQueue: this.gameQueueSnapshot(),
+      });
       this.broadcast("member-back", { name }, ws);
       this.resetIdle();
     } else {

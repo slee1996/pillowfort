@@ -1,8 +1,25 @@
 import { create } from "zustand";
-import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus } from "../services/protocol";
+import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus, RoomLeaderboards, RoomGameQueue } from "../services/protocol";
 import { clearChatCryptoState } from "../services/chatCrypto";
 
 let msgId = 0;
+
+function emptyLeaderboards(): RoomLeaderboards {
+  return {
+    pillowFight: {},
+    rps: {},
+    ttt: {},
+    saboteur: {},
+    koth: {},
+  };
+}
+
+function emptyGameQueue(): RoomGameQueue {
+  return {
+    current: null,
+    queue: [],
+  };
+}
 
 export interface VoteState {
   target: string;
@@ -66,6 +83,8 @@ export interface GameStore {
   sabStrikes: number;
   sabBombCountdown: number;
   sabDetonateSignal: number;
+  leaderboards: RoomLeaderboards;
+  gameQueue: RoomGameQueue;
 
   // Host offer
   hostOffer: { oldHost: string } | null;
@@ -105,6 +124,8 @@ export interface GameStore {
   setSabStrikes: (strikes: number) => void;
   setSabBombCountdown: (seconds: number) => void;
   triggerSabDetonation: () => void;
+  setLeaderboards: (leaderboards: RoomLeaderboards) => void;
+  setGameQueue: (gameQueue: RoomGameQueue) => void;
   setHostOffer: (offer: { oldHost: string } | null) => void;
   setMinimized: (minimized: boolean) => void;
   incrementUnread: () => void;
@@ -159,6 +180,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   sabStrikes: 0,
   sabBombCountdown: 0,
   sabDetonateSignal: 0,
+  leaderboards: emptyLeaderboards(),
+  gameQueue: emptyGameQueue(),
 
   // Host offer
   hostOffer: null,
@@ -256,6 +279,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setSabStrikes: (strikes) => set({ sabStrikes: strikes }),
   setSabBombCountdown: (seconds) => set({ sabBombCountdown: Math.max(0, seconds) }),
   triggerSabDetonation: () => set((s) => ({ sabDetonateSignal: s.sabDetonateSignal + 1 })),
+  setLeaderboards: (leaderboards) => set({ leaderboards }),
+  setGameQueue: (gameQueue) => set({ gameQueue }),
   setHostOffer: (offer) => set({ hostOffer: offer }),
   setMinimized: (minimized) => set({ minimized }),
   incrementUnread: () => set((s) => ({ unreadCount: s.unreadCount + 1 })),
@@ -293,6 +318,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sabStrikes: 0,
       sabBombCountdown: 0,
       sabDetonateSignal: 0,
+      leaderboards: emptyLeaderboards(),
+      gameQueue: emptyGameQueue(),
       unreadCount: 0,
       minimized: false,
     });

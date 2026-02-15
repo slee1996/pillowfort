@@ -57,7 +57,7 @@ describe("Rock Paper Scissors", () => {
     expect(declined.from).toBe("bob");
   });
 
-  it("challenge during active game → error", async () => {
+  it("challenge during active game → queued and starts next", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
 
@@ -66,10 +66,19 @@ describe("Rock Paper Scissors", () => {
     bob.send({ type: "rps-accept" });
     await host.waitFor("rps-started");
 
-    // Try to start another challenge while game in progress
+    // Try to start another challenge while game in progress -> queued
     bob.send({ type: "rps-challenge", target: "alice" });
-    const err = await bob.waitFor("error");
-    expect(err.message).toContain("duel is already in progress");
+    const queued = await bob.waitFor("game-queued");
+    expect(queued.kind).toBe("rps");
+    expect(queued.position).toBe(1);
+
+    host.send({ type: "rps-pick", pick: "rock" });
+    bob.send({ type: "rps-pick", pick: "paper" });
+    await host.waitFor("rps-result");
+
+    // queued duel should begin automatically
+    const nextChallenge = await host.waitFor("rps-challenged");
+    expect(nextChallenge.from).toBe("bob");
   });
 });
 
@@ -428,6 +437,153 @@ describe("King of the Hill", () => {
     host.send({ type: "koth-challenge" });
     const err = await host.waitFor("error");
     expect(err.message).toContain("only non-hosts can challenge");
+  });
+});
+
+// ---- Roomwide leaderboards ----
+
+describe("Roomwide leaderboards", () => {
+  it("includes leaderboard payload on create and join", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const created = host.messages.find(m => m.type === "room-created");
+    expect(created?.leaderboards).toBeDefined();
+    expect(created?.leaderboards?.rps || {}).toEqual({});
+
+    const bob = await joinRoom(roomId, "bob");
+    const joined = bob.messages.find(m => m.type === "joined");
+    expect(joined?.leaderboards).toBeDefined();
+    expect(joined?.leaderboards?.ttt || {}).toEqual({});
+  });
+
+  it("tracks RPS wins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+    bob.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+
+    host.send({ type: "rps-pick", pick: "rock" });
+    bob.send({ type: "rps-pick", pick: "scissors" });
+    await host.waitFor("rps-result");
+
+    const lb = await host.waitFor("leaderboards");
+    expect(lb.leaderboards.rps.alice).toBe(1);
+    expect(lb.leaderboards.rps.bob || 0).toBe(0);
+  });
+
+  it("tracks Tic-Tac-Toe wins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "ttt-challenge", target: "bob" });
+    await bob.waitFor("ttt-challenged");
+    bob.send({ type: "ttt-accept" });
+    await host.waitFor("ttt-started");
+
+    host.send({ type: "ttt-move", cell: 0 }); // X
+    await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+    bob.send({ type: "ttt-move", cell: 3 }); // O
+    await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+    host.send({ type: "ttt-move", cell: 1 }); // X
+    await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+    bob.send({ type: "ttt-move", cell: 4 }); // O
+    await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+    host.send({ type: "ttt-move", cell: 2 }); // X wins
+    await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+
+    const lb = await host.waitFor("leaderboards");
+    expect(lb.leaderboards.ttt.alice).toBe(1);
+  });
+
+  it("tracks Pillow Fight vote wins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+
+    host.send({ type: "start-vote", target: "bob" });
+    await bob.waitFor("vote-started");
+    carol.send({ type: "cast-vote", vote: "yes" });
+    await host.waitFor("vote-result");
+
+    const lb = await host.waitFor("leaderboards");
+    expect(lb.leaderboards.pillowFight.alice).toBe(1);
+  });
+
+  it("tracks Saboteur wins on strike 3", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+
+    host.send({ type: "sab-start" });
+    await host.waitFor("sab-started");
+    const players = [
+      { name: "alice", client: host },
+      { name: "bob", client: bob },
+      { name: "carol", client: carol },
+      { name: "dave", client: dave },
+    ];
+    let sabName = "";
+    for (const p of players) {
+      const role = await p.client.waitFor("sab-role");
+      if (role.role === "saboteur") sabName = p.name;
+    }
+    const sab = players.find(p => p.name === sabName)!;
+
+    sab.client.send({ type: "sab-strike" });
+    await host.waitFor("sab-strike");
+    sab.client.send({ type: "sab-strike" });
+    await host.waitFor("sab-strike");
+    sab.client.send({ type: "sab-strike" });
+    await host.waitFor("sab-strike");
+
+    const lb = await host.waitFor("leaderboards");
+    expect(lb.leaderboards.saboteur[sabName]).toBe(1);
+  });
+
+  it("tracks KOTH wins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    bob.send({ type: "koth-challenge" });
+    await host.waitFor("koth-started");
+    await host.waitFor("rps-started");
+    bob.send({ type: "rps-pick", pick: "paper" });
+    host.send({ type: "rps-pick", pick: "rock" });
+    await host.waitFor("rps-result");
+
+    const first = await host.waitFor("leaderboards");
+    if (first.leaderboards.koth.bob === 1) return;
+    const second = await host.waitFor("leaderboards");
+    expect(second.leaderboards.koth.bob).toBe(1);
+  });
+});
+
+describe("Roomwide game queue", () => {
+  it("queues a second duel from another player while first duel is active", async () => {
+    const { roomId, host } = await createRoom("luna");
+    const kai = await joinRoom(roomId, "kai");
+    const javi = await joinRoom(roomId, "javi");
+
+    host.send({ type: "rps-challenge", target: "kai" });
+    await kai.waitFor("rps-challenged");
+    kai.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+
+    javi.send({ type: "rps-challenge", target: "luna" });
+    const queued = await javi.waitFor("game-queued");
+    expect(queued.kind).toBe("rps");
+    expect(queued.by).toBe("javi");
+    expect(queued.target).toBe("luna");
+
+    host.send({ type: "rps-pick", pick: "paper" });
+    kai.send({ type: "rps-pick", pick: "rock" });
+    await host.waitFor("rps-result");
+
+    const nextChallenge = await host.waitFor("rps-challenged");
+    expect(nextChallenge.from).toBe("javi");
   });
 });
 

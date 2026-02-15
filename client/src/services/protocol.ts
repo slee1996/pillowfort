@@ -31,9 +31,12 @@ export type OutgoingMessage =
 // --- Incoming messages (server → client) ---
 
 export type IncomingMessage =
-  | { type: "room-created"; room: string }
-  | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence> }
-  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence> }
+  | { type: "room-created"; room: string; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
+  | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
+  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
+  | { type: "leaderboards"; leaderboards: RoomLeaderboards }
+  | { type: "game-queue"; gameQueue: RoomGameQueue }
+  | { type: "game-queued"; kind: QueueGameKind; by: string; target?: string; position: number }
   | { type: "message"; from: string; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "member-joined"; name: string; presence?: MemberPresence }
   | { type: "member-left"; name: string }
@@ -98,6 +101,27 @@ export type PresenceStatus = "available" | "away";
 export interface MemberPresence {
   status: PresenceStatus;
   awayText?: string;
+}
+
+export interface RoomLeaderboards {
+  pillowFight: Record<string, number>;
+  rps: Record<string, number>;
+  ttt: Record<string, number>;
+  saboteur: Record<string, number>;
+  koth: Record<string, number>;
+}
+
+export type QueueGameKind = "vote" | "rps" | "ttt" | "saboteur" | "koth";
+
+export interface GameQueueItem {
+  kind: QueueGameKind;
+  by: string;
+  target?: string;
+}
+
+export interface RoomGameQueue {
+  current: GameQueueItem | null;
+  queue: GameQueueItem[];
 }
 
 export type Screen = "home" | "setup" | "join" | "chat" | "knocked";

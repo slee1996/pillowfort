@@ -17,6 +17,7 @@ import { VoteBanner } from "../components/games/VoteBanner";
 import { RpsOverlay } from "../components/games/RpsOverlay";
 import { TttOverlay } from "../components/games/TttOverlay";
 import { SabVoteBanner } from "../components/games/SabVoteBanner";
+import { GameQueueBanner } from "../components/games/GameQueueBanner";
 import { DrawCanvas } from "../components/canvas/DrawCanvas";
 import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
 import { DraggableWindow } from "../components/effects/DraggableWindow";
@@ -244,6 +245,7 @@ export function ChatScreen() {
 
                 <SabVoteBanner />
                 <VoteBanner />
+                <GameQueueBanner />
                 <MessageList />
                 <TypingIndicator />
                 <FormatToolbar onInsertEmoji={handleInsertEmoji} />

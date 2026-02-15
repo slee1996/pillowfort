@@ -1,7 +1,7 @@
 import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
-import type { IncomingMessage } from "./protocol";
+import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem } from "./protocol";
 import { decryptChatPayload } from "./chatCrypto";
 
 const SABOTEUR_EXPLOSION_MS = 1200;
@@ -10,6 +10,38 @@ let sabBombEndsAt = 0;
 let warnedPlaintextChat = false;
 
 type IncomingChatMessage = Extract<IncomingMessage, { type: "message" }>;
+
+function normalizeLeaderboards(src?: RoomLeaderboards): RoomLeaderboards {
+  return {
+    pillowFight: { ...(src?.pillowFight || {}) },
+    rps: { ...(src?.rps || {}) },
+    ttt: { ...(src?.ttt || {}) },
+    saboteur: { ...(src?.saboteur || {}) },
+    koth: { ...(src?.koth || {}) },
+  };
+}
+
+function normalizeGameQueue(src?: RoomGameQueue): RoomGameQueue {
+  return {
+    current: src?.current ? { ...src.current } : null,
+    queue: (src?.queue || []).map((q) => ({ ...q })),
+  };
+}
+
+function queueItemText(item: GameQueueItem): string {
+  switch (item.kind) {
+    case "vote":
+      return `${item.by} starts Pillow Fight on ${item.target || "someone"}`;
+    case "rps":
+      return `${item.by} challenges ${item.target || "someone"} to RPS`;
+    case "ttt":
+      return `${item.by} challenges ${item.target || "someone"} to Tic-Tac-Toe`;
+    case "saboteur":
+      return `${item.by} starts Secret Saboteur`;
+    case "koth":
+      return `${item.by} challenges for the crown`;
+  }
+}
 
 function stopSabBombCountdown() {
   if (sabBombInterval) {
@@ -77,6 +109,8 @@ export function handleMessage(msg: IncomingMessage) {
       s.setIsHost(true);
       s.setMembers([s.name]);
       s.setMemberPresenceMap({ [s.name]: { status: "available" } });
+      s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
+      s.setGameQueue(normalizeGameQueue(msg.gameQueue));
       s.setScreen("chat");
       s.clearMessages();
       s.addSystemMessage("Welcome to the fort.");
@@ -95,6 +129,8 @@ export function handleMessage(msg: IncomingMessage) {
       s.setMembers(msg.members);
       if (msg.presence) s.setMemberPresenceMap(msg.presence);
       else s.setMemberPresenceMap(Object.fromEntries(msg.members.map((m) => [m, { status: "available" as const }])));
+      s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
+      s.setGameQueue(normalizeGameQueue(msg.gameQueue));
       s.setScreen("chat");
       s.clearMessages();
       if (renamed) s.addSystemMessage(`That name's taken — you're ${msg.name} now`);
@@ -113,8 +149,25 @@ export function handleMessage(msg: IncomingMessage) {
       s.setMembers(msg.members);
       if (msg.presence) s.setMemberPresenceMap(msg.presence);
       else s.setMemberPresenceMap(Object.fromEntries(msg.members.map((m) => [m, { status: "available" as const }])));
+      s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
+      s.setGameQueue(normalizeGameQueue(msg.gameQueue));
       s.addSystemMessage("Reconnected!");
       requestWakeLock();
+      break;
+    }
+
+    case "leaderboards": {
+      s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
+      break;
+    }
+
+    case "game-queue": {
+      s.setGameQueue(normalizeGameQueue(msg.gameQueue));
+      break;
+    }
+
+    case "game-queued": {
+      s.addSystemMessage(`⏳ Queued (#${msg.position}): ${queueItemText(msg)}`);
       break;
     }
 
