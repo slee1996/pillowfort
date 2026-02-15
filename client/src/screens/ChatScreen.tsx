@@ -258,12 +258,17 @@ export function ChatScreen() {
                 <div className="chat-info-bar">
                   <div className="chat-info-primary">{chatInfoText}</div>
                   {gameQueue.current && (
-                    <div className="chat-info-queue-now">
+                    <>
+                      <span className="chat-info-sep">•</span>
+                      <span className="chat-info-queue-now">
                       Now playing: {describeQueueItem(gameQueue.current)}
-                    </div>
+                      </span>
+                    </>
                   )}
                   {gameQueue.queue.length > 0 && (
-                    <div className="chat-info-queue-next">
+                    <>
+                      <span className="chat-info-sep">•</span>
+                      <div className="chat-info-queue-next">
                       <span className="chat-info-queue-next-label">Up next:</span>
                       <span className="chat-info-queue-next-list">
                         {gameQueue.queue.map((item, idx) => (
@@ -272,7 +277,8 @@ export function ChatScreen() {
                           </span>
                         ))}
                       </span>
-                    </div>
+                      </div>
+                    </>
                   )}
                 </div>
 

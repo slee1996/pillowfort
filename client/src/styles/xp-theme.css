@@ -447,25 +447,37 @@
   color: #666;
   font-size: 11px;
   padding: 4px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .chat-info-primary {
   color: #888;
   font-style: italic;
+  flex-shrink: 0;
+}
+
+.chat-info-sep {
+  color: #9aa7b7;
+  flex-shrink: 0;
 }
 
 .chat-info-queue-now {
-  margin-top: 2px;
   color: #274466;
   font-weight: bold;
+  flex-shrink: 0;
 }
 
 .chat-info-queue-next {
-  margin-top: 1px;
   color: #3c5f88;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .chat-info-queue-next-label {
