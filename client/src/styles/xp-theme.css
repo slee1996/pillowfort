@@ -536,6 +536,13 @@
   font-size: 14px;
 }
 
+.format-member-count {
+  display: none;
+  margin-left: auto;
+  color: #666;
+  font-size: 11px;
+}
+
 /* --- Color Palette --- */
 
 .color-palette {
@@ -1463,6 +1470,7 @@
 .message-input-controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
   padding-bottom: 1px;
@@ -1476,11 +1484,6 @@
 
 .message-controls-spacer {
   flex: 1;
-}
-
-.message-members-count {
-  color: #666;
-  font-size: 11px;
 }
 
 .message-btn {
@@ -2022,7 +2025,6 @@
 
   .message-input-wrap {
     gap: 8px;
-    padding: 10px 10px max(8px, env(safe-area-inset-bottom, 8px));
   }
 
   .message-input-field {
@@ -2049,19 +2051,18 @@
     display: none;
   }
 
-  .message-members-count {
-    order: 3;
-    margin-left: auto;
-  }
-
   .message-btn-send {
-    order: 4;
+    order: 3;
     margin-left: 2px;
   }
 
   .message-btn-leave {
     order: 1;
     margin-right: 2px;
+  }
+
+  .format-member-count {
+    display: inline;
   }
 }
 

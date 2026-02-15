@@ -121,7 +121,6 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
           )}
         </div>
         <div className="message-controls-spacer" />
-        <span id="member-count" className="message-members-count">{members.length} inside</span>
         {isHost ? (
           <Button id="btn-knock-down" onClick={handleKnockDown} className="message-btn message-btn-leave">
             Knock Down
