@@ -9,6 +9,7 @@ import { Button } from "../xp/Button";
 
 let lastTypingSent = 0;
 let warnedPlaintextFallback = false;
+const MOBILE_KEYBOARD_OPEN_PX = 120;
 
 export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) => void }) {
   const name = useGameStore((s) => s.name);
@@ -16,20 +17,58 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   const members = useGameStore((s) => s.members);
   const sabRole = useGameStore((s) => s.sabRole);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [inputFocused, setInputFocused] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 600px)").matches);
-  const disableRoomAction = isMobile && inputFocused;
+  const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
+  const mobileViewportBaseRef = useRef(0);
+  const disableRoomAction = mobileKeyboardOpen;
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 600px)");
-    const sync = () => setIsMobile(media.matches);
-    sync();
+    const getVisibleViewport = () => {
+      const vv = window.visualViewport;
+      if (!vv) return window.innerHeight;
+      return vv.height + vv.offsetTop;
+    };
+    const detectKeyboard = () => {
+      if (!media.matches) {
+        setMobileKeyboardOpen(false);
+        mobileViewportBaseRef.current = getVisibleViewport();
+        return;
+      }
+      const visible = getVisibleViewport();
+      if (!mobileViewportBaseRef.current) mobileViewportBaseRef.current = visible;
+      if (visible > mobileViewportBaseRef.current) mobileViewportBaseRef.current = visible;
+      const delta = Math.max(0, mobileViewportBaseRef.current - visible);
+      setMobileKeyboardOpen(delta > MOBILE_KEYBOARD_OPEN_PX);
+      if (delta < 8) mobileViewportBaseRef.current = visible;
+    };
+    const onOrientation = () => {
+      mobileViewportBaseRef.current = 0;
+      detectKeyboard();
+    };
+    detectKeyboard();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", detectKeyboard);
+    vv?.addEventListener("scroll", detectKeyboard);
+    window.addEventListener("resize", detectKeyboard);
+    window.addEventListener("orientationchange", onOrientation);
     try {
-      media.addEventListener("change", sync);
-      return () => media.removeEventListener("change", sync);
+      media.addEventListener("change", detectKeyboard);
+      return () => {
+        media.removeEventListener("change", detectKeyboard);
+        vv?.removeEventListener("resize", detectKeyboard);
+        vv?.removeEventListener("scroll", detectKeyboard);
+        window.removeEventListener("resize", detectKeyboard);
+        window.removeEventListener("orientationchange", onOrientation);
+      };
     } catch {
-      media.addListener(sync);
-      return () => media.removeListener(sync);
+      media.addListener(detectKeyboard);
+      return () => {
+        media.removeListener(detectKeyboard);
+        vv?.removeEventListener("resize", detectKeyboard);
+        vv?.removeEventListener("scroll", detectKeyboard);
+        window.removeEventListener("resize", detectKeyboard);
+        window.removeEventListener("orientationchange", onOrientation);
+      };
     }
   }, []);
 
@@ -113,8 +152,6 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
         className="xp-input message-input-field"
         onKeyDown={(e) => e.key === "Enter" && handleSend()}
         onInput={handleInput}
-        onFocus={() => setInputFocused(true)}
-        onBlur={() => setInputFocused(false)}
       />
       <div className="message-input-controls">
         <Button id="btn-send" primary onClick={handleSend} className="message-btn message-btn-send">
