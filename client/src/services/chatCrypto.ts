@@ -18,8 +18,25 @@ export interface DecryptedChatPayload {
   style?: ChatStyle;
 }
 
+interface CryptoLike {
+  subtle?: SubtleCrypto;
+  webkitSubtle?: SubtleCrypto;
+  getRandomValues<T extends ArrayBufferView>(array: T): T;
+}
+
+function getCryptoLike(): CryptoLike | null {
+  const c = (globalThis as any).crypto as CryptoLike | undefined;
+  return c || null;
+}
+
+function getSubtle(): SubtleCrypto | null {
+  const c = getCryptoLike();
+  if (!c) return null;
+  return c.subtle || c.webkitSubtle || null;
+}
+
 function hasSubtleCrypto(): boolean {
-  return typeof crypto !== "undefined" && !!crypto.subtle;
+  return !!getSubtle();
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -40,19 +57,21 @@ function fromBase64(value: string): Uint8Array | null {
 }
 
 async function deriveRoomKey(roomId: string, password: string): Promise<CryptoKey> {
+  const subtle = getSubtle();
+  if (!subtle) throw new Error("subtle-unavailable");
   const cacheKey = `${roomId}\u0000${password}`;
   const existing = KEY_CACHE.get(cacheKey);
   if (existing) return existing;
 
   const promise = (async () => {
-    const baseKey = await crypto.subtle.importKey(
+    const baseKey = await subtle.importKey(
       "raw",
       textEncoder.encode(password),
       "PBKDF2",
       false,
       ["deriveKey"]
     );
-    return crypto.subtle.deriveKey(
+    return subtle.deriveKey(
       {
         name: "PBKDF2",
         salt: textEncoder.encode(`pillowfort-e2ee:${roomId}`),
@@ -115,14 +134,16 @@ export async function encryptChatPayload(
   text: string,
   style?: ChatStyle
 ): Promise<EncryptedChatPayload | null> {
-  if (!hasSubtleCrypto()) return null;
+  const subtle = getSubtle();
+  const c = getCryptoLike();
+  if (!subtle || !c) return null;
   if (!text.trim()) return null;
   const key = await deriveRoomKey(roomId, password);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = c.getRandomValues(new Uint8Array(12));
   const body: EncryptedChatBodyV2 = { t: text.slice(0, 2000) };
   const sanitizedStyle = sanitizeStyleInput(style);
   if (sanitizedStyle) body.s = sanitizedStyle;
-  const cipher = await crypto.subtle.encrypt(
+  const cipher = await subtle.encrypt(
     { name: "AES-GCM", iv: asArrayBuffer(iv), additionalData: asArrayBuffer(aadFor(roomId, sender)) },
     key,
     textEncoder.encode(JSON.stringify(body))
@@ -137,7 +158,8 @@ export async function decryptChatPayload(
   payload: EncryptedChatPayload,
   legacyStyle?: ChatStyle
 ): Promise<DecryptedChatPayload | null> {
-  if (!hasSubtleCrypto()) return null;
+  const subtle = getSubtle();
+  if (!subtle) return null;
   if (!payload || (payload.v !== 1 && payload.v !== 2)) return null;
   const iv = fromBase64(payload.iv);
   const ct = fromBase64(payload.ct);
@@ -147,7 +169,7 @@ export async function decryptChatPayload(
 
   try {
     const key = await deriveRoomKey(roomId, password);
-    const plain = await crypto.subtle.decrypt(
+    const plain = await subtle.decrypt(
       payload.v === 2
         ? { name: "AES-GCM", iv: asArrayBuffer(iv), additionalData: asArrayBuffer(aadFor(roomId, sender)) }
         : { name: "AES-GCM", iv: asArrayBuffer(iv) },
@@ -174,4 +196,8 @@ export async function decryptChatPayload(
 export function clearChatCryptoState() {
   KEY_CACHE.clear();
   RECENT_NONCES.clear();
+}
+
+export function isChatCryptoAvailable(): boolean {
+  return hasSubtleCrypto();
 }

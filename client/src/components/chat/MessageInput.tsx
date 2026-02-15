@@ -2,12 +2,13 @@ import { useRef } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
-import { encryptChatPayload } from "../../services/chatCrypto";
+import { encryptChatPayload, isChatCryptoAvailable } from "../../services/chatCrypto";
 import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
 
 let lastTypingSent = 0;
+let warnedPlaintextFallback = false;
 
 export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) => void }) {
   const name = useGameStore((s) => s.name);
@@ -28,16 +29,25 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     }
 
     const style = useFormatStore.getState().getStyle();
+    let sent = false;
     try {
       const enc = await encryptChatPayload(roomId, password, name, text, style);
-      if (!enc) {
-        showToast("Encryption unavailable in this browser.");
-        return;
+      if (enc) {
+        send("chat", { enc });
+        sent = true;
       }
-      send("chat", { enc });
-    } catch {
-      showToast("Couldn't encrypt message.");
-      return;
+    } catch {}
+
+    if (!sent) {
+      send("chat", { text, ...(style ? { style } : {}) });
+      if (!warnedPlaintextFallback) {
+        warnedPlaintextFallback = true;
+        showToast(
+          isChatCryptoAvailable()
+            ? "Encryption failed. Sent without encryption."
+            : "Encryption unavailable here (use HTTPS/localhost). Sent without encryption."
+        );
+      }
     }
 
     playSendSound();
