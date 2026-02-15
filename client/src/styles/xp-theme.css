@@ -543,6 +543,25 @@
   font-size: 11px;
 }
 
+.format-mobile-actions {
+  display: none;
+}
+
+.format-mobile-action {
+  font-family: Tahoma, Arial, sans-serif;
+  font-size: 10px;
+  padding: 1px 7px;
+  border: 1px solid #7a95b4;
+  background: linear-gradient(180deg, #fff 0%, #ece9d8 100%);
+  color: #003c74;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.format-mobile-action:active {
+  background: #d6d2c2;
+}
+
 /* --- Color Palette --- */
 
 .color-palette {
@@ -1762,6 +1781,84 @@
   background: #f4f2ea;
 }
 
+.mobile-invite-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 91;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-invite-card {
+  width: 280px;
+  max-height: 72vh;
+  background: #ece9d8;
+  border-radius: 8px 8px 4px 4px;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-invite-header {
+  background: #ece9d8;
+  border-bottom: 1px solid #aca899;
+  color: #333;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-invite-close {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.mobile-invite-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-invite-section {
+  background: #f8f7f1;
+  border: 1px solid #d8d2c2;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.mobile-invite-title {
+  color: #003c74;
+  font-size: 10px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.mobile-invite-line {
+  color: #444;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.mobile-invite-empty {
+  color: #777;
+  font-style: italic;
+}
+
 /* --- Minimized Windows --- */
 
 .xp-window.minimized {
@@ -2082,6 +2179,12 @@
 
   .format-member-count {
     display: inline;
+  }
+
+  .format-mobile-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 }
 

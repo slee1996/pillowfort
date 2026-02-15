@@ -7,11 +7,13 @@ import { encryptChatPayload } from "../../services/chatCrypto";
 const BRICK_COLORS = ["#FF6B6B", "#FFA94D", "#FFD43B", "#69DB7C", "#4DABF7", "#9775FA", "#F06595", "#20C997"];
 const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
 const PADDLE_H = 12, BALL_R = 6;
+const MOBILE_PADDLE_LIFT_PX = 50;
 
 interface Brick { x: number; y: number; w: number; h: number; color: string; alive: boolean }
 
 export function BreakoutCanvas({ active }: { active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const bootFrameRef = useRef<number>(0);
   const stateRef = useRef<{
     bricks: Brick[]; paddle: { x: number; y: number; w: number; h: number };
     ball: { x: number; y: number; dx: number; dy: number };
@@ -41,6 +43,8 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     cv.width = rect.width;
     cv.height = rect.height;
     const w = cv.width, h = cv.height;
+    const isMobile = window.matchMedia("(max-width: 600px)").matches;
+    const paddleLift = isMobile ? MOBILE_PADDLE_LIFT_PX : 0;
     const brickW = (w - BRICK_PAD * (COLS + 1)) / COLS;
     const bricks: Brick[] = [];
     for (let r = 0; r < ROWS; r++) {
@@ -54,7 +58,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
         });
       }
     }
-    const barH = 50;
+    const barH = 50 + paddleLift;
     stateRef.current = {
       bricks,
       paddle: { x: w / 2 - 40, y: h - barH, w: 80, h: PADDLE_H },
@@ -63,25 +67,39 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     };
   }, []);
 
+  const stopGameLoop = useCallback(() => {
+    if (bootFrameRef.current) {
+      cancelAnimationFrame(bootFrameRef.current);
+      bootFrameRef.current = 0;
+    }
+    if (animRef.current) {
+      cancelAnimationFrame(animRef.current);
+      animRef.current = 0;
+    }
+    if (stateRef.current) stateRef.current.running = false;
+  }, []);
+
   useEffect(() => {
     if (!active) {
-      cancelAnimationFrame(animRef.current);
-      if (stateRef.current) stateRef.current.running = false;
+      stopGameLoop();
       return;
     }
 
     const cv = canvasRef.current;
     if (!cv) return;
     const ctx = cv.getContext("2d")!;
+    let disposed = false;
 
-    requestAnimationFrame(() => {
+    bootFrameRef.current = requestAnimationFrame(() => {
+      bootFrameRef.current = 0;
+      if (disposed) return;
       if (!stateRef.current || stateRef.current.won || stateRef.current.lost) reset();
       if (!stateRef.current) return;
       stateRef.current.running = true;
 
       function loop() {
         const s = stateRef.current;
-        if (!s || !s.running) return;
+        if (disposed || !s || !s.running) return;
         const w = cv!.width, h = cv!.height;
 
         // Update
@@ -203,16 +221,29 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
 
     // Input handlers
     const cv2 = cv;
-    const onMouse = (e: MouseEvent) => {
+    const setPaddleFromClientX = (clientX: number) => {
       if (!stateRef.current?.running) return;
       const rect = cv2.getBoundingClientRect();
-      stateRef.current.paddle.x = Math.max(0, Math.min(cv2.width - stateRef.current.paddle.w, e.clientX - rect.left - stateRef.current.paddle.w / 2));
+      stateRef.current.paddle.x = Math.max(
+        0,
+        Math.min(cv2.width - stateRef.current.paddle.w, clientX - rect.left - stateRef.current.paddle.w / 2)
+      );
     };
-    const onTouch = (e: TouchEvent) => {
+    const onMouse = (e: MouseEvent) => {
+      setPaddleFromClientX(e.clientX);
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      if (!stateRef.current) return;
+      e.preventDefault();
+      if (stateRef.current.won || stateRef.current.lost) {
+        reset();
+      }
+      if (e.touches.length > 0) setPaddleFromClientX(e.touches[0].clientX);
+    };
+    const onTouchMove = (e: TouchEvent) => {
       if (!stateRef.current?.running) return;
       e.preventDefault();
-      const rect = cv2.getBoundingClientRect();
-      stateRef.current.paddle.x = Math.max(0, Math.min(cv2.width - stateRef.current.paddle.w, e.touches[0].clientX - rect.left - stateRef.current.paddle.w / 2));
+      if (e.touches.length > 0) setPaddleFromClientX(e.touches[0].clientX);
     };
     const onClick = () => {
       if (stateRef.current?.won || stateRef.current?.lost) reset();
@@ -221,7 +252,8 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     const onKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
 
     cv.addEventListener("mousemove", onMouse);
-    cv.addEventListener("touchmove", onTouch, { passive: false });
+    cv.addEventListener("touchstart", onTouchStart, { passive: false });
+    cv.addEventListener("touchmove", onTouchMove, { passive: false });
     cv.addEventListener("click", onClick);
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("keyup", onKeyUp);
@@ -233,15 +265,17 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     }, 16);
 
     return () => {
-      cancelAnimationFrame(animRef.current);
+      disposed = true;
+      stopGameLoop();
       clearInterval(keyInterval);
       cv.removeEventListener("mousemove", onMouse);
-      cv.removeEventListener("touchmove", onTouch);
+      cv.removeEventListener("touchstart", onTouchStart);
+      cv.removeEventListener("touchmove", onTouchMove);
       cv.removeEventListener("click", onClick);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
     };
-  }, [active, reset, sendBreakoutMessage]);
+  }, [active, reset, sendBreakoutMessage, stopGameLoop]);
 
   if (!active) return null;
 

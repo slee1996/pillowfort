@@ -22,6 +22,18 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
     return () => document.removeEventListener("click", handler);
   }, []);
 
+  const handleShowPeople = () => {
+    if (window.innerWidth <= 600) {
+      window.dispatchEvent(new CustomEvent("pf-show-mobile-buddies"));
+    } else {
+      window.dispatchEvent(new CustomEvent("pf-toggle-buddy-panel"));
+    }
+  };
+
+  const handleShowInvites = () => {
+    window.dispatchEvent(new CustomEvent("pf-show-mobile-invites"));
+  };
+
   return (
     <div className="format-toolbar">
       <button
@@ -110,6 +122,10 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
         </div>
       </div>
       <span id="member-count" className="format-member-count">{members.length} inside</span>
+      <div className="format-mobile-actions">
+        <button className="format-mobile-action" onClick={handleShowPeople}>People</button>
+        <button className="format-mobile-action" onClick={handleShowInvites}>Invites</button>
+      </div>
     </div>
   );
 }

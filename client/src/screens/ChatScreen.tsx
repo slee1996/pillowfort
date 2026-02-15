@@ -11,6 +11,7 @@ import { MessageInput } from "../components/chat/MessageInput";
 import { TypingIndicator } from "../components/chat/TypingIndicator";
 import { BuddyPanel } from "../components/sidebar/BuddyPanel";
 import { MobileBuddyOverlay } from "../components/sidebar/MobileBuddyOverlay";
+import { MobileInviteSheet } from "../components/sidebar/MobileInviteSheet";
 import { MemberPicker } from "../components/overlays/MemberPicker";
 import { HostOfferDialog } from "../components/overlays/HostOfferDialog";
 import { VoteBanner } from "../components/games/VoteBanner";
@@ -293,6 +294,7 @@ export function ChatScreen() {
       <RpsOverlay />
       <TttOverlay />
       <MobileBuddyOverlay />
+      <MobileInviteSheet />
 
       {picker && (
         <MemberPicker
