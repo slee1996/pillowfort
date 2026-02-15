@@ -247,6 +247,7 @@
   border-radius: 3px;
   color: #000;
   min-width: 75px;
+  box-sizing: border-box;
 }
 
 .xp-btn:hover {
@@ -1809,6 +1810,7 @@
     padding: 10px 20px;
     min-width: 0;
     flex: 1;
+    box-sizing: border-box;
   }
 
   .xp-title-bar {
