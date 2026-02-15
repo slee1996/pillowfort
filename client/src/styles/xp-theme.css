@@ -444,10 +444,25 @@
   flex-shrink: 0;
   background: #fff;
   border-bottom: 1px solid #e8e8e8;
-  color: #888;
+  color: #666;
   font-size: 11px;
+  padding: 4px 4px;
+}
+
+.chat-info-primary {
+  color: #888;
   font-style: italic;
-  padding: 4px 10px;
+}
+
+.chat-info-queue-now {
+  margin-top: 2px;
+  color: #274466;
+  font-weight: bold;
+}
+
+.chat-info-queue-next {
+  margin-top: 1px;
+  color: #3c5f88;
 }
 
 /* --- Format Toolbar --- */
@@ -677,25 +692,6 @@
 
 .sab-vote-options {
   margin: 8px 0;
-}
-
-.game-queue-banner {
-  background: linear-gradient(180deg, #e8f1ff, #d8e5f8);
-  border: 1px solid #4d76a6;
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin: 6px 10px;
-  font-size: 11px;
-  color: #1f2f47;
-}
-
-.game-queue-now {
-  font-weight: bold;
-}
-
-.game-queue-next {
-  margin-top: 4px;
-  color: #355173;
 }
 
 .leaderboards-panel {
@@ -1845,7 +1841,7 @@
   }
 
   .chat-info-bar {
-    padding: 4px 10px;
+    padding: 4px 4px;
   }
 
   .member-panel {
@@ -1953,10 +1949,6 @@
   .sab-vote-banner {
     padding: 12px 16px;
     font-size: 14px;
-  }
-  .game-queue-banner {
-    padding: 10px 14px;
-    font-size: 13px;
   }
   .leaderboards-panel {
     padding: 10px;

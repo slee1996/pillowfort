@@ -17,12 +17,27 @@ import { VoteBanner } from "../components/games/VoteBanner";
 import { RpsOverlay } from "../components/games/RpsOverlay";
 import { TttOverlay } from "../components/games/TttOverlay";
 import { SabVoteBanner } from "../components/games/SabVoteBanner";
-import { GameQueueBanner } from "../components/games/GameQueueBanner";
 import { DrawCanvas } from "../components/canvas/DrawCanvas";
 import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
 import { DraggableWindow } from "../components/effects/DraggableWindow";
+import type { GameQueueItem } from "../services/protocol";
 
 type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | null;
+
+function describeQueueItem(item: GameQueueItem): string {
+  switch (item.kind) {
+    case "vote":
+      return `Pillow Fight: ${item.by} vs ${item.target || "?"}`;
+    case "rps":
+      return `RPS: ${item.by} vs ${item.target || "?"}`;
+    case "ttt":
+      return `TTT: ${item.by} vs ${item.target || "?"}`;
+    case "saboteur":
+      return `Saboteur started by ${item.by}`;
+    case "koth":
+      return `KOTH challenge by ${item.by}`;
+  }
+}
 
 export function ChatScreen() {
   const roomId = useGameStore((s) => s.roomId);
@@ -35,6 +50,7 @@ export function ChatScreen() {
   const sabStrikes = useGameStore((s) => s.sabStrikes);
   const sabBombCountdown = useGameStore((s) => s.sabBombCountdown);
   const sabDetonateSignal = useGameStore((s) => s.sabDetonateSignal);
+  const gameQueue = useGameStore((s) => s.gameQueue);
 
   const [picker, setPicker] = useState<PickerType>(null);
   const [sabFrameFx, setSabFrameFx] = useState("");
@@ -240,12 +256,21 @@ export function ChatScreen() {
             <div className="chat-main">
               <div className="chat-column">
                 <div className="chat-info-bar">
-                  {chatInfoText}
+                  <div className="chat-info-primary">{chatInfoText}</div>
+                  {gameQueue.current && (
+                    <div className="chat-info-queue-now">
+                      Now playing: {describeQueueItem(gameQueue.current)}
+                    </div>
+                  )}
+                  {gameQueue.queue.length > 0 && (
+                    <div className="chat-info-queue-next">
+                      Up next: {gameQueue.queue.map(describeQueueItem).join(" • ")}
+                    </div>
+                  )}
                 </div>
 
                 <SabVoteBanner />
                 <VoteBanner />
-                <GameQueueBanner />
                 <MessageList />
                 <TypingIndicator />
                 <FormatToolbar onInsertEmoji={handleInsertEmoji} />
