@@ -268,16 +268,9 @@ export function ChatScreen() {
                   {gameQueue.queue.length > 0 && (
                     <>
                       <span className="chat-info-sep">•</span>
-                      <div className="chat-info-queue-next">
-                      <span className="chat-info-queue-next-label">Up next:</span>
-                      <span className="chat-info-queue-next-list">
-                        {gameQueue.queue.map((item, idx) => (
-                          <span key={`${item.kind}-${item.by}-${item.target || "none"}-${idx}`} className="chat-info-queue-next-item">
-                            {describeQueueItem(item)}
-                          </span>
-                        ))}
+                      <span className="chat-info-queue-next">
+                        Up next: {gameQueue.queue.map(describeQueueItem).join(" • ")}
                       </span>
-                      </div>
                     </>
                   )}
                 </div>
