@@ -23,7 +23,7 @@ import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
 import { DraggableWindow } from "../components/effects/DraggableWindow";
 import type { GameQueueItem } from "../services/protocol";
 
-type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | null;
+type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | "sab-accuse" | null;
 
 function describeQueueItem(item: GameQueueItem): string {
   switch (item.kind) {
@@ -160,6 +160,10 @@ export function ChatScreen() {
         send("ttt-challenge", { target: picked });
         useGameStore.getState().addSystemMessage(`You challenged ${picked} to Tic-Tac-Toe!`);
         break;
+      case "sab-accuse":
+        send("sab-accuse", { suspect: picked });
+        useGameStore.getState().addSystemMessage(`You accused ${picked}.`);
+        break;
     }
   };
 
@@ -169,6 +173,7 @@ export function ChatScreen() {
     vote: "Vote to kick...",
     rps: "Challenge to RPS...",
     ttt: "Challenge to Tic-Tac-Toe...",
+    "sab-accuse": "Accuse as saboteur...",
   };
 
   const filteredMembers = picker

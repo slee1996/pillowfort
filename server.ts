@@ -39,8 +39,14 @@ interface Room {
   saboteur: string | null;
   saboteurActive: boolean;
   sabStrikes: number;
-  sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null;
-  sabRoundTimer: ReturnType<typeof setTimeout> | null;
+  sabVote: {
+    accuser: string;
+    suspect: string;
+    yes: Set<string>;
+    no: Set<string>;
+    timer: ReturnType<typeof setTimeout>;
+  } | null;
+  sabCanStrike: boolean;
   sabBombTimer: ReturnType<typeof setTimeout> | null;
   kothGame: { challenger: string; host: string } | null;
   activeGame: GameQueueItem | null;
@@ -83,7 +89,6 @@ const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
-const SAB_ROUND_DELAY_MS = process.env.NODE_ENV === "test" ? 500 : 60_000;
 const SAB_BOMB_MS_RAW = parseInt(process.env.SAB_BOMB_MS || (process.env.NODE_ENV === "test" ? "1200" : "10000"));
 const SAB_BOMB_MS = Number.isFinite(SAB_BOMB_MS_RAW) && SAB_BOMB_MS_RAW > 0 ? SAB_BOMB_MS_RAW : 10_000;
 const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
@@ -258,6 +263,10 @@ function resetIdle(room: Room) {
 
 function destroy(room: Room, reason: string) {
   clearTimeout(room.idleTimer);
+  if (room.sabVote) {
+    clearTimeout(room.sabVote.timer);
+    room.sabVote = null;
+  }
   if (room.sabBombTimer) {
     clearTimeout(room.sabBombTimer);
     room.sabBombTimer = null;
@@ -325,7 +334,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
     saboteurActive: false,
     sabStrikes: 0,
     sabVote: null,
-    sabRoundTimer: null,
+    sabCanStrike: false,
     sabBombTimer: null,
     kothGame: null,
     activeGame: null,
@@ -704,19 +713,19 @@ function startSaboteur(room: Room, starter: string): boolean {
 
   room.saboteurActive = true;
   room.sabStrikes = 0;
+  room.sabCanStrike = true;
   room.saboteur = m[Math.floor(Math.random() * m.length)];
   setActiveGame(room, { kind: "saboteur", by: starter });
 
   broadcast(room, "sab-started", { starter });
   const sabWs = findWs(room, room.saboteur);
-  if (sabWs) send(sabWs, "sab-role", { role: "saboteur" });
+  if (sabWs) send(sabWs, "sab-role", { role: "saboteur", canStrike: true });
   for (const name of m) {
     if (name !== room.saboteur) {
       const w = findWs(room, name);
       if (w) send(w, "sab-role", { role: "defender" });
     }
   }
-  scheduleSabVote(room);
   return true;
 }
 
@@ -962,45 +971,56 @@ function onSabStart(ws: any, d: WSData) {
   }
 }
 
-function scheduleSabVote(room: Room) {
-  if (room.sabRoundTimer) clearTimeout(room.sabRoundTimer);
-  room.sabRoundTimer = setTimeout(() => startSabVote(room), SAB_ROUND_DELAY_MS);
-}
+function onSabAccuse(ws: any, d: WSData, msg: any) {
+  if (!d.roomId || !d.name || !msg.suspect) return;
+  const room = rooms.get(d.roomId);
+  if (!room || !room.saboteurActive) return;
+  if (room.sabVote) return send(ws, "error", { message: "an accusation vote is already in progress" });
+  if (d.name === room.saboteur) return send(ws, "error", { message: "saboteur can't accuse" });
+  if (!members(room).includes(msg.suspect)) return;
+  if (msg.suspect === d.name) return send(ws, "error", { message: "you can't accuse yourself" });
 
-function startSabVote(room: Room) {
-  if (!room.saboteurActive) return;
-  room.sabVote = { votes: new Map(), timer: setTimeout(() => resolveSabVote(room), SABOTEUR_VOTE_MS) };
-  broadcast(room, "sab-vote-start", { duration: SABOTEUR_VOTE_MS });
+  room.sabVote = {
+    accuser: d.name,
+    suspect: msg.suspect,
+    yes: new Set([d.name]),
+    no: new Set(),
+    timer: setTimeout(() => resolveSabVote(room), SABOTEUR_VOTE_MS),
+  };
+  broadcast(room, "sab-vote-start", {
+    accuser: d.name,
+    suspect: msg.suspect,
+    duration: SABOTEUR_VOTE_MS,
+  });
 }
 
 function onSabVote(ws: any, d: WSData, msg: any) {
-  if (!d.roomId || !d.name || !msg.suspect) return;
+  if (!d.roomId || !d.name) return;
   const room = rooms.get(d.roomId);
-  if (!room || !room.sabVote) return;
-  if (!members(room).includes(msg.suspect)) return;
-  room.sabVote.votes.set(d.name, msg.suspect);
-  if (room.sabVote.votes.size >= members(room).length) resolveSabVote(room);
+  if (!room || !room.sabVote || !room.saboteurActive) return;
+  if (msg.vote !== "yes" && msg.vote !== "no") return;
+
+  room.sabVote.yes.delete(d.name);
+  room.sabVote.no.delete(d.name);
+  if (msg.vote === "yes") room.sabVote.yes.add(d.name);
+  else room.sabVote.no.add(d.name);
+
+  const total = room.sabVote.yes.size + room.sabVote.no.size;
+  if (total >= members(room).length) resolveSabVote(room);
 }
 
 function resolveSabVote(room: Room) {
   if (!room.sabVote || !room.saboteurActive) return;
   clearTimeout(room.sabVote.timer);
-
-  const tally = new Map<string, number>();
-  for (const suspect of room.sabVote.votes.values()) {
-    tally.set(suspect, (tally.get(suspect) || 0) + 1);
-  }
-
-  let topName = "";
-  let topCount = 0;
-  for (const [name, count] of tally) {
-    if (count > topCount) { topName = name; topCount = count; }
-  }
-
-  const correct = topName === room.saboteur;
+  const { accuser, suspect, yes, no } = room.sabVote;
+  const passed = yes.size > no.size;
+  const correct = passed && suspect === room.saboteur;
   broadcast(room, "sab-vote-result", {
-    votes: Object.fromEntries(tally),
-    accused: topName,
+    accuser,
+    accused: suspect,
+    yes: yes.size,
+    no: no.size,
+    passed,
     wasSaboteur: correct,
     saboteur: correct ? room.saboteur : null,
   });
@@ -1012,9 +1032,9 @@ function resolveSabVote(room: Room) {
     }
     emitLeaderboards(room);
     room.saboteurActive = false;
+    room.sabCanStrike = false;
     room.saboteur = null;
     room.sabVote = null;
-    if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
 
     // auto-start pillow fight vote against the caught saboteur
     clearActiveGame(room, false);
@@ -1025,7 +1045,11 @@ function resolveSabVote(room: Room) {
     }
   } else {
     room.sabVote = null;
-    scheduleSabVote(room);
+    if (!room.sabCanStrike && room.saboteur) {
+      room.sabCanStrike = true;
+      const sabWs = findWs(room, room.saboteur);
+      if (sabWs) send(sabWs, "sab-strike-ready", { reason: "wrong-accusation" });
+    }
   }
 }
 
@@ -1033,7 +1057,9 @@ function onSabStrike(ws: any, d: WSData) {
   if (!d.roomId || !d.name) return;
   const room = rooms.get(d.roomId);
   if (!room || !room.saboteurActive || d.name !== room.saboteur) return;
+  if (!room.sabCanStrike) return send(ws, "error", { message: "you can strike after a wrong accusation vote" });
 
+  room.sabCanStrike = false;
   room.sabStrikes++;
   broadcast(room, "sab-strike", { saboteur: d.name, strikes: room.sabStrikes });
 
@@ -1042,9 +1068,9 @@ function onSabStrike(ws: any, d: WSData) {
     bumpLeaderboard(room, "saboteur", d.name);
     emitLeaderboards(room);
     room.saboteurActive = false;
+    room.sabCanStrike = false;
     room.saboteur = null;
     if (room.sabVote) { clearTimeout(room.sabVote.timer); room.sabVote = null; }
-    if (room.sabRoundTimer) { clearTimeout(room.sabRoundTimer); room.sabRoundTimer = null; }
     if (room.sabBombTimer) clearTimeout(room.sabBombTimer);
     broadcast(room, "sab-bomb-start", { saboteur: d.name, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
     room.sabBombTimer = setTimeout(() => {
@@ -1187,6 +1213,7 @@ Bun.serve({
           case "ttt-decline":   onTttDecline(ws, d); break;
           case "ttt-move":      onTttMove(ws, d, msg); break;
           case "sab-start":     onSabStart(ws, d); break;
+          case "sab-accuse":    onSabAccuse(ws, d, msg); break;
           case "sab-strike":    onSabStrike(ws, d); break;
           case "sab-vote":      onSabVote(ws, d, msg); break;
           case "koth-challenge": onKothChallenge(ws, d); break;

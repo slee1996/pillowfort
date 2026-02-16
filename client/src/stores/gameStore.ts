@@ -51,6 +51,14 @@ export interface TttState {
   challengedBy?: string;
 }
 
+export interface SabVoteState {
+  accuser: string;
+  suspect: string;
+  duration: number;
+  timerStart: number;
+  myVote?: "yes" | "no";
+}
+
 export interface GameStore {
   // Connection
   screen: Screen;
@@ -79,7 +87,8 @@ export interface GameStore {
   rpsState: RpsState | null;
   tttState: TttState | null;
   sabRole: "saboteur" | "defender" | null;
-  sabVoteActive: boolean;
+  sabVote: SabVoteState | null;
+  sabCanStrike: boolean;
   sabStrikes: number;
   sabBombCountdown: number;
   sabDetonateSignal: number;
@@ -120,7 +129,9 @@ export interface GameStore {
   setRpsState: (rps: RpsState | null) => void;
   setTttState: (ttt: TttState | null) => void;
   setSabRole: (role: "saboteur" | "defender" | null) => void;
-  setSabVoteActive: (active: boolean) => void;
+  setSabVote: (vote: SabVoteState | null) => void;
+  setSabVoteChoice: (vote: "yes" | "no") => void;
+  setSabCanStrike: (canStrike: boolean) => void;
   setSabStrikes: (strikes: number) => void;
   setSabBombCountdown: (seconds: number) => void;
   triggerSabDetonation: () => void;
@@ -176,7 +187,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rpsState: null,
   tttState: null,
   sabRole: null,
-  sabVoteActive: false,
+  sabVote: null,
+  sabCanStrike: false,
   sabStrikes: 0,
   sabBombCountdown: 0,
   sabDetonateSignal: 0,
@@ -275,7 +287,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setRpsState: (rps) => set({ rpsState: rps }),
   setTttState: (ttt) => set({ tttState: ttt }),
   setSabRole: (role) => set({ sabRole: role }),
-  setSabVoteActive: (active) => set({ sabVoteActive: active }),
+  setSabVote: (vote) => set({ sabVote: vote }),
+  setSabVoteChoice: (vote) =>
+    set((s) => (s.sabVote ? { sabVote: { ...s.sabVote, myVote: vote } } : {})),
+  setSabCanStrike: (canStrike) => set({ sabCanStrike: canStrike }),
   setSabStrikes: (strikes) => set({ sabStrikes: strikes }),
   setSabBombCountdown: (seconds) => set({ sabBombCountdown: Math.max(0, seconds) }),
   triggerSabDetonation: () => set((s) => ({ sabDetonateSignal: s.sabDetonateSignal + 1 })),
@@ -314,7 +329,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rpsState: null,
       tttState: null,
       sabRole: null,
-      sabVoteActive: false,
+      sabVote: null,
+      sabCanStrike: false,
       sabStrikes: 0,
       sabBombCountdown: 0,
       sabDetonateSignal: 0,

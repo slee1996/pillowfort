@@ -268,24 +268,45 @@ describe("Secret Saboteur", () => {
     host.send({ type: "sab-start" });
     await host.waitFor("sab-started");
 
-    const players = [host, bob, carol, dave];
-    const roles: { client: typeof host; role: string }[] = [];
+    const players = [
+      { name: "alice", client: host },
+      { name: "bob", client: bob },
+      { name: "carol", client: carol },
+      { name: "dave", client: dave },
+    ];
+    const roles: { name: string; client: typeof host; role: string }[] = [];
     for (const p of players) {
-      const roleMsg = await p.waitFor("sab-role");
-      roles.push({ client: p, role: roleMsg.role });
+      const roleMsg = await p.client.waitFor("sab-role");
+      roles.push({ name: p.name, client: p.client, role: roleMsg.role });
     }
 
     const saboteur = roles.find(r => r.role === "saboteur")!;
+    const defenders = roles.filter(r => r.role === "defender");
+
+    const runWrongAccusation = async () => {
+      const accuser = defenders[0];
+      const wrongTarget = defenders.find((d) => d.name !== accuser.name)!.name;
+      accuser.client.send({ type: "sab-accuse", suspect: wrongTarget });
+      await host.waitFor("sab-vote-start");
+      for (const r of roles) r.client.send({ type: "sab-vote", vote: "yes" });
+      const wrong = await host.waitFor("sab-vote-result");
+      expect(wrong.wasSaboteur).toBe(false);
+      await saboteur.client.waitFor("sab-strike-ready");
+    };
 
     // Strike 1
     saboteur.client.send({ type: "sab-strike" });
     const s1 = await host.waitFor("sab-strike");
     expect(s1.strikes).toBe(1);
 
+    await runWrongAccusation();
+
     // Strike 2
     saboteur.client.send({ type: "sab-strike" });
     const s2 = await host.waitFor("sab-strike");
     expect(s2.strikes).toBe(2);
+
+    await runWrongAccusation();
 
     // Strike 3 → bomb countdown starts
     saboteur.client.send({ type: "sab-strike" });
@@ -308,7 +329,7 @@ describe("Secret Saboteur", () => {
     expect(err.message).toContain("need at least 4 people");
   });
 
-  it("saboteur caught by vote → auto pillow fight vote starts", async () => {
+  it("saboteur caught by accusation vote → auto pillow fight vote starts", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
     const carol = await joinRoom(roomId, "carol");
@@ -327,13 +348,11 @@ describe("Secret Saboteur", () => {
 
     const saboteur = roles.find(r => r.role === "saboteur")!;
 
-    // Wait for the sab vote round to start (500ms in test mode)
+    // A defender accuses the actual saboteur
+    const accuser = roles.find(r => r.role === "defender")!;
+    accuser.client.send({ type: "sab-accuse", suspect: saboteur.name });
     await host.waitFor("sab-vote-start");
-
-    // Everyone votes for the actual saboteur
-    for (const r of roles) {
-      r.client.send({ type: "sab-vote", suspect: saboteur.name });
-    }
+    for (const r of roles) r.client.send({ type: "sab-vote", vote: "yes" });
 
     // Should get sab-vote-result with wasSaboteur: true
     const result = await host.waitFor("sab-vote-result");
@@ -374,6 +393,55 @@ describe("Secret Saboteur", () => {
     // Verify no sab-strike was broadcast
     const strikes = host.messages.filter(m => m.type === "sab-strike");
     expect(strikes.length).toBe(0);
+  });
+
+  it("strike 2 is blocked until a wrong accusation grants a chance", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+
+    host.send({ type: "sab-start" });
+    await host.waitFor("sab-started");
+
+    const players = [
+      { name: "alice", client: host },
+      { name: "bob", client: bob },
+      { name: "carol", client: carol },
+      { name: "dave", client: dave },
+    ];
+    const roles: { name: string; client: typeof host; role: string }[] = [];
+    for (const p of players) {
+      const roleMsg = await p.client.waitFor("sab-role");
+      roles.push({ name: p.name, client: p.client, role: roleMsg.role });
+    }
+
+    const saboteur = roles.find(r => r.role === "saboteur")!;
+    const defenders = roles.filter(r => r.role === "defender");
+
+    saboteur.client.send({ type: "sab-strike" });
+    await host.waitFor("sab-strike");
+
+    // Immediate second strike should be rejected
+    saboteur.client.send({ type: "sab-strike" });
+    const strikeErr = await saboteur.client.waitFor("error");
+    expect(strikeErr.message).toContain("wrong accusation");
+    const strikesSoFar = host.messages.filter((m) => m.type === "sab-strike");
+    expect(strikesSoFar.length).toBe(1);
+
+    // Wrong accusation vote grants the next strike chance
+    const accuser = defenders[0];
+    const wrongTarget = defenders.find((d) => d.name !== accuser.name)!.name;
+    accuser.client.send({ type: "sab-accuse", suspect: wrongTarget });
+    await host.waitFor("sab-vote-start");
+    for (const r of roles) r.client.send({ type: "sab-vote", vote: "yes" });
+    const result = await host.waitFor("sab-vote-result");
+    expect(result.wasSaboteur).toBe(false);
+    await saboteur.client.waitFor("sab-strike-ready");
+
+    saboteur.client.send({ type: "sab-strike" });
+    const s2 = await host.waitFor("sab-strike");
+    expect(s2.strikes).toBe(2);
   });
 });
 
@@ -532,10 +600,25 @@ describe("Roomwide leaderboards", () => {
     }
     const sab = players.find(p => p.name === sabName)!;
 
+    const defenders = players.filter((p) => p.name !== sabName);
+
+    const runWrongAccusation = async () => {
+      const accuser = defenders[0];
+      const wrongTarget = defenders.find((d) => d.name !== accuser.name)!.name;
+      accuser.client.send({ type: "sab-accuse", suspect: wrongTarget });
+      await host.waitFor("sab-vote-start");
+      for (const p of players) p.client.send({ type: "sab-vote", vote: "yes" });
+      const result = await host.waitFor("sab-vote-result");
+      expect(result.wasSaboteur).toBe(false);
+      await sab.client.waitFor("sab-strike-ready");
+    };
+
     sab.client.send({ type: "sab-strike" });
     await host.waitFor("sab-strike");
+    await runWrongAccusation();
     sab.client.send({ type: "sab-strike" });
     await host.waitFor("sab-strike");
+    await runWrongAccusation();
     sab.client.send({ type: "sab-strike" });
     await host.waitFor("sab-strike");
 

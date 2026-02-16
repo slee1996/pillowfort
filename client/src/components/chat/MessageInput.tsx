@@ -16,6 +16,7 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
   const isHost = useGameStore((s) => s.isHost);
   const members = useGameStore((s) => s.members);
   const sabRole = useGameStore((s) => s.sabRole);
+  const sabCanStrike = useGameStore((s) => s.sabCanStrike);
   const inputRef = useRef<HTMLInputElement>(null);
   const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
   const mobileViewportBaseRef = useRef(0);
@@ -168,12 +169,15 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
             if (members.length < 4) return showToast("Need at least 4 people");
             send("sab-start");
           }}>🕵</button>
+          {sabRole === "defender" && (
+            <button className="game-shortcut-btn" title="Accuse Saboteur" onClick={() => onPickerOpen("sab-accuse")}>🗳</button>
+          )}
           <button className="game-shortcut-btn" title="Dethrone" onClick={() => {
             if (isHost) return showToast("You're already the host!");
             send("koth-challenge");
             useGameStore.getState().addSystemMessage("👑 You challenged the host for the crown!");
           }}>👑</button>
-          {sabRole === "saboteur" && (
+          {sabRole === "saboteur" && sabCanStrike && (
             <button className="sab-strike-btn" onClick={handleSabStrike}>💣 Strike!</button>
           )}
         </div>

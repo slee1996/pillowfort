@@ -8,9 +8,11 @@ import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 
 export function JoinScreen() {
   const name = useGameStore((s) => s.name);
+  const setName = useGameStore((s) => s.setName);
   const setScreen = useGameStore((s) => s.setScreen);
   const setPassword = useGameStore((s) => s.setPassword);
   const pendingRoom = useGameStore((s) => s.pendingRoom);
+  const nameRef = useRef<HTMLInputElement>(null);
   const roomRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -18,15 +20,22 @@ export function JoinScreen() {
     if (pendingRoom && roomRef.current) {
       roomRef.current.value = pendingRoom;
       useGameStore.getState().setPendingRoom(null);
-      passwordRef.current?.focus();
+      if (!name) nameRef.current?.focus();
+      else passwordRef.current?.focus();
     } else {
-      roomRef.current?.focus();
+      if (!name) nameRef.current?.focus();
+      else roomRef.current?.focus();
     }
   }, []);
 
   const handleJoin = () => {
+    const enteredName = nameRef.current?.value.trim() || name.trim();
     const room = roomRef.current?.value.trim();
     const pw = passwordRef.current?.value.trim();
+    if (!enteredName) {
+      nameRef.current?.focus();
+      return;
+    }
     if (!room) {
       roomRef.current?.focus();
       return;
@@ -35,8 +44,9 @@ export function JoinScreen() {
       passwordRef.current?.focus();
       return;
     }
+    setName(enteredName);
     setPassword(pw);
-    connect(room, () => send("join", { name, password: pw, room }));
+    connect(room, () => send("join", { name: enteredName, password: pw, room }));
   };
 
   return (
@@ -51,6 +61,16 @@ export function JoinScreen() {
           <p className="auth-note">
             Enter the fort flag and secret password you were given.
           </p>
+          <Input
+            id="join-name"
+            label="Screen Name"
+            placeholder="Enter a screen name"
+            maxLength={24}
+            autoComplete="off"
+            autoCapitalize="off"
+            defaultValue={name}
+            ref={nameRef}
+          />
           <Input
             id="join-room"
             label="Fort Flag"

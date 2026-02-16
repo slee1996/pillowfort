@@ -23,8 +23,9 @@ export type OutgoingMessage =
   | { type: "ttt-decline" }
   | { type: "ttt-move"; cell: number }
   | { type: "sab-start" }
+  | { type: "sab-accuse"; suspect: string }
   | { type: "sab-strike" }
-  | { type: "sab-vote"; suspect: string }
+  | { type: "sab-vote"; vote: "yes" | "no" }
   | { type: "set-status"; status: PresenceStatus; awayText?: string }
   | { type: "koth-challenge" };
 
@@ -71,9 +72,10 @@ export type IncomingMessage =
   | { type: "ttt-update"; board: string[]; turn: number; lastMove: number; winner: string | null; draw: boolean }
   // Saboteur
   | { type: "sab-started"; starter: string }
-  | { type: "sab-role"; role: "saboteur" | "defender" }
-  | { type: "sab-vote-start"; duration: number }
-  | { type: "sab-vote-result"; votes: Record<string, number>; accused: string; wasSaboteur: boolean; saboteur: string | null }
+  | { type: "sab-role"; role: "saboteur" | "defender"; canStrike?: boolean }
+  | { type: "sab-vote-start"; accuser: string; suspect: string; duration: number }
+  | { type: "sab-vote-result"; accuser: string; accused: string; yes: number; no: number; passed: boolean; wasSaboteur: boolean; saboteur: string | null }
+  | { type: "sab-strike-ready"; reason: "wrong-accusation" }
   | { type: "sab-strike"; saboteur: string; strikes: number }
   | { type: "sab-bomb-start"; saboteur: string; seconds: number; durationMs?: number }
   // KOTH

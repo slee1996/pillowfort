@@ -1,52 +1,44 @@
 import { useState, useEffect } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
-import { buddyIconColor } from "../../utils/nameColor";
 
 export function SabVoteBanner() {
-  const sabVoteActive = useGameStore((s) => s.sabVoteActive);
-  const members = useGameStore((s) => s.members);
+  const sabVote = useGameStore((s) => s.sabVote);
   const [remaining, setRemaining] = useState(30);
 
   useEffect(() => {
-    if (!sabVoteActive) return;
-    setRemaining(30);
+    if (!sabVote) return;
+    const totalSeconds = Math.max(1, Math.ceil(sabVote.duration / 1000));
+    setRemaining(totalSeconds);
+    const endAt = sabVote.timerStart + sabVote.duration;
     const timer = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return r - 1;
-      });
+      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setRemaining(next);
+      if (next <= 0) clearInterval(timer);
     }, 1000);
     return () => clearInterval(timer);
-  }, [sabVoteActive]);
+  }, [sabVote?.timerStart, sabVote?.duration]);
 
-  if (!sabVoteActive) return null;
+  if (!sabVote) return null;
 
-  const vote = (suspect: string) => {
-    send("sab-vote", { suspect });
-    useGameStore.getState().setSabVoteActive(false);
-    useGameStore.getState().addSystemMessage(`You voted for ${suspect}.`);
+  const vote = (choice: "yes" | "no") => {
+    send("sab-vote", { vote: choice });
+    useGameStore.getState().setSabVoteChoice(choice);
+    useGameStore.getState().addSystemMessage(`You voted ${choice.toUpperCase()} on accusing ${sabVote.suspect}.`);
   };
 
   return (
     <div className="sab-vote-banner">
-      <div>🕵 <strong>SABOTEUR VOTE!</strong> Who is the saboteur?</div>
+      <div>🕵 <strong>ACCUSATION VOTE!</strong> {sabVote.accuser} accused <strong>{sabVote.suspect}</strong>.</div>
       <div className="sab-vote-options">
-        {members.map((name) => (
-          <div
-            key={name}
-            className="member-picker-item"
-            onClick={() => vote(name)}
-          >
-            <span className="buddy-icon" style={{ background: buddyIconColor(name) }} />
-            <span>{name}</span>
-          </div>
-        ))}
+        <button className="xp-btn" onClick={() => vote("yes")} disabled={sabVote.myVote === "yes"}>
+          ✅ Yes, guilty
+        </button>
+        <button className="xp-btn" onClick={() => vote("no")} disabled={sabVote.myVote === "no"}>
+          ❌ No, not them
+        </button>
       </div>
-      <div className="vote-remaining">{remaining}s</div>
+      <div className="vote-remaining">{remaining}s remaining</div>
     </div>
   );
 }

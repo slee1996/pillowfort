@@ -456,45 +456,69 @@ export function handleMessage(msg: IncomingMessage) {
     case "sab-started": {
       stopSabBombCountdown();
       s.setSabBombCountdown(0);
+      s.setSabVote(null);
+      s.setSabCanStrike(false);
+      s.setSabStrikes(0);
       s.addSystemMessage(`🕵 ${msg.starter} started Secret Saboteur mode! A saboteur lurks among you...`);
-      s.addSystemMessage("The saboteur can strike at any time. Every 60s, you vote on who you think it is.");
+      s.addSystemMessage("Defenders can launch accusation votes. A wrong accusation gives the saboteur a strike chance.");
       break;
     }
 
     case "sab-role": {
       s.setSabRole(msg.role);
       if (msg.role === "saboteur") {
-        s.addSystemMessage("👿 YOU are the saboteur! Strike when the time is right, or stay hidden.");
+        s.setSabCanStrike(!!msg.canStrike);
+        s.addSystemMessage("👿 YOU are the saboteur! Your first strike is ready now.");
       } else {
+        s.setSabCanStrike(false);
         s.addSystemMessage("🛡 You are a defender. Find the saboteur before they strike!");
       }
       break;
     }
 
     case "sab-vote-start": {
-      s.addSystemMessage("🕵 VOTE TIME! Who is the saboteur?");
-      s.setSabVoteActive(true);
+      s.setSabVote({
+        accuser: msg.accuser,
+        suspect: msg.suspect,
+        duration: msg.duration,
+        timerStart: Date.now(),
+      });
+      s.addSystemMessage(`🕵 ACCUSATION! ${msg.accuser} accused ${msg.suspect}. Vote yes/no.`);
       break;
     }
 
     case "sab-vote-result": {
-      s.setSabVoteActive(false);
+      s.setSabVote(null);
       if (msg.wasSaboteur) {
         stopSabBombCountdown();
         s.setSabBombCountdown(0);
+        s.setSabCanStrike(false);
         s.addSystemMessage(`🎉 ${msg.accused} was the saboteur! Pillow fight incoming...`);
         s.setSabRole(null);
       } else {
-        s.addSystemMessage(`❌ ${msg.accused} was NOT the saboteur. The hunt continues...`);
+        const voteText = msg.passed
+          ? `❌ accusation passed (${msg.yes}-${msg.no}), but ${msg.accused} was NOT the saboteur.`
+          : `⚖ accusation failed (${msg.yes}-${msg.no}). ${msg.accused} stays in.`;
+        s.addSystemMessage(`${voteText} The hunt continues...`);
+      }
+      break;
+    }
+
+    case "sab-strike-ready": {
+      if (s.sabRole === "saboteur") {
+        s.setSabCanStrike(true);
+        s.addSystemMessage("💣 Wrong accusation. You can strike now.");
       }
       break;
     }
 
     case "sab-strike": {
       s.setSabStrikes(msg.strikes);
+      if (s.sabRole === "saboteur" && msg.strikes < 3) s.setSabCanStrike(false);
       if (msg.strikes >= 3) {
         s.addSystemMessage(`💥💥💥 STRIKE ${msg.strikes}/3! ${msg.saboteur} planted a bomb!`);
         s.setSabRole(null);
+        s.setSabCanStrike(false);
       } else if (msg.strikes === 2) {
         s.addSystemMessage(`💥💥 STRIKE ${msg.strikes}/3! ${msg.saboteur} struck again! The fort is crumbling!`);
       } else {

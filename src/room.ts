@@ -96,8 +96,14 @@ export class Room implements DurableObject {
   private saboteur: string | null = null;
   private saboteurActive = false;
   private sabStrikes = 0;
-  private sabVote: { votes: Map<string, string>; timer: ReturnType<typeof setTimeout> } | null = null;
-  private sabRoundTimer: ReturnType<typeof setTimeout> | null = null;
+  private sabVote: {
+    accuser: string;
+    suspect: string;
+    yes: Set<string>;
+    no: Set<string>;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  private sabCanStrike = false;
   private sabBombTimer: ReturnType<typeof setTimeout> | null = null;
   private activeGame: GameQueueItem | null = null;
   private gameQueue: GameQueueItem[] = [];
@@ -166,6 +172,7 @@ export class Room implements DurableObject {
         case "ttt-decline":   this.onTttDecline(ws); break;
         case "ttt-move":      this.onTttMove(ws, msg); break;
         case "sab-start":     this.onSabStart(ws); break;
+        case "sab-accuse":    this.onSabAccuse(ws, msg); break;
         case "sab-strike":    this.onSabStrike(ws); break;
         case "sab-vote":      this.onSabVote(ws, msg); break;
         case "koth-challenge": this.onKothChallenge(ws); break;
@@ -335,6 +342,10 @@ export class Room implements DurableObject {
   private async destroyRoom(reason: string) {
     const count = this.state.getWebSockets().length;
     this.log(`destroying (${count} connected) — ${reason}`);
+    if (this.sabVote) {
+      clearTimeout(this.sabVote.timer);
+      this.sabVote = null;
+    }
     if (this.sabBombTimer) {
       clearTimeout(this.sabBombTimer);
       this.sabBombTimer = null;
@@ -590,18 +601,18 @@ export class Room implements DurableObject {
 
     this.saboteurActive = true;
     this.sabStrikes = 0;
+    this.sabCanStrike = true;
     this.saboteur = members[Math.floor(Math.random() * members.length)];
     this.setActiveGame({ kind: "saboteur", by: starter });
     this.log(`saboteur mode started — ${this.saboteur} is the saboteur`);
 
     this.broadcast("sab-started", { starter });
     const sabWs = this.findWs(this.saboteur);
-    if (sabWs) this.send(sabWs, "sab-role", { role: "saboteur" });
+    if (sabWs) this.send(sabWs, "sab-role", { role: "saboteur", canStrike: true });
     for (const w of this.state.getWebSockets()) {
       const d = this.att(w);
       if (d.name && d.name !== this.saboteur) this.send(w, "sab-role", { role: "defender" });
     }
-    this.scheduleSabVote();
     return true;
   }
 
@@ -851,54 +862,59 @@ export class Room implements DurableObject {
     }
   }
 
-  private scheduleSabVote() {
-    if (this.sabRoundTimer) clearTimeout(this.sabRoundTimer);
-    // vote every 60 seconds
-    this.sabRoundTimer = setTimeout(() => this.startSabVote(), 60_000);
-  }
-
-  private startSabVote() {
-    if (!this.saboteurActive) return;
-    this.sabVote = { votes: new Map(), timer: setTimeout(() => this.resolveSabVote(), SABOTEUR_VOTE_MS) };
-    this.broadcast("sab-vote-start", { duration: SABOTEUR_VOTE_MS });
-    this.log("saboteur vote round started");
-  }
-
-  private onSabVote(ws: WebSocket, msg: { suspect?: string }) {
+  private onSabAccuse(ws: WebSocket, msg: { suspect?: string }) {
     const a = this.att(ws);
-    if (!a.name || !this.sabVote || !msg.suspect) return;
+    if (!a.name || !msg.suspect || !this.saboteurActive) return;
+    if (this.sabVote) return this.send(ws, "error", { message: "an accusation vote is already in progress" });
+    if (a.name === this.saboteur) return this.send(ws, "error", { message: "saboteur can't accuse" });
     if (!this.getMembers().includes(msg.suspect)) return;
-    this.sabVote.votes.set(a.name, msg.suspect);
+    if (msg.suspect === a.name) return this.send(ws, "error", { message: "you can't accuse yourself" });
 
-    // check if everyone voted
-    if (this.sabVote.votes.size >= this.getMembers().length) this.resolveSabVote();
+    this.sabVote = {
+      accuser: a.name,
+      suspect: msg.suspect,
+      yes: new Set([a.name]),
+      no: new Set(),
+      timer: setTimeout(() => this.resolveSabVote(), SABOTEUR_VOTE_MS),
+    };
+    this.broadcast("sab-vote-start", {
+      accuser: a.name,
+      suspect: msg.suspect,
+      duration: SABOTEUR_VOTE_MS,
+    });
+    this.log(`sab accusation started: ${a.name} accused ${msg.suspect}`);
+  }
+
+  private onSabVote(ws: WebSocket, msg: { vote?: string }) {
+    const a = this.att(ws);
+    if (!a.name || !this.sabVote || !this.saboteurActive) return;
+    if (msg.vote !== "yes" && msg.vote !== "no") return;
+
+    this.sabVote.yes.delete(a.name);
+    this.sabVote.no.delete(a.name);
+    if (msg.vote === "yes") this.sabVote.yes.add(a.name);
+    else this.sabVote.no.add(a.name);
+
+    const total = this.sabVote.yes.size + this.sabVote.no.size;
+    if (total >= this.getMembers().length) this.resolveSabVote();
   }
 
   private resolveSabVote() {
     if (!this.sabVote || !this.saboteurActive) return;
     clearTimeout(this.sabVote.timer);
-
-    // tally votes
-    const tally = new Map<string, number>();
-    for (const suspect of this.sabVote.votes.values()) {
-      tally.set(suspect, (tally.get(suspect) || 0) + 1);
-    }
-
-    // find top voted
-    let topName = "";
-    let topCount = 0;
-    for (const [name, count] of tally) {
-      if (count > topCount) { topName = name; topCount = count; }
-    }
-
-    const correct = topName === this.saboteur;
+    const { accuser, suspect, yes, no } = this.sabVote;
+    const passed = yes.size > no.size;
+    const correct = passed && suspect === this.saboteur;
     this.broadcast("sab-vote-result", {
-      votes: Object.fromEntries(tally),
-      accused: topName,
+      accuser,
+      accused: suspect,
+      yes: yes.size,
+      no: no.size,
+      passed,
       wasSaboteur: correct,
       saboteur: correct ? this.saboteur : null
     });
-    this.log(`sab vote: ${topName} accused (${correct ? "correct!" : "wrong"})`);
+    this.log(`sab vote: ${suspect} accused (${correct ? "correct!" : "wrong"})`);
 
     if (correct) {
       // saboteur caught!
@@ -908,9 +924,9 @@ export class Room implements DurableObject {
       }
       this.emitLeaderboards();
       this.saboteurActive = false;
+      this.sabCanStrike = false;
       this.saboteur = null;
       this.sabVote = null;
-      if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
 
       // auto-start pillow fight vote against the caught saboteur
       this.clearActiveGame(false);
@@ -922,14 +938,20 @@ export class Room implements DurableObject {
       }
     } else {
       this.sabVote = null;
-      this.scheduleSabVote();
+      if (!this.sabCanStrike && this.saboteur) {
+        this.sabCanStrike = true;
+        const sabWs = this.findWs(this.saboteur);
+        if (sabWs) this.send(sabWs, "sab-strike-ready", { reason: "wrong-accusation" });
+      }
     }
   }
 
   private onSabStrike(ws: WebSocket) {
     const a = this.att(ws);
     if (!a.name || !this.saboteurActive || a.name !== this.saboteur) return;
+    if (!this.sabCanStrike) return this.send(ws, "error", { message: "you can strike after a wrong accusation vote" });
 
+    this.sabCanStrike = false;
     this.sabStrikes++;
     this.broadcast("sab-strike", { saboteur: a.name, strikes: this.sabStrikes });
     this.log(`saboteur ${a.name} struck! (${this.sabStrikes}/3)`);
@@ -939,9 +961,9 @@ export class Room implements DurableObject {
       this.bumpLeaderboard("saboteur", a.name);
       this.emitLeaderboards();
       this.saboteurActive = false;
+      this.sabCanStrike = false;
       this.saboteur = null;
       if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
-      if (this.sabRoundTimer) { clearTimeout(this.sabRoundTimer); this.sabRoundTimer = null; }
       if (this.sabBombTimer) clearTimeout(this.sabBombTimer);
       this.broadcast("sab-bomb-start", { saboteur: a.name, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
       this.sabBombTimer = setTimeout(() => {

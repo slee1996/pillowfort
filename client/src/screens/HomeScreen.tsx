@@ -20,9 +20,7 @@ export function HomeScreen() {
     if (match) {
       history.replaceState(null, "", "/");
       useGameStore.getState().setPendingRoom(match[1]);
-      if (useGameStore.getState().name) {
-        setScreen("join");
-      }
+      setScreen("join");
     } else if (name && inputRef.current) {
       inputRef.current.select();
     }
