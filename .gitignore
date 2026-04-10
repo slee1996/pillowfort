@@ -22,14 +22,12 @@ bun.lock
 
 # Build output
 client/dist/
+video/
 video/out/
 demo-videos/
 *.tsbuildinfo
 
 # Generated media / captures
-video/public/
-video/capture/
-video/ref-screenshots/
 *.actual.png
 *.diff.png
 /demo.ts

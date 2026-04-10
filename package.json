@@ -17,9 +17,5 @@
     "@playwright/test": "^1.58.2",
     "playwright": "^1.58.2",
     "wrangler": "^3.99.0"
-  },
-  "dependencies": {
-    "@remotion/cli": "4.0.421",
-    "remotion": "4.0.421"
   }
 }

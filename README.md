@@ -15,7 +15,7 @@ Set up a fort, share the code and password, hang out in real time, then knock it
 
 - a real-time chat app with ephemeral rooms
 - a dual-runtime experiment that runs locally on Bun and in production on Cloudflare Workers + Durable Objects
-- a design-heavy frontend with tests and a separate Remotion package for promo/demo video work
+- a design-heavy frontend with browser and snapshot test coverage
 
 The core product idea is simple:
 
@@ -109,7 +109,6 @@ pillowfort/
 │   └── shared.ts          shared limits and sanitizers
 ├── server.ts              local Bun server and in-memory room runtime
 ├── test/                  Bun integration/e2e/visual tests
-├── video/                 Remotion project for demos and marketing renders
 ├── wrangler.toml          Cloudflare config
 └── ARCHITECTURE.md        protocol and runtime design notes
 ```
@@ -122,7 +121,7 @@ pillowfort/
 
 ## Install
 
-This repo is not set up as a workspace. Root, `client/`, and `video/` are separate package installs.
+This repo is not set up as a workspace. Root and `client/` are separate package installs.
 
 ```bash
 # root dependencies
@@ -130,11 +129,6 @@ npm install
 
 # client dependencies
 cd client
-npm install
-cd ..
-
-# optional: only if you want to work on Remotion videos
-cd video
 npm install
 cd ..
 ```
@@ -226,23 +220,6 @@ Production routing looks like this:
 - `/ws?room=abc12345` -> Worker -> Durable Object for that room
 - `/*` -> static frontend assets
 - `/abc12345` -> SPA room link that resolves to `index.html`
-
-## Video Package
-
-`video/` is a separate Remotion project used for product demos and marketing edits.
-
-Typical workflow:
-
-```bash
-cd video
-npm run studio
-```
-
-Useful renders include:
-
-- `npm run render`
-- `npm run render:marketing`
-- `npm run render:v16`
 
 ## Good First Places To Read
 
