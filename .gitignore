@@ -32,6 +32,8 @@ video/capture/
 video/ref-screenshots/
 *.actual.png
 *.diff.png
+/demo.ts
+/*.png
 
 # Test / report output
 coverage/

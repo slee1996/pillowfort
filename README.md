@@ -5,8 +5,8 @@ Small, private, disposable chat rooms with AIM / Windows XP energy.
 Set up a fort, share the code and password, hang out in real time, then knock it down. No accounts. No public room list. No durable chat history for late joiners.
 
 <p align="center">
-  <img src="aim-home.png" width="360" alt="sign on screen">
-  <img src="aim-chat-full.png" width="360" alt="chat screen">
+  <img src="docs/screenshots/aim-home.png" width="360" alt="sign on screen">
+  <img src="docs/screenshots/aim-chat-full.png" width="360" alt="chat screen">
 </p>
 
 ## What This Repo Contains
