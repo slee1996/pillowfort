@@ -1,122 +1,272 @@
 # pillowfort
 
-ephemeral chat rooms with AIM vibes. set up a fort, hang out, knock it down.
+Small, private, disposable chat rooms with AIM / Windows XP energy.
 
-no accounts. no history. no database. when the fort comes down, it's gone forever.
+Set up a fort, share the code and password, hang out in real time, then knock it down. No accounts. No public room list. No durable chat history for late joiners.
 
 <p align="center">
   <img src="aim-home.png" width="360" alt="sign on screen">
   <img src="aim-chat-full.png" width="360" alt="chat screen">
 </p>
 
-## how it works
+## What This Repo Contains
 
-1. **set up a fort** — pick a screen name and a secret password
-2. **share the code** — give the 8-character fort code + password to your friends
-3. **hang out** — chat in real time, windows xp style
-4. **knock it down** — the host can destroy the fort at any time. poof, it's gone
+`pillowfort` is both:
 
-## host migration (the pillow throw)
+- a real-time chat app with ephemeral rooms
+- a dual-runtime experiment that runs locally on Bun and in production on Cloudflare Workers + Durable Objects
+- a design-heavy frontend with tests and a separate Remotion package for promo/demo video work
 
-when the host leaves without knocking down the fort, a pillow gets thrown to a random guest:
+The core product idea is simple:
 
-- **host leaves** — a random guest gets the "incoming pillow!" dialog
-- **guest catches** — they become the new host with full controls (Copy Invite, Knock Down)
-- **guest ducks** — the pillow passes to the next guest
-- **everyone ducks** — the fort collapses ("nobody caught the pillow")
+1. Pick a screen name and secret password.
+2. Create a fort and get an 8-character room code.
+3. Share the code and password out of band.
+4. Chat, doodle, and play small games together.
+5. Knock the fort down, or let it expire.
 
-## features
+When the fort is gone, the room is gone.
 
-- **ephemeral** — nothing persists. no messages stored, no user accounts, no database
-- **invite only** — no room list, no lobby, no discovery. if you know the code + password, you're in
-- **auto-suffixed names** — join as "spencer" when there's already a "spencer"? you become "spencer2"
-- **user hashes** — every connection gets a 4-char hex hash for server-side disambiguation
-- **rate limiting** — room creation (5/min per IP) and message sending (10/5s) are throttled
-- **20 guest cap** — keeps forts small and personal
-- **10 minute idle timeout** — no messages for 10 minutes and the fort self-destructs
-- **typing indicators** — see who's whispering
-- **room-scoped presence** — set yourself as Available/Away (optionally with an away note) visible only to people inside your current fort
-- **room-key message encryption** — chat payload (text + style) is encrypted in-browser with AES-GCM (PBKDF2-derived key from fort password + room flag), bound to sender identity, with replay-drop in session; relay still sees metadata like sender/typing
-- **mobile responsive** — full-screen chat on mobile with safe area support
-- **AIM / Windows XP aesthetic** — title bars, buddy list, door sounds, the whole deal
+## Current Feature Set
 
-## screenshots
+### Core room behavior
 
-### desktop
+- Invite-only rooms with no lobby and no room discovery
+- Host-created forts with 8-character room codes
+- Ephemeral room state with no user accounts
+- Auto-suffixed duplicate names like `spencer2`
+- Typing indicators
+- Room-scoped presence with away messages
+- Reconnect grace window for temporary disconnects
+- Host migration via "the pillow throw" when the host leaves
+- Rate limiting, guest cap, and idle room self-destruction
 
-| sign on | set up | chat (host view) |
-|---------|--------|------------------|
-| ![sign on](aim-home.png) | ![chat](aim-chat.png) | ![host view](host-view.png) |
+### Chat and UX
 
-| chat (full) | knocked down |
-|-------------|--------------|
-| ![full chat](aim-chat-full.png) | ![knocked](knocked.png) |
+- AIM / Windows XP-inspired interface
+- Desktop and mobile layouts
+- Browser-side encrypted chat payloads using AES-GCM
+- Message formatting support
+- Save-chat export from the UI
+- Invite-copy flow with room link + password
 
-### mobile
+### Extras beyond plain chat
 
-| sign on | set up | chat | message | knocked |
-|---------|--------|------|---------|---------|
-| ![sign on](mobile-signon.png) | ![setup](mobile-setup.png) | ![chat](mobile-chat.png) | ![message](mobile-chat-msg.png) | ![knocked](mobile-knocked.png) |
+- Shared drawing canvas
+- Pillow Fight vote-to-kick
+- Rock Paper Scissors
+- Tic-Tac-Toe
+- Secret Saboteur
+- King of the Hill
+- Per-room leaderboards and queued game flow
 
-## running locally
+## Ephemeral Model
+
+The app is designed to avoid long-lived room history:
+
+- no user accounts
+- no message history replay for new joiners
+- no database for chat transcripts
+- only the last-used screen name is kept in `localStorage`
+
+In production, Durable Object storage is used only to coordinate a live room while it exists. When a fort is destroyed, that room state is cleared.
+
+## Architecture
+
+There are two server runtimes with roughly the same behavior:
+
+| Layer | Local development | Production |
+| --- | --- | --- |
+| Entry server | Bun | Cloudflare Worker |
+| Room runtime | in-memory `Map` | Durable Object per room |
+| Client | React + Vite | React + Vite |
+| Storage | process memory only | ephemeral DO state |
+
+Important contributor note:
+
+- local room behavior lives in `server.ts`
+- production room behavior lives in `src/room.ts`
+- shared validation helpers live in `src/shared.ts`
+
+If you change room rules, websocket behavior, limits, or game logic, you usually need to update both runtimes.
+
+For a deeper system-level walkthrough, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Repo Layout
+
+```text
+pillowfort/
+├── client/                React + Vite frontend
+│   ├── src/
+│   │   ├── screens/       Home, setup, join, chat, knocked-down screens
+│   │   ├── components/    XP UI, chat UI, games, overlays, canvas
+│   │   ├── stores/        Zustand app state
+│   │   └── services/      websocket protocol, message handling, chat crypto
+│   └── dist/              built assets served by Bun / Cloudflare
+├── src/
+│   ├── index.ts           Cloudflare Worker entrypoint
+│   ├── room.ts            Durable Object room runtime
+│   └── shared.ts          shared limits and sanitizers
+├── server.ts              local Bun server and in-memory room runtime
+├── test/                  Bun integration/e2e/visual tests
+├── video/                 Remotion project for demos and marketing renders
+├── wrangler.toml          Cloudflare config
+└── ARCHITECTURE.md        protocol and runtime design notes
+```
+
+## Prerequisites
+
+- Bun
+- Node.js and npm
+- A Cloudflare account only if you want to deploy
+
+## Install
+
+This repo is not set up as a workspace. Root, `client/`, and `video/` are separate package installs.
 
 ```bash
-# install dependencies
+# root dependencies
 npm install
 
-# start the local dev server (bun)
-bun run server.ts
+# client dependencies
+cd client
+npm install
+cd ..
 
-# or with watch mode
-bun --watch server.ts
+# optional: only if you want to work on Remotion videos
+cd video
+npm install
+cd ..
 ```
 
-open http://localhost:3000
+## Running Locally
 
-the local server uses Bun's native WebSocket support. no cloudflare, no durable objects — just a single process holding rooms in memory.
-
-## design snapshot tests
+Build the frontend, then start the Bun server:
 
 ```bash
-# runs visual baselines for home/setup/join/chat (desktop + mobile)
-bun run test:design-snapshots
-
-# optional: run against an already-running app URL
-PF_BASE_URL=http://localhost:3000 bun run test:design-snapshots
+npm run build
+npm run dev
 ```
 
-first run writes baselines to `test/__snapshots__/design/`. later runs compare pixel diffs and fail if UI drift exceeds threshold.
+Open `http://localhost:3000`.
 
-## deploying to cloudflare
+What this does:
+
+- `npm run build` builds `client/dist` with Vite
+- `npm run dev` runs `bun --watch server.ts`
+- `server.ts` serves the built client and handles websocket room state in memory
+
+If you are changing frontend code, rebuild the client before reloading the Bun app:
 
 ```bash
-# deploy to cloudflare workers + durable objects
-npx wrangler deploy
+npm run build
 ```
 
-production uses Cloudflare Workers for the entry point and a Durable Object per room for WebSocket management. see [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+There is also a client-only Vite script:
 
-## project structure
-
-```
-pillowfort/
-├── client/               # React + Vite client
-│   ├── src/              # screens, stores, components, styles
-│   └── dist/             # built static assets served by server.ts
-├── src/
-│   ├── index.ts           # cloudflare worker entry point (routes /ws to durable objects)
-│   └── room.ts            # durable object — one instance per room
-├── server.ts              # local bun dev server (mirrors room.ts logic)
-├── wrangler.toml          # cloudflare config
-└── ARCHITECTURE.md        # system design and protocol docs
+```bash
+npm run dev:client
 ```
 
-## tech
+That is useful for isolated frontend work, but the full app behavior still depends on the websocket backend in `server.ts`.
 
-| layer   | local dev | production                     |
-|---------|-----------|--------------------------------|
-| server  | bun       | cloudflare workers             |
-| rooms   | in-memory | durable objects (one per room) |
-| client  | react + vite | react + vite                |
-| storage | none      | none (durable object memory only) |
-| build   | vite      | vite + wrangler                |
+## Testing
+
+### Core test suite
+
+```bash
+npm test
+```
+
+This runs the stable core test suite:
+
+- unit tests
+- room lifecycle / websocket integration tests
+- gameplay protocol tests
+- end-to-end invite flow checks
+
+### Design snapshot tests only
+
+```bash
+npm run test:design-snapshots
+```
+
+This launches Playwright and captures key UI states. The first run writes baselines to `test/__snapshots__/design/`. Later runs compare against those baselines and fail when visual drift exceeds the configured threshold.
+
+You can also point the snapshot runner at an existing app URL:
+
+```bash
+PF_BASE_URL=http://localhost:3000 npm run test:design-snapshots
+```
+
+### Long-form UI choreography tests
+
+```bash
+npm run test:ui
+```
+
+These Playwright-heavy suites mirror the demo and promo choreography flows. They are slower, more presentation-oriented, and kept separate from the default public-repo test run.
+
+## Deployment
+
+Use the root deploy script:
+
+```bash
+npm run deploy
+```
+
+That:
+
+1. builds the client
+2. deploys the Cloudflare Worker
+3. publishes the Durable Object binding defined in `wrangler.toml`
+
+Production routing looks like this:
+
+- `/ws?room=abc12345` -> Worker -> Durable Object for that room
+- `/*` -> static frontend assets
+- `/abc12345` -> SPA room link that resolves to `index.html`
+
+## Video Package
+
+`video/` is a separate Remotion project used for product demos and marketing edits.
+
+Typical workflow:
+
+```bash
+cd video
+npm run studio
+```
+
+Useful renders include:
+
+- `npm run render`
+- `npm run render:marketing`
+- `npm run render:v16`
+
+## Good First Places To Read
+
+If you are trying to understand the app quickly, start here:
+
+- [`server.ts`](server.ts) for the local runtime
+- [`src/index.ts`](src/index.ts) for Cloudflare request routing
+- [`src/room.ts`](src/room.ts) for production room behavior
+- [`client/src/services/protocol.ts`](client/src/services/protocol.ts) for websocket message shapes
+- [`client/src/stores/gameStore.ts`](client/src/stores/gameStore.ts) for client state
+- [`client/src/screens/ChatScreen.tsx`](client/src/screens/ChatScreen.tsx) for the main UI surface
+- [`test/integration.test.ts`](test/integration.test.ts) for expected room behavior
+
+## Status
+
+This repo is beyond a toy chat mock. It already includes:
+
+- two server runtimes
+- reconnect and host handoff logic
+- browser-side encrypted chat payloads
+- room-scoped presence
+- multiplayer mini-games
+- integration tests
+- visual regression coverage
+- motion-design assets in a separate package
+
+If you are making architectural changes, read `ARCHITECTURE.md` before editing the room runtime.

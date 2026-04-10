@@ -2,6 +2,7 @@ import { forwardRef, type ReactNode } from "react";
 import { LogoIcon } from "./Logo";
 
 export interface TitleButton {
+  id?: string;
   label: string;
   close?: boolean;
   onClick: () => void;
@@ -30,6 +31,7 @@ export const TitleBar = forwardRef<HTMLDivElement, TitleBarProps>(
             {buttons.map((btn, i) => (
               <div
                 key={i}
+                id={btn.id}
                 className={`xp-title-btn ${btn.close ? "xp-title-btn-close" : ""}`}
                 onClick={btn.onClick}
               >

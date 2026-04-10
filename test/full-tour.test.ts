@@ -1,6 +1,6 @@
 /**
  * Tests that the V8 "Full Tour" capture choreography works against the real UI.
- * Mirrors video/capture/scenes/capture-v8-full-tour.ts but with assertions.
+ * Mirrors the private full-tour capture choreography but with assertions.
  * If a selector or flow changes in the app, this test breaks before the capture does.
  *
  * Screenshot snapshots saved to test/__snapshots__/full-tour/.
@@ -19,7 +19,7 @@ import {
   tttAccept, tttMove,
   castVote, knockDown,
   type Client,
-} from "../video/capture/ws-client";
+} from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/full-tour";
 const PIXEL_THRESHOLD = 0.005;

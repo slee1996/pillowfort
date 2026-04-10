@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import sharp from "sharp";
 import { startServer, stopServer, getPort } from "./helpers";
-import { chat, joinRoom, sleep, type Client } from "../video/capture/ws-client";
+import { chat, joinRoom, sleep, type Client } from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/design";
 const PIXEL_THRESHOLD = 0.005;

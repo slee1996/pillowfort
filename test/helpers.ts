@@ -8,16 +8,46 @@ export type Client = {
 
 export const TEST_GRACE_MS = 300;
 export const allClients: Client[] = [];
+const ROOT_DIR = import.meta.dir + "/..";
 
 let _port = 0;
 let _proc: ReturnType<typeof Bun.spawn> | null = null;
+let _buildOnce: Promise<void> | null = null;
 
 export function getPort() { return _port; }
 
+async function ensureClientBuild(): Promise<void> {
+  if (_buildOnce) return _buildOnce;
+
+  _buildOnce = (async () => {
+    const proc = Bun.spawn(["npm", "run", "build"], {
+      cwd: ROOT_DIR,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: process.env,
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (exitCode !== 0) {
+      _buildOnce = null;
+      throw new Error(
+        `client build failed before tests\n` +
+        `${stdout}${stderr ? `\n${stderr}` : ""}`.trim()
+      );
+    }
+  })();
+
+  return _buildOnce;
+}
+
 export async function startServer(): Promise<void> {
+  await ensureClientBuild();
   _port = 10_000 + Math.floor(Math.random() * 50_000);
   _proc = Bun.spawn(["bun", "server.ts"], {
-    cwd: import.meta.dir + "/..",
+    cwd: ROOT_DIR,
     env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999", NODE_ENV: "test" },
     stdout: "ignore",
     stderr: "ignore",

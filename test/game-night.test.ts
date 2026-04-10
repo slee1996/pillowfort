@@ -1,6 +1,6 @@
 /**
  * Tests that the V7 "Game Night" capture choreography works against the real UI.
- * Mirrors video/capture/scenes/capture-v7-game-night.ts but with assertions.
+ * Mirrors the private game-night capture choreography but with assertions.
  * If a selector or flow changes in the app, this test breaks before the capture does.
  *
  * Screenshot snapshots saved to test/__snapshots__/game-night/.
@@ -17,7 +17,7 @@ import {
   connect, joinRoom as wsJoin, chat, draw, sleep,
   rpsAccept, rpsPick, kothChallenge, knockDown,
   type Client,
-} from "../video/capture/ws-client";
+} from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/game-night";
 const PIXEL_THRESHOLD = 0.005;

@@ -10,19 +10,20 @@ interface MemberPickerProps {
 export function MemberPicker({ title, members, onPick, onClose }: MemberPickerProps) {
   return (
     <div
-      className="member-picker-overlay"
+      id="member-picker-overlay"
+      className="member-picker-overlay open"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="member-picker">
         <div className="xp-title-bar" style={{ cursor: "default" }}>
-          <div className="xp-title-text">{title}</div>
+          <div id="member-picker-title" className="xp-title-text">{title}</div>
           <div className="xp-title-buttons">
             <div className="xp-title-btn xp-title-btn-close" onClick={onClose}>
               ✕
             </div>
           </div>
         </div>
-        <div className="member-picker-body">
+        <div id="member-picker-body" className="member-picker-body">
           {members.length === 0 ? (
             <div className="member-picker-empty">No one to pick.</div>
           ) : (

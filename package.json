@@ -1,14 +1,16 @@
 {
   "name": "pillowfort",
   "version": "0.0.1",
+  "license": "MIT",
   "scripts": {
     "dev": "bun --watch server.ts",
     "dev:client": "cd client && npx vite",
     "build": "cd client && npx vite build",
     "deploy": "cd client && npx vite build && cd .. && npx wrangler deploy",
     "start": "bun server.ts",
-    "test": "bun test",
-    "test:design-snapshots": "bun test test/design-snapshots.test.ts"
+    "test": "bun test test/unit.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts",
+    "test:design-snapshots": "bun test test/design-snapshots.test.ts",
+    "test:ui": "bun test test/mobile.test.ts test/quad-view.test.ts test/demo-reel.test.ts test/full-tour.test.ts test/game-night.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",

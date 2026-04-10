@@ -16,12 +16,12 @@ export function RpsOverlay() {
   // Phase: challenged (accept/decline)
   if (rps.phase === "challenged" && rps.challengedBy) {
     return (
-      <div className="game-overlay">
+      <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
           <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
-            <div>{rps.challengedBy} challenges you to RPS!</div>
-            <div className="auth-actions game-actions">
+            <div id="rps-prompt">{rps.challengedBy} challenges you to RPS!</div>
+            <div id="rps-actions" className="auth-actions game-actions">
               <Button primary onClick={() => send("rps-accept")}>Accept</Button>
               <Button onClick={() => { send("rps-decline"); close(); }}>Decline</Button>
             </div>
@@ -35,13 +35,13 @@ export function RpsOverlay() {
   if (rps.phase === "picking") {
     const opponent = rps.p1 === name ? rps.p2 : rps.p1;
     return (
-      <div className="game-overlay">
+      <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
           <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
-            <div>RPS vs {opponent}{rps.koth ? " 👑 for the crown!" : ""} — pick your weapon!</div>
+            <div id="rps-prompt">RPS vs {opponent}{rps.koth ? " 👑 for the crown!" : ""} — pick your weapon!</div>
             {!rps.myPick ? (
-              <div className="rps-picks">
+              <div id="rps-picks" className="rps-picks">
                 {(["rock", "paper", "scissors"] as RpsPick[]).map((pick) => (
                   <span
                     key={pick}
@@ -57,7 +57,7 @@ export function RpsOverlay() {
                 ))}
               </div>
             ) : (
-              <div className="rps-status-waiting">Waiting for opponent...</div>
+              <div id="rps-waiting" className="rps-status-waiting">Waiting for opponent...</div>
             )}
           </div>
         </div>
@@ -70,14 +70,14 @@ export function RpsOverlay() {
     const { pick1, pick2, winner } = rps.result;
     const line = `${rps.p1} ${RPS_EMOJI[pick1]} vs ${RPS_EMOJI[pick2]} ${rps.p2}`;
     return (
-      <div className="game-overlay">
+      <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
           <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
-            <div className="rps-result-text">
+            <div id="rps-result-text" className="rps-result-text">
               {line}<br />{winner ? `${winner} wins!${rps.koth ? " 👑" : ""}` : "Draw!"}
             </div>
-            <div className="auth-actions game-actions">
+            <div id="rps-actions" className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>
             </div>
           </div>

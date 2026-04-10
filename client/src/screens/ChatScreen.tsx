@@ -225,8 +225,8 @@ export function ChatScreen() {
           title=""
           onDoubleClick={handleRestore}
           buttons={[
-            { label: "─", onClick: handleMinimize },
-            { label: "□", onClick: handleMaximize },
+            { id: "chat-btn-min", label: "─", onClick: handleMinimize },
+            { id: "chat-btn-max", label: "□", onClick: handleMaximize },
             { label: "✕", close: true, onClick: handleClose },
           ]}
           extra={

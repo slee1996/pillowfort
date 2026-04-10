@@ -159,20 +159,20 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
           Send
         </Button>
         <div className="message-game-controls">
-          <button className="game-shortcut-btn" title="Pillow Fight" onClick={() => {
+          <button id="aim-btn-vote" className="game-shortcut-btn" title="Pillow Fight" onClick={() => {
             if (members.length < 3) return showToast("Need at least 3 people");
             onPickerOpen("vote");
           }}>⚔</button>
-          <button className="game-shortcut-btn" title="Rock Paper Scissors" onClick={() => onPickerOpen("rps")}>✊</button>
-          <button className="game-shortcut-btn" title="Tic-Tac-Toe" onClick={() => onPickerOpen("ttt")}>⬜</button>
-          <button className="game-shortcut-btn" title="Secret Saboteur" onClick={() => {
+          <button id="aim-btn-rps" className="game-shortcut-btn" title="Rock Paper Scissors" onClick={() => onPickerOpen("rps")}>✊</button>
+          <button id="aim-btn-ttt" className="game-shortcut-btn" title="Tic-Tac-Toe" onClick={() => onPickerOpen("ttt")}>⬜</button>
+          <button id="aim-btn-sab" className="game-shortcut-btn" title="Secret Saboteur" onClick={() => {
             if (members.length < 4) return showToast("Need at least 4 people");
             send("sab-start");
           }}>🕵</button>
           {sabRole === "defender" && (
             <button className="game-shortcut-btn" title="Accuse Saboteur" onClick={() => onPickerOpen("sab-accuse")}>🗳</button>
           )}
-          <button className="game-shortcut-btn" title="Dethrone" onClick={() => {
+          <button id="aim-btn-koth" className="game-shortcut-btn" title="Dethrone" onClick={() => {
             if (isHost) return showToast("You're already the host!");
             send("koth-challenge");
             useGameStore.getState().addSystemMessage("👑 You challenged the host for the crown!");

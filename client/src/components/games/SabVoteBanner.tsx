@@ -28,9 +28,9 @@ export function SabVoteBanner() {
   };
 
   return (
-    <div className="sab-vote-banner">
+    <div id="sab-vote-banner" className="sab-vote-banner visible">
       <div>🕵 <strong>ACCUSATION VOTE!</strong> {sabVote.accuser} accused <strong>{sabVote.suspect}</strong>.</div>
-      <div className="sab-vote-options">
+      <div id="sab-vote-list" className="sab-vote-options">
         <button className="xp-btn" onClick={() => vote("yes")} disabled={sabVote.myVote === "yes"}>
           ✅ Yes, guilty
         </button>

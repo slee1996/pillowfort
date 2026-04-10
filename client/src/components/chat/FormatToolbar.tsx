@@ -37,6 +37,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
   return (
     <div className="format-toolbar">
       <button
+        id="fmt-bold"
         className={`format-btn ${bold ? "active" : ""}`}
         onClick={toggleBold}
         title="Bold"
@@ -44,6 +45,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
         <b>B</b>
       </button>
       <button
+        id="fmt-italic"
         className={`format-btn ${italic ? "active" : ""}`}
         onClick={toggleItalic}
         title="Italic"
@@ -51,6 +53,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
         <i>I</i>
       </button>
       <button
+        id="fmt-underline"
         className={`format-btn ${underline ? "active" : ""}`}
         onClick={toggleUnderline}
         title="Underline"

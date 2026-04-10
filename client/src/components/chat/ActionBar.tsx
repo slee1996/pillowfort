@@ -34,7 +34,7 @@ export function ActionBar({ onPickerOpen }: { onPickerOpen: (type: string) => vo
 
   return (
     <div className="aim-action-bar">
-      <button className="aim-action-btn" onClick={handleToss} title="Toss Pillow">🛏 Toss</button>
+      <button id="aim-btn-toss" className="aim-action-btn" onClick={handleToss} title="Toss Pillow">🛏 Toss</button>
       <button className="aim-action-btn" onClick={handleMute} title="Mute">🔇 Mute</button>
       <button className="aim-action-btn" onClick={handleInfo} title="Info">ℹ Info</button>
       <button className="aim-action-btn" onClick={handleInvite} title="Copy Invite">✉ Invite</button>

@@ -15,12 +15,12 @@ export function TttOverlay() {
   // Phase: challenged
   if (ttt.phase === "challenged" && ttt.challengedBy) {
     return (
-      <div className="game-overlay">
+      <div id="ttt-overlay" className="game-overlay open">
         <div className="game-dialog game-dialog-wide">
           <div className="xp-title-bar"><div className="xp-title-text">⬜ Tic-Tac-Toe</div></div>
           <div className="game-dialog-body">
             <div>{ttt.challengedBy} challenges you to Tic-Tac-Toe!</div>
-            <div className="auth-actions game-actions">
+            <div id="ttt-actions" className="auth-actions game-actions">
               <Button primary onClick={() => send("ttt-accept")}>Accept</Button>
               <Button onClick={() => { send("ttt-decline"); close(); }}>Decline</Button>
             </div>
@@ -61,12 +61,12 @@ export function TttOverlay() {
   }
 
   return (
-    <div className="game-overlay">
+    <div id="ttt-overlay" className="game-overlay open">
       <div className="game-dialog game-dialog-wide">
         <div className="xp-title-bar"><div className="xp-title-text">⬜ Tic-Tac-Toe</div></div>
         <div className="game-dialog-body">
           <div>{ttt.p1} (X) vs {ttt.p2} (O)</div>
-          <div className="ttt-board">
+          <div id="ttt-board" className="ttt-board">
             {ttt.board.map((cell, i) => (
               <div
                 key={i}
@@ -80,9 +80,9 @@ export function TttOverlay() {
               </div>
             ))}
           </div>
-          <div className="ttt-status" style={{ color: statusColor }}>{statusText}</div>
+          <div id="ttt-status" className="ttt-status" style={{ color: statusColor }}>{statusText}</div>
           {isResult && (
-            <div className="auth-actions game-actions">
+            <div id="ttt-actions" className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>
             </div>
           )}

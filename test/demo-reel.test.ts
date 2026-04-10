@@ -1,6 +1,6 @@
 /**
  * Tests that the demo reel capture script's choreography works against the real UI.
- * Mirrors video/capture/scenes/capture-demo-reel.ts but with assertions.
+ * Mirrors the private demo-reel capture choreography but with assertions.
  * If a selector or flow changes in the app, this test breaks before the capture does.
  *
  * Screenshot snapshots saved to test/__snapshots__/demo-reel/.
@@ -17,7 +17,7 @@ import {
   connect, joinRoom as wsJoin, chat, draw, sleep,
   tttAccept, tttMove, castVote, knockDown,
   type Client,
-} from "../video/capture/ws-client";
+} from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/demo-reel";
 // Max fraction of pixels that can differ (0.005 = 0.5%)

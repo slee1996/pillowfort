@@ -38,9 +38,9 @@ export function VoteBanner() {
   };
 
   return (
-    <div className="vote-banner">
+    <div id="vote-banner" className="vote-banner visible">
       <div>⚔ <strong>PILLOW FIGHT!</strong> Vote to kick <span className="vote-target-name">{vote.target}</span></div>
-      <div className="vote-status">
+      <div id="vote-buttons" className="vote-status">
         {myVote ? (
           <span className={`vote-choice ${myVote === "yes" ? "yes" : "no"}`}>
             Voted: {myVote === "yes" ? "Kick" : "Keep"}
@@ -51,12 +51,14 @@ export function VoteBanner() {
       {!isTarget && !myVote && (
         <div className="auth-actions">
           <Button
+            id="vote-yes"
             onClick={() => castVote("yes")}
             style={{ background: "linear-gradient(180deg,#fff,#D4E8D4)", borderColor: "#060" }}
           >
             ✔ Kick
           </Button>
           <Button
+            id="vote-no"
             onClick={() => castVote("no")}
             style={{ background: "linear-gradient(180deg,#fff,#E8D4D4)", borderColor: "#800" }}
           >
