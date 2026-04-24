@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients,
-  connectClient, createRoom, joinRoom,
+  connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth,
   TEST_GRACE_MS,
 } from "./helpers";
 
@@ -19,8 +19,8 @@ describe("Room lifecycle", () => {
 
   it("join room → joined with members list", async () => {
     const { roomId } = await createRoom("alice");
-    const guest = await connectClient();
-    guest.send({ type: "join", name: "bob", password: "secret", room: roomId });
+    const guest = await connectClientToRoom(roomId);
+    guest.send({ type: "join", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
     const joined = await guest.waitFor("joined");
     expect(joined.members).toContain("alice");
     expect(joined.members).toContain("bob");
@@ -28,15 +28,15 @@ describe("Room lifecycle", () => {
 
   it("join with wrong password → error", async () => {
     const { roomId } = await createRoom();
-    const guest = await connectClient();
-    guest.send({ type: "join", name: "bob", password: "wrong", room: roomId });
+    const guest = await connectClientToRoom(roomId);
+    guest.send({ type: "join", name: "bob", auth: await roomAuth(roomId, "wrong"), room: roomId });
     const err = await guest.waitFor("error");
     expect(err.message).toContain("wrong password");
   });
 
   it("join nonexistent room → error", async () => {
-    const guest = await connectClient();
-    guest.send({ type: "join", name: "bob", password: "secret", room: "zzzzzz" });
+    const guest = await connectClientToRoom("zzzzzz");
+    guest.send({ type: "join", name: "bob", auth: await roomAuth("zzzzzz", "secret"), room: "zzzzzz" });
     const err = await guest.waitFor("error");
     expect(err.message).toContain("fort not found");
   });
@@ -225,8 +225,8 @@ describe("Grace period / reconnect", () => {
     await bob.close();
     await host.waitFor("member-away");
 
-    const bob2 = await connectClient();
-    bob2.send({ type: "rejoin", name: "bob", password: "secret", room: roomId });
+    const bob2 = await connectClientToRoom(roomId);
+    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
     const rejoined = await bob2.waitFor("rejoined");
     expect(rejoined.name).toBe("bob");
     const back = await host.waitFor("member-back");
@@ -241,8 +241,8 @@ describe("Grace period / reconnect", () => {
 
     await Bun.sleep(TEST_GRACE_MS + 100);
 
-    const bob2 = await connectClient();
-    bob2.send({ type: "rejoin", name: "bob", password: "secret", room: roomId });
+    const bob2 = await connectClientToRoom(roomId);
+    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
     const result = await bob2.waitFor("joined");
     expect(result.name).toBe("bob");
   });
@@ -253,8 +253,8 @@ describe("Grace period / reconnect", () => {
     await host.close();
     await bob.waitFor("member-away");
 
-    const alice2 = await connectClient();
-    alice2.send({ type: "rejoin", name: "alice", password: "secret", room: roomId });
+    const alice2 = await connectClientToRoom(roomId);
+    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(roomId, "secret"), room: roomId });
     const rejoined = await alice2.waitFor("rejoined");
     expect(rejoined.isHost).toBe(true);
   });
@@ -270,8 +270,8 @@ describe("Grace period / reconnect", () => {
     await bob.waitFor("new-host");
 
     // Now alice tries to rejoin — grace expired, someone else is host
-    const alice2 = await connectClient();
-    alice2.send({ type: "rejoin", name: "alice", password: "secret", room: roomId });
+    const alice2 = await connectClientToRoom(roomId);
+    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(roomId, "secret"), room: roomId });
     const result = await alice2.waitFor("joined");
     expect(result.name).toBe("alice");
   });

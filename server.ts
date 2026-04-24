@@ -18,7 +18,7 @@ interface WSData {
 
 interface Room {
   id: string;
-  password: string;
+  authVerifier: string;
   host: { ws: any; name: string } | null;
   guests: Map<any, string>;
   idleTimer: ReturnType<typeof setTimeout>;
@@ -95,9 +95,13 @@ const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const MAX_ENC_B64_LEN = 4096;
 const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
+const ALLOW_LEGACY_PLAINTEXT = process.env.PF_ALLOW_LEGACY_PLAINTEXT === "1";
 
 interface EncryptedChatPayload {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
+  kdf?: string;
+  sid?: string;
+  seq?: number;
   iv: string;
   ct: string;
 }
@@ -154,12 +158,25 @@ function roomPresence(room: Room): Record<string, { status: "available" | "away"
 }
 
 function sanitizeEncryptedChat(enc: any): EncryptedChatPayload | null {
-  if (!enc || (enc.v !== 1 && enc.v !== 2)) return null;
+  if (!enc || (enc.v !== 1 && enc.v !== 2 && enc.v !== 3)) return null;
+  if (enc.v === 3) {
+    if (enc.kdf !== "pbkdf2-sha256-600k-v1") return null;
+    if (typeof enc.sid !== "string" || enc.sid.length < 16 || enc.sid.length > 64) return null;
+    if (!Number.isSafeInteger(enc.seq) || enc.seq < 1) return null;
+  }
   if (typeof enc.iv !== "string" || typeof enc.ct !== "string") return null;
   if (!BASE64_RE.test(enc.iv) || !BASE64_RE.test(enc.ct)) return null;
   if (enc.iv.length < 16 || enc.iv.length > 32) return null;
   if (enc.ct.length < 16 || enc.ct.length > MAX_ENC_B64_LEN) return null;
-  return { v: enc.v, iv: enc.iv, ct: enc.ct };
+  return { v: enc.v, ...(enc.kdf ? { kdf: enc.kdf } : {}), ...(enc.sid ? { sid: enc.sid } : {}), ...(enc.seq ? { seq: enc.seq } : {}), iv: enc.iv, ct: enc.ct };
+}
+
+function validAuth(auth: any): auth is { v: 1; kdf: string; verifier: string } {
+  return !!auth &&
+    auth.v === 1 &&
+    auth.kdf === "pbkdf2-sha256-600k-v1" &&
+    typeof auth.verifier === "string" &&
+    /^[A-Za-z0-9_-]{32,128}$/.test(auth.verifier);
 }
 
 function createLeaderboards(): RoomLeaderboards {
@@ -300,7 +317,7 @@ function rateLimitedMsg(data: WSData): boolean {
 // --- handlers ---
 
 function onSetUp(ws: any, d: WSData, msg: any) {
-  if (!msg.name?.trim() || !msg.password?.trim())
+  if (!msg.name?.trim() || !validAuth(msg.auth))
     return send(ws, "error", { message: "name and password required" });
   if (d.isHost)
     return send(ws, "error", { message: "already in a fort" });
@@ -320,7 +337,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
 
   const room: Room = {
     id,
-    password: msg.password.trim(),
+    authVerifier: msg.auth.verifier,
     host: { ws, name: d.name },
     guests: new Map(),
     idleTimer: setTimeout(() => destroy(room, "the fort went quiet for too long"), IDLE_MS),
@@ -347,14 +364,14 @@ function onSetUp(ws: any, d: WSData, msg: any) {
 }
 
 function onJoin(ws: any, d: WSData, msg: any) {
-  if (!msg.name?.trim() || !msg.password?.trim() || !msg.room?.trim())
+  if (!msg.name?.trim() || !validAuth(msg.auth) || !msg.room?.trim())
     return send(ws, "error", { message: "name, password, and fort flag required" });
   if (d.isHost)
     return send(ws, "error", { message: "already in a fort" });
 
   const room = rooms.get(msg.room.trim());
   if (!room) return send(ws, "error", { message: "fort not found" });
-  if (room.password !== msg.password.trim())
+  if (room.authVerifier !== msg.auth.verifier)
     return send(ws, "error", { message: "wrong password" });
   if (room.guests.size >= MAX_GUESTS)
     return send(ws, "error", { message: "fort is full (20 max)" });
@@ -395,6 +412,7 @@ function onChat(ws: any, d: WSData, msg: any) {
     return;
   }
 
+  if (!ALLOW_LEGACY_PLAINTEXT) return send(ws, "error", { message: "encrypted chat required" });
   if (!msg.text?.trim()) return;
   broadcast(room, "message", { from: d.name, text: msg.text.trim().slice(0, MAX_MSG_LEN), ...(style ? { style } : {}) });
   resetIdle(room);
@@ -591,12 +609,12 @@ function onDisconnect(ws: any, d: WSData) {
 }
 
 function onRejoin(ws: any, d: WSData, msg: any) {
-  if (!msg.name?.trim() || !msg.password?.trim() || !msg.room?.trim())
+  if (!msg.name?.trim() || !validAuth(msg.auth) || !msg.room?.trim())
     return send(ws, "error", { message: "name, password, and fort flag required" });
 
   const room = rooms.get(msg.room.trim());
   if (!room) return send(ws, "error", { message: "fort not found" });
-  if (room.password !== msg.password.trim())
+  if (room.authVerifier !== msg.auth.verifier)
     return send(ws, "error", { message: "wrong password" });
 
   const disc = room.disconnected.get(msg.name.trim());

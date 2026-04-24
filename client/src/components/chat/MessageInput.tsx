@@ -8,7 +8,6 @@ import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
 
 let lastTypingSent = 0;
-let warnedPlaintextFallback = false;
 const MOBILE_KEYBOARD_OPEN_PX = 120;
 
 export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) => void }) {
@@ -95,15 +94,12 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     } catch {}
 
     if (!sent) {
-      send("chat", { text, ...(style ? { style } : {}) });
-      if (!warnedPlaintextFallback) {
-        warnedPlaintextFallback = true;
-        showToast(
-          isChatCryptoAvailable()
-            ? "Encryption failed. Sent without encryption."
-            : "Encryption unavailable here (use HTTPS/localhost). Sent without encryption."
-        );
-      }
+      showToast(
+        isChatCryptoAvailable()
+          ? "Encryption failed. Message not sent."
+          : "Encryption unavailable here. Use HTTPS or localhost."
+      );
+      return;
     }
 
     playSendSound();

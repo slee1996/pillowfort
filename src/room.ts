@@ -29,9 +29,13 @@ const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const MAX_ENC_B64_LEN = 4096;
 const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
+const ALLOW_LEGACY_PLAINTEXT = false;
 
 interface EncryptedChatPayload {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
+  kdf?: string;
+  sid?: string;
+  seq?: number;
   iv: string;
   ct: string;
 }
@@ -68,17 +72,30 @@ function createLeaderboards(): RoomLeaderboards {
 }
 
 function sanitizeEncryptedChat(enc: any): EncryptedChatPayload | null {
-  if (!enc || (enc.v !== 1 && enc.v !== 2)) return null;
+  if (!enc || (enc.v !== 1 && enc.v !== 2 && enc.v !== 3)) return null;
+  if (enc.v === 3) {
+    if (enc.kdf !== "pbkdf2-sha256-600k-v1") return null;
+    if (typeof enc.sid !== "string" || enc.sid.length < 16 || enc.sid.length > 64) return null;
+    if (!Number.isSafeInteger(enc.seq) || enc.seq < 1) return null;
+  }
   if (typeof enc.iv !== "string" || typeof enc.ct !== "string") return null;
   if (!BASE64_RE.test(enc.iv) || !BASE64_RE.test(enc.ct)) return null;
   if (enc.iv.length < 16 || enc.iv.length > 32) return null;
   if (enc.ct.length < 16 || enc.ct.length > MAX_ENC_B64_LEN) return null;
-  return { v: enc.v, iv: enc.iv, ct: enc.ct };
+  return { v: enc.v, ...(enc.kdf ? { kdf: enc.kdf } : {}), ...(enc.sid ? { sid: enc.sid } : {}), ...(enc.seq ? { seq: enc.seq } : {}), iv: enc.iv, ct: enc.ct };
+}
+
+function validAuth(auth: any): auth is { v: 1; kdf: string; verifier: string } {
+  return !!auth &&
+    auth.v === 1 &&
+    auth.kdf === "pbkdf2-sha256-600k-v1" &&
+    typeof auth.verifier === "string" &&
+    /^[A-Za-z0-9_-]{32,128}$/.test(auth.verifier);
 }
 
 export class Room implements DurableObject {
   private state: DurableObjectState;
-  private password: string | null = null;
+  private authVerifier: string | null = null;
   private roomId: string = "";
   private tossPillowFrom: string | null = null;
   private disconnected: Map<string, {
@@ -112,7 +129,7 @@ export class Room implements DurableObject {
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
     state.blockConcurrencyWhile(async () => {
-      this.password = (await state.storage.get("password")) as string || null;
+      this.authVerifier = (await state.storage.get("authVerifier")) as string || null;
       this.roomId = (await state.storage.get("roomId")) as string || "";
     });
   }
@@ -357,7 +374,7 @@ export class Room implements DurableObject {
     for (const w of this.state.getWebSockets()) {
       try { w.close(1000, reason); } catch {}
     }
-    this.password = null;
+    this.authVerifier = null;
     this.roomId = "";
     this.tossPillowFrom = null;
     await this.state.storage.deleteAll();
@@ -365,15 +382,15 @@ export class Room implements DurableObject {
 
   // --- handlers ---
 
-  private async onSetUp(ws: WebSocket, msg: { name?: string; password?: string }) {
-    if (!msg.name?.trim() || !msg.password?.trim())
+  private async onSetUp(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
+    if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
     if (this.getHost())
       return this.send(ws, "error", { message: "fort already exists" });
 
     const name = msg.name.trim().slice(0, MAX_NAME_LEN);
-    this.password = msg.password.trim();
-    await this.state.storage.put("password", this.password);
+    this.authVerifier = msg.auth.verifier;
+    await this.state.storage.put("authVerifier", this.authVerifier);
 
     const prev = this.att(ws);
     const data: WSData = {
@@ -392,12 +409,12 @@ export class Room implements DurableObject {
     this.resetIdle();
   }
 
-  private onJoin(ws: WebSocket, msg: { name?: string; password?: string }) {
-    if (!msg.name?.trim() || !msg.password?.trim())
+  private onJoin(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
+    if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
     if (!this.getHost())
       return this.send(ws, "error", { message: "fort not found" });
-    if (this.password !== msg.password.trim())
+    if (this.authVerifier !== msg.auth.verifier)
       return this.send(ws, "error", { message: "wrong password" });
 
     const registered = this.state.getWebSockets().filter(w => this.att(w).name);
@@ -449,6 +466,7 @@ export class Room implements DurableObject {
       return;
     }
 
+    if (!ALLOW_LEGACY_PLAINTEXT) return this.send(ws, "error", { message: "encrypted chat required" });
     if (!msg.text?.trim()) return;
     this.broadcast("message", { from: a.name, text: msg.text.trim().slice(0, MAX_MSG_LEN), ...(style ? { style } : {}) });
     this.resetIdle();
@@ -1144,12 +1162,12 @@ export class Room implements DurableObject {
     try { ws.close(1000, "grace"); } catch {}
   }
 
-  private onRejoin(ws: WebSocket, msg: { name?: string; password?: string; room?: string }) {
-    if (!msg.name?.trim() || !msg.password?.trim())
+  private onRejoin(ws: WebSocket, msg: { name?: string; auth?: unknown; room?: string }) {
+    if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
     if (!this.getHost() && this.disconnected.size === 0 && this.state.getWebSockets().filter(w => this.att(w).name).length === 0)
       return this.send(ws, "error", { message: "fort not found" });
-    if (this.password !== msg.password?.trim())
+    if (this.authVerifier !== msg.auth.verifier)
       return this.send(ws, "error", { message: "wrong password" });
 
     const disc = this.disconnected.get(msg.name.trim());

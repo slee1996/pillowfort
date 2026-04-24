@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients, getPort,
-  connectClient, createRoom, joinRoom,
+  connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth,
 } from "./helpers";
 
 beforeAll(startServer);
@@ -13,22 +13,19 @@ afterAll(stopServer);
 describe("Happy path: 3-user chat session", () => {
   it("create → join → chat → toss → catch → knock-down", async () => {
     // 1. User A creates fort
-    const alice = await connectClient();
-    alice.send({ type: "set-up", name: "alice", password: "fort123" });
-    const created = await alice.waitFor("room-created");
-    const roomId = created.room;
+    const { host: alice, roomId } = await createRoom("alice", "fort123");
     expect(roomId).toMatch(/^[a-z0-9]{8}$/);
 
     // 2. User B joins
-    const bob = await connectClient();
-    bob.send({ type: "join", name: "bob", password: "fort123", room: roomId });
+    const bob = await connectClientToRoom(roomId);
+    bob.send({ type: "join", name: "bob", auth: await roomAuth(roomId, "fort123"), room: roomId });
     const bobJoined = await bob.waitFor("joined");
     expect(bobJoined.members).toContain("alice");
     expect(bobJoined.members).toContain("bob");
 
     // 3. User C joins
-    const carol = await connectClient();
-    carol.send({ type: "join", name: "carol", password: "fort123", room: roomId });
+    const carol = await connectClientToRoom(roomId);
+    carol.send({ type: "join", name: "carol", auth: await roomAuth(roomId, "fort123"), room: roomId });
     const carolJoined = await carol.waitFor("joined");
     expect(carolJoined.members).toContain("alice");
     expect(carolJoined.members).toContain("carol");
@@ -82,8 +79,8 @@ describe("Invite link flow", () => {
 describe("Name collision", () => {
   it("second 'alice' gets renamed to 'alice2'", async () => {
     const { roomId } = await createRoom("alice");
-    const alice2 = await connectClient();
-    alice2.send({ type: "join", name: "alice", password: "secret", room: roomId });
+    const alice2 = await connectClientToRoom(roomId);
+    alice2.send({ type: "join", name: "alice", auth: await roomAuth(roomId, "secret"), room: roomId });
     const joined = await alice2.waitFor("joined");
     expect(joined.name).toBe("alice2");
   });
@@ -97,8 +94,8 @@ describe("Room capacity", () => {
     for (let i = 0; i < 20; i++) {
       await joinRoom(roomId, `guest${i}`);
     }
-    const extra = await connectClient();
-    extra.send({ type: "join", name: "extra", password: "secret", room: roomId });
+    const extra = await connectClientToRoom(roomId);
+    extra.send({ type: "join", name: "extra", auth: await roomAuth(roomId, "secret"), room: roomId });
     const err = await extra.waitFor("error");
     expect(err.message).toContain("full");
   });

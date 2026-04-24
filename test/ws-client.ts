@@ -12,6 +12,39 @@ export type Client = {
   close: () => Promise<void>;
 };
 
+const KDF_ID = "pbkdf2-sha256-600k-v1";
+
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+export async function roomAuth(roomId: string, password: string) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  const authKey = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: new TextEncoder().encode(`pillowfort:auth:${roomId}`),
+      iterations: 600_000,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  const raw = await crypto.subtle.exportKey("raw", authKey);
+  const hash = await crypto.subtle.digest("SHA-256", raw);
+  return { v: 1, kdf: KDF_ID, verifier: toBase64Url(new Uint8Array(hash)) };
+}
+
 export async function connectUrl(url: string): Promise<Client> {
   const ws = new WebSocket(url);
   return setupClient(ws);
@@ -92,9 +125,13 @@ export async function createRoom(
 ): Promise<{ client: Client; roomId: string }> {
   const client = await connect(port);
   client.name = name;
-  client.send({ type: "set-up", name, password });
-  const created = await client.waitFor("room-created");
-  return { client, roomId: created.room };
+  const roomId = generateRoomId();
+  client.ws.close();
+  const roomClient = await connectUrl(`ws://localhost:${port}/ws?room=${roomId}`);
+  roomClient.name = name;
+  roomClient.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  const created = await roomClient.waitFor("room-created");
+  return { client: roomClient, roomId: created.room };
 }
 
 export async function joinRoom(
@@ -103,9 +140,9 @@ export async function joinRoom(
   name: string,
   password = "demo"
 ): Promise<Client> {
-  const client = await connect(port);
+  const client = await connectUrl(`ws://localhost:${port}/ws?room=${roomId}`);
   client.name = name;
-  client.send({ type: "join", name, password, room: roomId });
+  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
   await client.waitFor("joined");
   return client;
 }
@@ -129,7 +166,7 @@ export async function createRoomUrl(
   const roomId = generateRoomId();
   const client = await connectUrl(`${wsBase}?room=${roomId}`);
   client.name = name;
-  client.send({ type: "set-up", name, password });
+  client.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
   const created = await client.waitFor("room-created");
   return { client, roomId: created.room };
 }
@@ -142,7 +179,7 @@ export async function joinRoomUrl(
 ): Promise<Client> {
   const client = await connectUrl(`${wsBase}?room=${roomId}`);
   client.name = name;
-  client.send({ type: "join", name, password, room: roomId });
+  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
   await client.waitFor("joined");
   return client;
 }

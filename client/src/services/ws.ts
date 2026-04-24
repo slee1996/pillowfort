@@ -1,5 +1,6 @@
 import { useGameStore } from "../stores/gameStore";
 import { handleMessage } from "./messageHandler";
+import { createRoomAuthPayload } from "./chatCrypto";
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -72,7 +73,7 @@ function attemptReconnect() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const newWs = new WebSocket(`${proto}//${location.host}/ws?room=${s.roomId}`);
 
-    newWs.onopen = () => {
+    newWs.onopen = async () => {
       ws = newWs;
       newWs.onmessage = (e) => {
         try {
@@ -80,11 +81,13 @@ function attemptReconnect() {
         } catch {}
       };
       newWs.onclose = () => onDisconnect();
+      if (!s.password || !s.roomId) return;
+      const auth = await createRoomAuthPayload(s.roomId, s.password);
       newWs.send(
         JSON.stringify({
           type: "rejoin",
           name: s.name,
-          password: s.password,
+          auth,
           room: s.roomId,
         })
       );

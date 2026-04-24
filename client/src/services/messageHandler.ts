@@ -2,12 +2,13 @@ import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
 import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem } from "./protocol";
-import { decryptChatPayload } from "./chatCrypto";
+import { decryptChatPayload, roomSafetyCode } from "./chatCrypto";
 
 const SABOTEUR_EXPLOSION_MS = 1200;
 let sabBombInterval: ReturnType<typeof setInterval> | null = null;
 let sabBombEndsAt = 0;
-let warnedPlaintextChat = false;
+const viteEnv = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env;
+const ALLOW_LEGACY_PLAINTEXT = viteEnv?.DEV === true && viteEnv?.VITE_ALLOW_LEGACY_PLAINTEXT === "1";
 
 type IncomingChatMessage = Extract<IncomingMessage, { type: "message" }>;
 
@@ -116,6 +117,13 @@ export function handleMessage(msg: IncomingMessage) {
       s.addSystemMessage("Welcome to the fort.");
       s.addSystemMessage(`Fort: ${msg.room} — Password: ${s.password}`);
       s.addSystemMessage("Share the fort flag and password to let your friends in.");
+      if (s.password) {
+        void roomSafetyCode(msg.room, s.password).then((code) => {
+          if (code && useGameStore.getState().roomId === msg.room) {
+            useGameStore.getState().addSystemMessage(`Room safety code: ${code}`);
+          }
+        });
+      }
       playDoorOpen();
       requestWakeLock();
       break;
@@ -135,6 +143,13 @@ export function handleMessage(msg: IncomingMessage) {
       s.clearMessages();
       if (renamed) s.addSystemMessage(`That name's taken — you're ${msg.name} now`);
       s.addSystemMessage(`You're inside. ${msg.members.length} people in the fort.`);
+      if (s.password) {
+        void roomSafetyCode(msg.room, s.password).then((code) => {
+          if (code && useGameStore.getState().roomId === msg.room) {
+            useGameStore.getState().addSystemMessage(`Room safety code: ${code}`);
+          }
+        });
+      }
       playDoorOpen();
       requestWakeLock();
       break;
@@ -179,11 +194,7 @@ export function handleMessage(msg: IncomingMessage) {
           s.addChatMessage(msg.from, "[encrypted message]", msg.style);
           playMsgSound();
         }
-      } else if (typeof msg.text === "string" && !s.mutedNames.has(msg.from)) {
-        if (!warnedPlaintextChat) {
-          warnedPlaintextChat = true;
-          s.addSystemMessage("Warning: Received plaintext chat from a legacy client.");
-        }
+      } else if (ALLOW_LEGACY_PLAINTEXT && typeof msg.text === "string" && !s.mutedNames.has(msg.from)) {
         s.addChatMessage(msg.from, msg.text, msg.style);
         playMsgSound();
       }

@@ -9,6 +9,7 @@ export type Client = {
 export const TEST_GRACE_MS = 300;
 export const allClients: Client[] = [];
 const ROOT_DIR = import.meta.dir + "/..";
+const KDF_ID = "pbkdf2-sha256-600k-v1";
 
 let _port = 0;
 let _proc: ReturnType<typeof Bun.spawn> | null = null;
@@ -48,7 +49,7 @@ export async function startServer(): Promise<void> {
   _port = 10_000 + Math.floor(Math.random() * 50_000);
   _proc = Bun.spawn(["bun", "server.ts"], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999", NODE_ENV: "test" },
+    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999", PF_ALLOW_LEGACY_PLAINTEXT: "1", NODE_ENV: "test" },
     stdout: "ignore",
     stderr: "ignore",
   });
@@ -142,16 +143,110 @@ export async function connectClient(): Promise<Client> {
   return client;
 }
 
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+export async function roomAuth(roomId: string, password: string) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  const authKey = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: new TextEncoder().encode(`pillowfort:auth:${roomId}`),
+      iterations: 600_000,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  const raw = await crypto.subtle.exportKey("raw", authKey);
+  const hash = await crypto.subtle.digest("SHA-256", raw);
+  return { v: 1, kdf: KDF_ID, verifier: toBase64Url(new Uint8Array(hash)) };
+}
+
 export async function createRoom(name = "host", password = "secret"): Promise<{ host: Client; roomId: string }> {
   const host = await connectClient();
-  host.send({ type: "set-up", name, password });
+  const roomId = `t${Math.random().toString(36).slice(2, 9)}`;
+  host.ws.close();
+  const realHost = await connectClientToRoom(roomId);
+  realHost.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  const created = await realHost.waitFor("room-created");
+  return { host: realHost, roomId: created.room };
+}
+
+export async function connectClientToRoom(roomId: string): Promise<Client> {
+  const ws = new WebSocket(`ws://localhost:${_port}/ws?room=${roomId}`);
+  const messages: any[] = [];
+  const queues = new Map<string, any[]>();
+  const waiters = new Map<string, { resolve: (msg: any) => void; timer: ReturnType<typeof setTimeout> }[]>();
+
+  ws.addEventListener("message", (e) => {
+    const msg = JSON.parse(e.data as string);
+    messages.push(msg);
+    const list = waiters.get(msg.type);
+    if (list?.length) {
+      const { resolve, timer } = list.shift()!;
+      clearTimeout(timer);
+      resolve(msg);
+    } else {
+      const q = queues.get(msg.type) || [];
+      q.push(msg);
+      queues.set(msg.type, q);
+    }
+  });
+
+  await new Promise<void>((res, rej) => {
+    ws.addEventListener("open", () => res());
+    ws.addEventListener("error", () => rej(new Error("ws connect failed")));
+  });
+
+  const client: Client = {
+    ws,
+    messages,
+    send(msg) { ws.send(JSON.stringify(msg)); },
+    waitFor(type, timeout = 2000) {
+      const q = queues.get(type);
+      if (q?.length) return Promise.resolve(q.shift()!);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`timeout waiting for "${type}" (${timeout}ms)`)), timeout);
+        const list = waiters.get(type) || [];
+        list.push({ resolve, timer });
+        waiters.set(type, list);
+      });
+    },
+    async close() {
+      if (ws.readyState === WebSocket.OPEN) {
+        await new Promise<void>((res) => {
+          ws.addEventListener("close", () => res());
+          ws.close();
+        });
+      }
+    },
+  };
+  allClients.push(client);
+  return client;
+}
+
+export async function createRoomWithId(roomId: string, name = "host", password = "secret"): Promise<{ host: Client; roomId: string }> {
+  const host = await connectClientToRoom(roomId);
+  host.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
   const created = await host.waitFor("room-created");
   return { host, roomId: created.room };
 }
 
 export async function joinRoom(roomId: string, name = "guest", password = "secret"): Promise<Client> {
-  const client = await connectClient();
-  client.send({ type: "join", name, password, room: roomId });
+  const client = await connectClientToRoom(roomId);
+  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
   await client.waitFor("joined");
   return client;
 }

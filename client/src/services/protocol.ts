@@ -1,9 +1,9 @@
 // --- Outgoing messages (client → server) ---
 
 export type OutgoingMessage =
-  | { type: "set-up"; name: string; password: string }
-  | { type: "join"; name: string; password: string; room: string }
-  | { type: "rejoin"; name: string; password: string; room: string }
+  | { type: "set-up"; name: string; auth: RoomAuthPayload }
+  | { type: "join"; name: string; auth: RoomAuthPayload; room: string }
+  | { type: "rejoin"; name: string; auth: RoomAuthPayload; room: string }
   | { type: "chat"; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "knock-down" }
   | { type: "typing" }
@@ -92,9 +92,18 @@ export interface ChatStyle {
 }
 
 export interface EncryptedChatPayload {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
+  kdf?: "pbkdf2-sha256-600k-v1";
+  sid?: string;
+  seq?: number;
   iv: string;
   ct: string;
+}
+
+export interface RoomAuthPayload {
+  v: 1;
+  kdf: "pbkdf2-sha256-600k-v1";
+  verifier: string;
 }
 
 export type RpsPick = "rock" | "paper" | "scissors";

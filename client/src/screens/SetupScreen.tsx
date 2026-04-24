@@ -4,6 +4,7 @@ import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { connect, send } from "../services/ws";
+import { createRoomAuthPayload } from "../services/chatCrypto";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 
 function generateRoomId(): string {
@@ -23,7 +24,7 @@ export function SetupScreen() {
   const setPassword = useGameStore((s) => s.setPassword);
   const passwordRef = useRef<HTMLInputElement>(null);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const pw = passwordRef.current?.value.trim();
     if (!pw) {
       passwordRef.current?.focus();
@@ -31,7 +32,8 @@ export function SetupScreen() {
     }
     setPassword(pw);
     const roomId = generateRoomId();
-    connect(roomId, () => send("set-up", { name, password: pw }));
+    const auth = await createRoomAuthPayload(roomId, pw);
+    connect(roomId, () => send("set-up", { name, auth }));
   };
 
   return (

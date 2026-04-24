@@ -4,6 +4,7 @@ import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { connect, send } from "../services/ws";
+import { createRoomAuthPayload } from "../services/chatCrypto";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 
 export function JoinScreen() {
@@ -28,7 +29,7 @@ export function JoinScreen() {
     }
   }, []);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const enteredName = nameRef.current?.value.trim() || name.trim();
     const room = roomRef.current?.value.trim();
     const pw = passwordRef.current?.value.trim();
@@ -46,7 +47,8 @@ export function JoinScreen() {
     }
     setName(enteredName);
     setPassword(pw);
-    connect(room, () => send("join", { name: enteredName, password: pw, room }));
+    const auth = await createRoomAuthPayload(room, pw);
+    connect(room, () => send("join", { name: enteredName, auth, room }));
   };
 
   return (

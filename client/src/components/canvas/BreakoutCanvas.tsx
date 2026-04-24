@@ -28,10 +28,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     try {
       const enc = await encryptChatPayload(roomId, password, name, text);
       if (enc) send("chat", { enc });
-      else send("chat", { text });
-    } catch {
-      send("chat", { text });
-    }
+    } catch {}
   }, []);
 
   const reset = useCallback(() => {
