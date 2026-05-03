@@ -139,7 +139,7 @@ export function HomeScreen() {
           </div>
 
           <div className="home-privacy-note">
-            Messages are encrypted in the browser. Room metadata still exists while the fort is live.
+            Message contents are end-to-end encrypted. Temporary room metadata, like joins and game state, is not.
           </div>
 
           <div className="home-version">
