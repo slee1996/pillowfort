@@ -268,6 +268,7 @@ describe("Fort Pass entitlements", () => {
     expect(normalizeCustomRoomCode("party-")).toBeNull();
     expect(normalizeCustomRoomCode("party--1")).toBeNull();
     expect(normalizeCustomRoomCode("analytics")).toBeNull();
+    expect(normalizeCustomRoomCode("activity")).toBeNull();
     expect(normalizeCustomRoomCode("this-is-too-long")).toBeNull();
   });
 

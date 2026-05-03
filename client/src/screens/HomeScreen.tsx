@@ -7,16 +7,28 @@ import { LogoIcon } from "../components/xp/Logo";
 import { ensureAudio } from "../hooks/useSound";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 import { track } from "../services/analytics";
+import { getDiscordActivityContext } from "../services/discordActivity";
 import { normalizeFortPassCode, normalizeFortPassSessionId } from "../services/fortPass";
 
 export function HomeScreen() {
   const name = useGameStore((s) => s.name);
+  const activityRoomId = useGameStore((s) => s.activityRoomId);
   const setName = useGameStore((s) => s.setName);
   const setScreen = useGameStore((s) => s.setScreen);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Check for room link in URL on mount
   useEffect(() => {
+    const activity = getDiscordActivityContext();
+    if (activity) {
+      useGameStore.getState().setActivityContext(activity.roomId, activity.source);
+      useGameStore.getState().setPendingRoom(activity.roomId);
+      track("discord_activity_detected", {
+        source: activity.source,
+        reason: activity.platform,
+      });
+    }
+
     const params = new URLSearchParams(location.search);
     const fortPassCode = normalizeFortPassCode(params.get("code"));
     const fortPassSessionId = normalizeFortPassSessionId(params.get("session_id"));
@@ -33,7 +45,7 @@ export function HomeScreen() {
       return;
     }
 
-    const roomFromPath = normalizeFortPassCode(location.pathname.slice(1));
+    const roomFromPath = activity ? null : normalizeFortPassCode(location.pathname.slice(1));
     if (roomFromPath) {
       history.replaceState(null, "", "/");
       useGameStore.getState().setPendingRoom(roomFromPath);
@@ -93,6 +105,18 @@ export function HomeScreen() {
 
           <div className="home-divider" />
 
+          <div className="home-trust-strip" aria-label="Beta trust notes">
+            <span>invite-only</span>
+            <span>no accounts</span>
+            <span>temporary rooms</span>
+          </div>
+
+          {activityRoomId && (
+            <div className="home-activity-note" role="status">
+              Discord Activity room ready: {activityRoomId}
+            </div>
+          )}
+
           <Input
             id="name-input"
             label="Screen Name"
@@ -107,15 +131,19 @@ export function HomeScreen() {
 
           <div className="auth-actions">
             <Button id="btn-setup" primary onClick={handleSetup}>
-              Set Up Fort
+              Start Hangout
             </Button>
             <Button id="btn-join" onClick={handleJoin}>
               Join Fort
             </Button>
           </div>
 
+          <div className="home-privacy-note">
+            Messages are encrypted in the browser. Room metadata still exists while the fort is live.
+          </div>
+
           <div className="home-version">
-            Version 1.0.0 &middot; 2025
+            Public beta &middot; 2026
           </div>
         </div>
       </Window>

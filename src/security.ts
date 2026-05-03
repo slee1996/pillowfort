@@ -1,11 +1,17 @@
 import { opsLogLine } from "./analytics";
 
-const SECURITY_HEADER_ENTRIES: [string, string][] = [
-  ["content-security-policy", [
+export type SecurityHeaderMode = "default" | "discord-activity";
+
+function contentSecurityPolicy(mode: SecurityHeaderMode): string {
+  const frameAncestors = mode === "discord-activity"
+    ? "frame-ancestors https://discord.com https://*.discord.com https://*.discordsays.com"
+    : "frame-ancestors 'none'";
+
+  return [
     "default-src 'self'",
     "base-uri 'none'",
     "object-src 'none'",
-    "frame-ancestors 'none'",
+    frameAncestors,
     "form-action 'self' https://checkout.stripe.com",
     "navigate-to 'self' https://checkout.stripe.com",
     "script-src 'self'",
@@ -14,14 +20,22 @@ const SECURITY_HEADER_ENTRIES: [string, string][] = [
     "font-src 'self'",
     "connect-src 'self' ws: wss:",
     "manifest-src 'self'",
-  ].join("; ")],
-  ["cross-origin-opener-policy", "same-origin"],
-  ["permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()"],
-  ["referrer-policy", "strict-origin-when-cross-origin"],
-  ["strict-transport-security", "max-age=31536000; includeSubDomains; preload"],
-  ["x-content-type-options", "nosniff"],
-  ["x-frame-options", "DENY"],
-];
+  ].join("; ");
+}
+
+function securityHeaderEntries(mode: SecurityHeaderMode): [string, string][] {
+  const entries: [string, string][] = [
+    ["content-security-policy", contentSecurityPolicy(mode)],
+    ["cross-origin-opener-policy", "same-origin"],
+    ["permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()"],
+    ["referrer-policy", "strict-origin-when-cross-origin"],
+    ["strict-transport-security", "max-age=31536000; includeSubDomains; preload"],
+    ["x-content-type-options", "nosniff"],
+  ];
+
+  if (mode === "default") entries.push(["x-frame-options", "DENY"]);
+  return entries;
+}
 
 const DOTFILE_SEGMENTS = new Set([
   ".env",
@@ -86,10 +100,18 @@ export function logBlockedProbe(pathname: string, surface = "http") {
   console.log(opsLogLine("probe_blocked", { reason, surface, status: 404 }));
 }
 
-export function withSecurityHeaders(response: Response): Response {
+export function isDiscordActivityRequest(request: Request): boolean {
+  const url = new URL(request.url);
+  return url.pathname === "/activity" ||
+    url.searchParams.get("discord_activity") === "1" ||
+    url.searchParams.has("frame_id");
+}
+
+export function withSecurityHeaders(response: Response, mode: SecurityHeaderMode = "default"): Response {
   const next = new Response(response.body, response);
-  for (const [key, value] of SECURITY_HEADER_ENTRIES) {
+  for (const [key, value] of securityHeaderEntries(mode)) {
     next.headers.set(key, value);
   }
+  if (mode === "discord-activity") next.headers.delete("x-frame-options");
   return next;
 }

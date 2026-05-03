@@ -110,6 +110,8 @@ export interface GameStore {
   // Pending room from URL
   pendingRoom: string | null;
   pendingFortPass: { code: string; sessionId: string } | null;
+  activityRoomId: string | null;
+  activitySource: string | null;
 
   // Error
   errorMessage: string | null;
@@ -156,6 +158,7 @@ export interface GameStore {
   setIntentionalLeave: (intentional: boolean) => void;
   setPendingRoom: (room: string | null) => void;
   setPendingFortPass: (fortPass: { code: string; sessionId: string } | null) => void;
+  setActivityContext: (roomId: string | null, source?: string | null) => void;
   showError: (message: string) => void;
   cleanup: () => void;
 }
@@ -218,6 +221,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Pending room
   pendingRoom: null,
   pendingFortPass: null,
+  activityRoomId: null,
+  activitySource: null,
 
   // Error
   errorMessage: null,
@@ -323,6 +328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setIntentionalLeave: (intentional) => set({ intentionalLeave: intentional }),
   setPendingRoom: (room) => set({ pendingRoom: room }),
   setPendingFortPass: (fortPass) => set({ pendingFortPass: fortPass }),
+  setActivityContext: (roomId, source = null) => set({ activityRoomId: roomId, activitySource: source }),
 
   showError: (message) => {
     const prev = get().errorTimer;

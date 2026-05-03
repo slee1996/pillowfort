@@ -164,7 +164,7 @@ describe("Worker production entrypoint", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("asset");
     expect(assetRequests).toHaveLength(1);
-    expect(new URL(assetRequests[0].url).pathname).toBe("/index.html");
+    expect(new URL(assetRequests[0].url).pathname).toBe("/");
   });
 
   it("serves custom paid room links through the assets binding", async () => {
@@ -175,7 +175,7 @@ describe("Worker production entrypoint", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("asset");
     expect(assetRequests).toHaveLength(1);
-    expect(new URL(assetRequests[0].url).pathname).toBe("/index.html");
+    expect(new URL(assetRequests[0].url).pathname).toBe("/");
   });
 
   it("validates analytics events at the Worker boundary", async () => {
@@ -234,6 +234,45 @@ describe("Worker production entrypoint", () => {
     expect(res.headers.get("strict-transport-security")).toContain("includeSubDomains");
     expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+  });
+
+  it("serves activity route with Discord-compatible frame headers", async () => {
+    const { env, assetRequests } = createWorkerEnv();
+
+    const res = await worker.fetch(new Request("https://pillow.test/activity?frame_id=frame-test"), env);
+
+    expect(res.status).toBe(200);
+    expect(assetRequests).toHaveLength(1);
+    expect(new URL(assetRequests[0].url).pathname).toBe("/");
+    expect(res.headers.get("content-security-policy")).toContain("https://*.discord.com");
+    expect(res.headers.get("content-security-policy")).toContain("https://*.discordsays.com");
+    expect(res.headers.get("x-frame-options")).toBeNull();
+  });
+
+  it("reports Fort Pass public beta readiness without secrets", async () => {
+    const { env } = createWorkerEnv();
+    const configuredEnv = {
+      ...env,
+      STRIPE_SECRET_KEY: "sk_test_secret",
+      FORT_PASS_PRICE_ID: "price_test",
+      STRIPE_WEBHOOK_SECRET: "whsec_test",
+    } as Env;
+
+    const closed = await worker.fetch(new Request("https://pillow.test/api/fort-pass/status"), env);
+    const open = await worker.fetch(new Request("https://pillow.test/api/fort-pass/status"), configuredEnv);
+
+    expect(await closed.json()).toEqual({
+      beta: true,
+      checkoutConfigured: false,
+      priceLabel: "$5",
+      perks: ["custom_code", "extended_idle", "theme_pack"],
+    });
+    expect(await open.json()).toEqual({
+      beta: true,
+      checkoutConfigured: true,
+      priceLabel: "$5",
+      perks: ["custom_code", "extended_idle", "theme_pack"],
+    });
   });
 
   it("reports Fort Pass custom-code availability through room status only", async () => {

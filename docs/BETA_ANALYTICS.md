@@ -14,8 +14,10 @@ Measure whether rooms activate:
 - First message sent.
 - Game started.
 - Fort knocked down.
+- Activation nudge shown and clicked.
 - Fort Pass code checked.
-- Fort Pass checkout started, failed, and returned.
+- Fort Pass status checked; checkout started, failed, and returned.
+- Discord Activity context detected.
 
 ## Non-Goals
 
@@ -41,10 +43,14 @@ Allowed event names:
 - `first_message_sent`
 - `game_started`
 - `room_knocked_down`
+- `activation_nudge_shown`
+- `activation_nudge_clicked`
 - `fort_pass_code_checked`
+- `fort_pass_status_checked`
 - `fort_pass_checkout_started`
 - `fort_pass_checkout_failed`
 - `fort_pass_checkout_returned`
+- `discord_activity_detected`
 - `probe_blocked`
 - `stripe_webhook_failed`
 - `ws_rejected`
@@ -76,5 +82,7 @@ failures, and join/setup failures stay measurable without logging secrets or
 room metadata. See `docs/PRODUCTION_MONITORING.md` for suggested alert
 thresholds.
 
-If the product needs dashboards later, add a storage/export layer behind this
-same sanitized event contract.
+For the current review loop, use `npm run metrics:report -- <log-file>` to turn
+sanitized log lines into a Markdown funnel readout. If the product needs
+dashboards later, add a storage/export layer behind this same sanitized event
+contract.

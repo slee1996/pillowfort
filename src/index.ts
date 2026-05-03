@@ -1,7 +1,7 @@
 import { analyticsLogLine, opsLogLine, readAnalyticsEvent } from "./analytics";
 import { customRoomCodeAvailability, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, type FortPassEntitlement } from "./entitlements";
-import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
-import { blockedProbeResponse, logBlockedProbe, probeReasonForPath, withSecurityHeaders } from "./security";
+import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_STATUS_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
+import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./security";
 import { createFortPassStripeCheckoutSession, fortPassEntitlementFromStripeEvent, verifyStripeWebhookSignature } from "./stripe";
 
 export interface Env {
@@ -90,6 +90,16 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
     return json(customRoomCodeAvailability(code, await roomExists(env, code, request)));
   }
 
+  if (url.pathname === FORT_PASS_STATUS_PATH) {
+    if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
+    return json({
+      beta: true,
+      checkoutConfigured: Boolean(env.STRIPE_SECRET_KEY && env.FORT_PASS_PRICE_ID && env.STRIPE_WEBHOOK_SECRET),
+      priceLabel: "$5",
+      perks: ["custom_code", "extended_idle", "theme_pack"],
+    });
+  }
+
   if (url.pathname === FORT_PASS_CHECKOUT_PATH) {
     if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
     const checkout = normalizeFortPassCheckoutRequest(await readSmallJson(request));
@@ -162,9 +172,13 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
     return env.ROOM.get(id).fetch(request);
   }
 
+  if (url.pathname === "/activity") {
+    return env.ASSETS.fetch(new Request(new URL("/", request.url), request));
+  }
+
   // room links: /abc123 → serve index.html
   if (normalizeCustomRoomCode(url.pathname.slice(1))) {
-    return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+    return env.ASSETS.fetch(new Request(new URL("/", request.url), request));
   }
 
   return env.ASSETS.fetch(request);
@@ -172,6 +186,7 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    return withSecurityHeaders(await handleFetch(request, env));
+    const mode: SecurityHeaderMode = isDiscordActivityRequest(request) ? "discord-activity" : "default";
+    return withSecurityHeaders(await handleFetch(request, env), mode);
   },
 } satisfies ExportedHandler<Env>;

@@ -110,6 +110,9 @@ Current shared implementation primitives:
   entitlements.
 - `GET /api/fort-pass/code?code=...` checks whether a custom code is valid and
   not already occupied by a live room.
+- `GET /api/fort-pass/status` returns non-secret beta readiness data so the
+  setup UI can keep checkout disabled unless Checkout and signed webhook
+  fulfillment are both configured.
 - `POST /api/fort-pass/checkout` validates the requested custom code. If Stripe
   config is present, it creates a hosted one-time Checkout Session. If Stripe is
   not configured, it returns `checkout_not_configured`.
@@ -129,6 +132,8 @@ Current shared implementation primitives:
 - The setup screen includes the first host-facing Fort Pass entry point: enter a
   custom code, start Checkout, and return through the accountless redemption
   flow.
+- The setup screen checks Fort Pass status before enabling the paid beta
+  checkout button.
 - Paid rooms expose the `retro-plus` theme pack. The host can switch room theme
   to `retro-green` or `midnight`, and the room broadcasts the selected theme to
   connected members.

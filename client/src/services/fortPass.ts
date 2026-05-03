@@ -6,6 +6,13 @@ export type FortPassCheckoutResult =
   | { ok: true; code: string; checkoutUrl: string; sessionId: string }
   | { ok: false; error: "invalid_custom_room_code" | "custom_room_code_taken" | "checkout_not_configured" | "checkout_provider_error" | "unknown"; code?: string };
 
+export type FortPassStatus = {
+  beta: boolean;
+  checkoutConfigured: boolean;
+  priceLabel: string;
+  perks: string[];
+};
+
 const ROOM_CODE_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const FORT_PASS_SESSION_RE = /^[a-zA-Z0-9_:-]{1,128}$/;
 const RESERVED_ROOM_CODES = new Set([
@@ -13,6 +20,7 @@ const RESERVED_ROOM_CODES = new Set([
   "analytics",
   "api",
   "app",
+  "activity",
   "asset",
   "assets",
   "billing",
@@ -53,6 +61,21 @@ export async function checkFortPassCode(code: string): Promise<FortPassAvailabil
     headers: { "accept": "application/json" },
   });
   return await res.json() as FortPassAvailability;
+}
+
+export async function getFortPassStatus(): Promise<FortPassStatus> {
+  const res = await fetch("/api/fort-pass/status", {
+    headers: { "accept": "application/json" },
+  });
+  const data = await res.json().catch(() => null) as Record<string, unknown> | null;
+  return {
+    beta: data?.beta === true,
+    checkoutConfigured: data?.checkoutConfigured === true,
+    priceLabel: typeof data?.priceLabel === "string" && data.priceLabel.length <= 12 ? data.priceLabel : "$5",
+    perks: Array.isArray(data?.perks)
+      ? data.perks.filter((perk): perk is string => typeof perk === "string" && perk.length <= 32).slice(0, 8)
+      : [],
+  };
 }
 
 export async function startFortPassCheckout(code: string): Promise<FortPassCheckoutResult> {

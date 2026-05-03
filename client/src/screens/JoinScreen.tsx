@@ -13,13 +13,15 @@ export function JoinScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const setPassword = useGameStore((s) => s.setPassword);
   const pendingRoom = useGameStore((s) => s.pendingRoom);
+  const activityRoomId = useGameStore((s) => s.activityRoomId);
   const nameRef = useRef<HTMLInputElement>(null);
   const roomRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (pendingRoom && roomRef.current) {
-      roomRef.current.value = pendingRoom;
+    const room = pendingRoom || activityRoomId;
+    if (room && roomRef.current) {
+      roomRef.current.value = room;
       useGameStore.getState().setPendingRoom(null);
       if (!name) nameRef.current?.focus();
       else passwordRef.current?.focus();
@@ -61,7 +63,7 @@ export function JoinScreen() {
       >
         <div className="xp-window-body">
           <p className="auth-note">
-            Enter the fort flag and secret password you were given.
+            Enter the fort flag and secret password from your invite.
           </p>
           <Input
             id="join-name"

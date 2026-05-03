@@ -1,4 +1,5 @@
 export const FORT_PASS_CODE_PATH = "/api/fort-pass/code";
+export const FORT_PASS_STATUS_PATH = "/api/fort-pass/status";
 export const FORT_PASS_CHECKOUT_PATH = "/api/fort-pass/checkout";
 export const STRIPE_WEBHOOK_PATH = "/api/stripe/webhook";
 export const ROOM_STATUS_PATH = "/__pillowfort/room-status";

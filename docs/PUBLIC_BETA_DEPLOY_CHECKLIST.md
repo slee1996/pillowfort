@@ -19,6 +19,8 @@ Do not deploy a public beta unless all of these are true:
 - Analytics events still follow the privacy-safe beta contract.
 - If Fort Pass is enabled, Stripe Checkout and the signed webhook endpoint are
   configured together.
+- `/api/fort-pass/status` reports `checkoutConfigured: true` before Fort Pass
+  is promoted outside quiet beta. This requires Checkout and webhook secrets.
 
 Optional but recommended before a marketing push:
 
@@ -77,6 +79,7 @@ Mobile smoke:
 
 Paid smoke, only if Fort Pass is enabled:
 
+1. Confirm `/api/fort-pass/status` returns `checkoutConfigured: true`.
 1. Check an available custom code with `/api/fort-pass/code?code=party-1`.
 2. Start checkout for that code.
 3. Complete a test Checkout Session.

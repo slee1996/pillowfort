@@ -6,10 +6,14 @@ type AnalyticsEventName =
   | "first_message_sent"
   | "game_started"
   | "room_knocked_down"
+  | "activation_nudge_shown"
+  | "activation_nudge_clicked"
   | "fort_pass_code_checked"
+  | "fort_pass_status_checked"
   | "fort_pass_checkout_started"
   | "fort_pass_checkout_failed"
-  | "fort_pass_checkout_returned";
+  | "fort_pass_checkout_returned"
+  | "discord_activity_detected";
 
 type AnalyticsProps = {
   kind?: string;

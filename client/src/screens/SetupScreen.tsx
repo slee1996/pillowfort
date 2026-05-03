@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
@@ -6,7 +6,7 @@ import { Input } from "../components/xp/Input";
 import { connect, send } from "../services/ws";
 import { track } from "../services/analytics";
 import { createRoomAuthPayload } from "../services/chatCrypto";
-import { checkFortPassCode, normalizeFortPassCode, startFortPassCheckout } from "../services/fortPass";
+import { checkFortPassCode, getFortPassStatus, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 
 type FortPassPreviewTheme = "retro-green" | "midnight";
@@ -28,11 +28,34 @@ export function SetupScreen() {
   const setPassword = useGameStore((s) => s.setPassword);
   const pendingFortPass = useGameStore((s) => s.pendingFortPass);
   const setPendingFortPass = useGameStore((s) => s.setPendingFortPass);
+  const activityRoomId = useGameStore((s) => s.activityRoomId);
   const [fortPassCode, setFortPassCode] = useState("");
   const [fortPassStatus, setFortPassStatus] = useState("");
+  const [fortPassConfig, setFortPassConfig] = useState<FortPassStatus | null>(null);
   const [fortPassBusy, setFortPassBusy] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("retro-green");
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFortPassStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setFortPassConfig(status);
+        track("fort_pass_status_checked", {
+          reason: status.checkoutConfigured ? "configured" : "not_configured",
+          source: "setup",
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFortPassConfig({ beta: true, checkoutConfigured: false, priceLabel: "$5", perks: [] });
+        track("fort_pass_status_checked", { reason: "failed", source: "setup" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCreate = async () => {
     const pw = passwordRef.current?.value.trim();
@@ -41,7 +64,7 @@ export function SetupScreen() {
       return;
     }
     setPassword(pw);
-    const roomId = pendingFortPass?.code || generateRoomId();
+    const roomId = pendingFortPass?.code || activityRoomId || generateRoomId();
     const auth = await createRoomAuthPayload(roomId, pw);
     connect(roomId, () => send("set-up", {
       name,
@@ -56,6 +79,12 @@ export function SetupScreen() {
   };
 
   const handleFortPassCheckout = async () => {
+    if (!fortPassConfig?.checkoutConfigured) {
+      setFortPassStatus("Fort Pass beta checkout is not open yet.");
+      track("fort_pass_checkout_failed", { reason: "not_configured", source: "setup" });
+      return;
+    }
+
     const code = normalizeFortPassCode(fortPassCode);
     if (!code) {
       setFortPassStatus("Invalid code.");
@@ -109,7 +138,7 @@ export function SetupScreen() {
       >
         <div className="xp-window-body">
           <p className="auth-note">
-            Pick a secret password. Share it with people you want to let inside.
+            Pick a secret password. Guests need the flag and password; Pillowfort does not store the password.
           </p>
           {pendingFortPass && (
             <div className="fort-pass-redeemed-panel" role="status">
@@ -120,6 +149,12 @@ export function SetupScreen() {
                 <span>6-hour idle</span>
                 <span>retro themes</span>
               </div>
+            </div>
+          )}
+          {!pendingFortPass && activityRoomId && (
+            <div className="activity-room-panel" role="status">
+              <div className="activity-room-title">Discord Activity room</div>
+              <div className="activity-room-code">flag: {activityRoomId}</div>
             </div>
           )}
           <Input
@@ -139,9 +174,9 @@ export function SetupScreen() {
               <div className="fort-pass-heading">
                 <div>
                   <div className="fort-pass-title">Fort Pass</div>
-                  <div className="fort-pass-subtitle">custom flag · 6-hour idle · retro themes</div>
-                </div>
-                <div className="fort-pass-price">$5</div>
+                <div className="fort-pass-subtitle">quiet beta · custom flag · 6-hour idle · retro themes</div>
+              </div>
+                <div className="fort-pass-price">{fortPassConfig?.priceLabel || "$5"}</div>
               </div>
               <div className={`fort-pass-preview preview-${previewTheme}`} aria-hidden>
                 <div className="fort-pass-preview-title">pillowfort — party-1</div>
@@ -198,11 +233,16 @@ export function SetupScreen() {
                 <Button
                   id="btn-fort-pass-checkout"
                   onClick={() => void handleFortPassCheckout()}
-                  disabled={fortPassBusy}
+                  disabled={fortPassBusy || !fortPassConfig?.checkoutConfigured}
                 >
-                  Upgrade $5
+                  Upgrade {fortPassConfig?.priceLabel || "$5"}
                 </Button>
               </div>
+              {fortPassConfig && !fortPassConfig.checkoutConfigured && (
+                <div className="fort-pass-status fort-pass-status-muted" role="status">
+                  Fort Pass beta opens after the paid smoke test.
+                </div>
+              )}
               {fortPassStatus && (
                 <div className="fort-pass-status" role="status">
                   {fortPassStatus}

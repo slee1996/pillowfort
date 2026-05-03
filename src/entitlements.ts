@@ -45,6 +45,7 @@ const RESERVED_ROOM_CODES = new Set([
   "analytics",
   "api",
   "app",
+  "activity",
   "asset",
   "assets",
   "billing",

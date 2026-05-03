@@ -1,7 +1,7 @@
 import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./src/game";
 import { analyticsLogLine, opsLogLine, readAnalyticsEvent } from "./src/analytics";
 import { customRoomCodeAvailability, fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./src/entitlements";
-import { blockedProbeResponse, logBlockedProbe, probeReasonForPath, withSecurityHeaders } from "./src/security";
+import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./src/security";
 import { createFortPassStripeCheckoutSession, fortPassEntitlementFromStripeEvent, verifyStripeWebhookSignature } from "./src/stripe";
 import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS as DEFAULT_GRACE_MS } from "./src/shared";
 
@@ -1456,6 +1456,16 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
     return json(availability);
   }
 
+  if (url.pathname === "/api/fort-pass/status") {
+    if (req.method !== "GET") return new Response("method not allowed", { status: 405 });
+    return json({
+      beta: true,
+      checkoutConfigured: Boolean(process.env.STRIPE_SECRET_KEY && process.env.FORT_PASS_PRICE_ID && process.env.STRIPE_WEBHOOK_SECRET),
+      priceLabel: "$5",
+      perks: ["custom_code", "extended_idle", "theme_pack"],
+    });
+  }
+
   if (url.pathname === "/api/fort-pass/checkout") {
     if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
     const checkout = normalizeFortPassCheckoutRequest(await readSmallJson(req));
@@ -1502,6 +1512,10 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
     return ok ? undefined : new Response("upgrade failed", { status: 400 });
   }
 
+  if (url.pathname === "/activity") {
+    return staticFileResponse("/index.html");
+  }
+
   // room links: /abc123 → serve index.html
   if (normalizeCustomRoomCode(url.pathname.slice(1))) {
     return staticFileResponse("/index.html");
@@ -1519,7 +1533,8 @@ Bun.serve({
 
   async fetch(req, server) {
     const response = await handleHttp(req, server);
-    return response ? withSecurityHeaders(response) : undefined;
+    const mode: SecurityHeaderMode = isDiscordActivityRequest(req) ? "discord-activity" : "default";
+    return response ? withSecurityHeaders(response, mode) : undefined;
   },
 
   websocket: {

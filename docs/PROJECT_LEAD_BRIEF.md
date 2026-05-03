@@ -355,6 +355,12 @@ Success criteria:
 - A user can create, invite, play, disconnect, rejoin, and knock down without
   manual recovery.
 
+Current status:
+
+- Edge hardening, security headers, operational events, and production
+  monitoring docs are in place.
+- The safety code moved out of chat into the Fort menu.
+
 ### Phase 2: Public Beta
 
 Goal: prove that people will use it for real hangouts.
@@ -374,6 +380,14 @@ Work:
   - Room duration.
   - Return host rate.
 - Use the existing video pipeline for launch clips.
+
+Current status:
+
+- Home/setup copy now states invite-only, accountless, temporary room, and
+  password-storage boundaries without adding an onboarding wall.
+- Chat now shows activation nudges for empty rooms and first-game starts.
+- `npm run metrics:report` turns sanitized analytics logs into a weekly funnel
+  readout.
 
 Success criteria:
 
@@ -401,11 +415,14 @@ Current status:
 
 - Fort Pass entitlement model exists.
 - Custom-code availability exists.
+- Public Fort Pass status exists for non-secret checkout readiness.
 - Stripe Checkout creation exists.
 - Signed Stripe webhook fulfillment exists.
 - Checkout success redemption exists.
 - The setup screen has a host-facing Fort Pass upgrade entry point.
 - Fort Pass rooms can switch to premium room themes.
+- The setup screen disables checkout if the deployed environment does not report
+  paid beta readiness.
 - A paid beta support/refund runbook exists.
 
 Success criteria:
@@ -425,6 +442,14 @@ Work:
 - Replace or adapt invite flow for Discord launch context.
 - Test mobile and desktop iframe constraints.
 - Evaluate Discord native monetization.
+
+Current status:
+
+- `/activity` serves the shared app shell with Discord frame headers.
+- Client-side Discord Activity detection maps an Activity launch to a
+  deterministic `dc-......` room flag.
+- SDK installation/authentication is intentionally deferred until a Discord
+  client ID and token exchange endpoint are ready.
 
 Success criteria:
 

@@ -94,6 +94,21 @@ Client-side needs:
 - A no-copy join path.
 - Mobile and desktop iframe layout checks.
 
+Current prototype slice:
+
+- `/activity` serves the shared app shell and uses Discord-specific frame
+  headers instead of the default `frame-ancestors 'none'` policy.
+- `client/src/services/discordActivity.ts` detects likely Activity launches via
+  `/activity`, Discord proxy hosts, `discord_activity=1`, or `frame_id`.
+- The detected Activity instance maps to a deterministic `dc-......` room flag.
+- The setup and join screens prefill/use that room flag while the existing
+  password model remains in place.
+- Analytics emits `discord_activity_detected` without logging Discord IDs.
+
+This is intentionally a pre-SDK slice. The next implementation step is adding
+`@discord/embedded-app-sdk`, calling `ready()`, and using `authorize()` /
+`authenticate()` once a Discord client ID and token exchange endpoint exist.
+
 ## Open Decisions
 
 Resolve before implementation:
@@ -131,8 +146,10 @@ Prototype is successful if:
 
 SDK and platform drift:
 
-- Verify against Discord's current official Activity documentation immediately
-  before implementation.
+- Verified against Discord's official docs on 2026-05-03: Activities run as
+  iframe-hosted SPAs, the SDK `ready()` handshake is required, Activity URLs use
+  Discord's proxy/URL mappings, and native IAP should verify entitlements
+  server-side rather than trusting only SDK data.
 
 Privacy:
 

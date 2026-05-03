@@ -16,9 +16,15 @@ Watch these event names in Cloudflare logs:
 - `stripe_webhook_failed`: Stripe webhook configuration, payload, signature, or
   fulfillment failures.
 - `fort_pass_code_checked`: client-side custom-code availability checks.
+- `fort_pass_status_checked`: setup screen checked whether paid beta checkout is
+  configured.
 - `fort_pass_checkout_started`: host clicked through to Checkout.
 - `fort_pass_checkout_failed`: checkout could not start from the setup screen.
 - `fort_pass_checkout_returned`: Stripe success redirect reached Pillowfort.
+- `activation_nudge_shown` / `activation_nudge_clicked`: first-room and
+  first-game prompts.
+- `discord_activity_detected`: Activity launch context was detected without
+  logging Discord IDs.
 
 ## Suggested Alert Thresholds
 

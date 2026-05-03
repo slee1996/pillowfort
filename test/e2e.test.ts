@@ -82,6 +82,15 @@ describe("Invite link flow", () => {
     expect(ct).toContain("text/html");
   });
 
+  it("GET /activity returns HTML with Discord frame headers", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/activity?frame_id=test-frame`);
+    expect(res.status).toBe(200);
+    const ct = res.headers.get("content-type") || "";
+    expect(ct).toContain("text/html");
+    expect(res.headers.get("content-security-policy")).toContain("https://*.discord.com");
+    expect(res.headers.get("x-frame-options")).toBeNull();
+  });
+
   it("blocks scanner paths in the local runtime", async () => {
     const blocked = await fetch(`http://localhost:${getPort()}/.%65%6Ev.%70%72%6F%64`);
     const php = await fetch(`http://localhost:${getPort()}/wp-content/sallu.php`);
@@ -125,6 +134,18 @@ describe("Beta analytics", () => {
 // ---- Fort Pass checkout boundary ----
 
 describe("Fort Pass custom-code availability", () => {
+  it("reports public Fort Pass beta readiness", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/api/fort-pass/status`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      beta: true,
+      checkoutConfigured: false,
+      priceLabel: "$5",
+      perks: ["custom_code", "extended_idle", "theme_pack"],
+    });
+  });
+
   it("reports invalid, available, and taken custom room codes", async () => {
     await createRoomWithId("taken-1", "host", "secret");
 

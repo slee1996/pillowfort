@@ -118,6 +118,9 @@ For the current Stripe sandbox setup, see
 For production hardening and operational log buckets, see
 [docs/PRODUCTION_MONITORING.md](docs/PRODUCTION_MONITORING.md).
 
+For weekly beta funnel review, see
+[docs/METRICS_REVIEW.md](docs/METRICS_REVIEW.md).
+
 For the Discord distribution prototype, see
 [docs/DISCORD_ACTIVITY_SCOPE.md](docs/DISCORD_ACTIVITY_SCOPE.md).
 
@@ -126,6 +129,7 @@ Public API surfaces currently exposed by the app:
 - `/ws?room=...` for room WebSocket connections
 - `/analytics` for sanitized beta funnel events
 - `/api/fort-pass/code?code=...` for custom-code availability checks
+- `/api/fort-pass/status` for non-secret paid beta availability/configuration
 - `/api/fort-pass/checkout` for the paid checkout boundary; creates a Stripe
   Checkout Session only when `STRIPE_SECRET_KEY`, `FORT_PASS_PRICE_ID`, and
   `PUBLIC_BASE_URL` are configured

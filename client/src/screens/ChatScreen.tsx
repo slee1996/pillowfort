@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { send } from "../services/ws";
-import { track } from "../services/analytics";
+import { track, trackOnce } from "../services/analytics";
 import { showToast } from "../components/xp/Toast";
 import { TitleBar } from "../components/xp/TitleBar";
 import { MenuBar } from "../components/chat/MenuBar";
@@ -54,6 +54,7 @@ function themeLabel(theme: string): string {
 
 export function ChatScreen() {
   const roomId = useGameStore((s) => s.roomId);
+  const password = useGameStore((s) => s.password);
   const isHost = useGameStore((s) => s.isHost);
   const name = useGameStore((s) => s.name);
   const members = useGameStore((s) => s.members);
@@ -70,6 +71,7 @@ export function ChatScreen() {
 
   const [picker, setPicker] = useState<PickerType>(null);
   const [sabFrameFx, setSabFrameFx] = useState("");
+  const [activationDismissed, setActivationDismissed] = useState(false);
   const titleBarRef = useRef<HTMLDivElement>(null);
   const fxTimeoutRef = useRef<number | null>(null);
   const prevSabStrikesRef = useRef(0);
@@ -107,6 +109,10 @@ export function ChatScreen() {
       if (fxTimeoutRef.current) window.clearTimeout(fxTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    setActivationDismissed(false);
+  }, [roomId]);
 
   const handleMinimize = () => {
     const m = !minimized;
@@ -154,6 +160,20 @@ export function ChatScreen() {
       track("invite_copied", {
         role: isHost ? "host" : "guest",
         source: "room_code",
+        memberCount: members.length,
+      });
+    });
+  };
+
+  const handleCopyInvite = (source: string) => {
+    if (!roomId) return;
+    const link = `${location.origin}/${roomId}`;
+    const text = password ? `${link}\npassword: ${password}` : link;
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("Invite copied!");
+      track("invite_copied", {
+        role: isHost ? "host" : "guest",
+        source,
         memberCount: members.length,
       });
     });
@@ -223,6 +243,31 @@ export function ChatScreen() {
   const awayCount = members.filter((member) => memberPresence[member]?.status === "away").length;
   const availableCount = Math.max(0, members.length - awayCount);
   const activeThemeLabel = themeLabel(roomTheme);
+  const activationKind = members.length <= 1
+    ? "empty_room"
+    : gameQueue.current || gameQueue.queue.length > 0
+      ? null
+      : "start_game";
+  const showActivationNudge = !activationDismissed && !minimized && !!activationKind;
+
+  useEffect(() => {
+    if (!showActivationNudge || !activationKind) return;
+    trackOnce(`activation:${roomId || "none"}:${activationKind}`, "activation_nudge_shown", {
+      kind: activationKind,
+      role: isHost ? "host" : "guest",
+      memberCount: members.length,
+    });
+  }, [activationKind, isHost, members.length, roomId, showActivationNudge]);
+
+  const handleStartGameNudge = (type: "rps" | "ttt") => {
+    track("activation_nudge_clicked", {
+      kind: type,
+      role: isHost ? "host" : "guest",
+      source: "start_game_nudge",
+      memberCount: members.length,
+    });
+    handlePickerOpen(type);
+  };
 
   return (
     <div className={`screen screen-chat theme-${roomTheme}`}>
@@ -312,6 +357,68 @@ export function ChatScreen() {
                     </>
                   )}
                 </div>
+
+                {showActivationNudge && (
+                  <div className="activation-nudge" role="status">
+                    <div className="activation-nudge-copy">
+                      {activationKind === "empty_room" ? (
+                        <>
+                          <strong>Waiting for buddies.</strong>
+                          <span>Copy the invite and password before the room goes quiet.</span>
+                        </>
+                      ) : (
+                        <>
+                          <strong>Room is live.</strong>
+                          <span>Start a quick game while everyone is here.</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="activation-nudge-actions">
+                      {activationKind === "empty_room" ? (
+                        <button
+                          type="button"
+                          className="activation-nudge-btn primary"
+                          onClick={() => {
+                            track("activation_nudge_clicked", {
+                              kind: "empty_room",
+                              role: isHost ? "host" : "guest",
+                              source: "copy_invite",
+                              memberCount: members.length,
+                            });
+                            handleCopyInvite("empty_room_nudge");
+                          }}
+                        >
+                          Copy Invite
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="activation-nudge-btn primary"
+                            onClick={() => handleStartGameNudge("rps")}
+                          >
+                            Start RPS
+                          </button>
+                          <button
+                            type="button"
+                            className="activation-nudge-btn"
+                            onClick={() => handleStartGameNudge("ttt")}
+                          >
+                            Tic-Tac-Toe
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="activation-nudge-close"
+                        aria-label="Dismiss"
+                        onClick={() => setActivationDismissed(true)}
+                      >
+                        x
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <SabVoteBanner />
                 <VoteBanner />
