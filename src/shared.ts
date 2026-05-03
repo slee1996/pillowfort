@@ -5,11 +5,7 @@ export const STYLE_COLORS = new Set([
   '#800080', '#000000', '#FF69B4', '#8B4513',
 ]);
 
-// Allow test override via env
-export const GRACE_MS = (() => {
-  try { return parseInt(process.env.PILLOWFORT_GRACE_MS || "15000"); }
-  catch { return 15_000; }
-})();
+export const GRACE_MS = 15_000;
 
 export function sanitizeStyle(s: any): Record<string, any> | undefined {
   if (!s || typeof s !== 'object') return undefined;

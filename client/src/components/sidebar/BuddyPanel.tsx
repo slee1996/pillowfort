@@ -1,15 +1,24 @@
 import { useState, useEffect } from "react";
 import { useGameStore } from "../../stores/gameStore";
+import { buddyIconColor } from "../../utils/nameColor";
+import { showToast } from "../xp/Toast";
 import { MemberEntry } from "./MemberEntry";
 import { LeaderboardsPanel } from "../games/LeaderboardsPanel";
 
 type SideTab = "buddies" | "leaderboard";
+type BuddyGroup = "inside" | "away";
 
 export function BuddyPanel() {
   const members = useGameStore((s) => s.members);
   const memberPresence = useGameStore((s) => s.memberPresence);
   const mutedNames = useGameStore((s) => s.mutedNames);
-  const [collapsed, setCollapsed] = useState(false);
+  const name = useGameStore((s) => s.name);
+  const roomId = useGameStore((s) => s.roomId);
+  const isHost = useGameStore((s) => s.isHost);
+  const [collapsed, setCollapsed] = useState<Record<BuddyGroup, boolean>>({
+    inside: false,
+    away: false,
+  });
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<SideTab>("buddies");
 
@@ -20,6 +29,54 @@ export function BuddyPanel() {
   }, []);
 
   if (hidden) return null;
+
+  const availableMembers = members.filter((member) => memberPresence[member]?.status !== "away");
+  const awayMembers = members.filter((member) => memberPresence[member]?.status === "away");
+  const myPresence = memberPresence[name];
+  const myStatus = myPresence?.status === "away" ? "Away" : "Available";
+  const myStatusText = myPresence?.status === "away" && myPresence.awayText
+    ? myPresence.awayText
+    : myStatus;
+
+  const copyRoomFlag = () => {
+    if (!roomId) return;
+    navigator.clipboard.writeText(roomId).then(() => showToast("Fort flag copied!"));
+  };
+
+  const toggleGroup = (group: BuddyGroup) => {
+    setCollapsed((current) => ({ ...current, [group]: !current[group] }));
+  };
+
+  const renderGroup = (group: BuddyGroup, label: string, list: string[]) => (
+    <>
+      <div
+        className={`buddy-group-header ${collapsed[group] ? "collapsed" : ""}`}
+        onClick={() => toggleGroup(group)}
+      >
+        <span
+          className="buddy-group-caret"
+          style={{ transform: collapsed[group] ? "rotate(-90deg)" : undefined }}
+        >
+          ▼
+        </span>
+        {label} ({list.length})
+      </div>
+      {!collapsed[group] && (
+        <div className="buddy-list">
+          {list.map((member) => (
+            <MemberEntry
+              key={member}
+              name={member}
+              isHost={members.indexOf(member) === 0}
+              isMuted={mutedNames.has(member)}
+              status={memberPresence[member]?.status}
+              awayText={memberPresence[member]?.awayText}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="member-panel">
@@ -46,32 +103,20 @@ export function BuddyPanel() {
 
       {tab === "buddies" ? (
         <>
-          <div
-            className={`buddy-group-header ${collapsed ? "collapsed" : ""}`}
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            <span
-              className="buddy-group-caret"
-              style={{ transform: collapsed ? "rotate(-90deg)" : undefined }}
-            >
-              ▼
-            </span>
-            Inside ({members.length})
-          </div>
-          {!collapsed && (
-            <div className="buddy-list">
-              {members.map((name, i) => (
-                <MemberEntry
-                  key={name}
-                  name={name}
-                  isHost={i === 0}
-                  isMuted={mutedNames.has(name)}
-                  status={memberPresence[name]?.status}
-                  awayText={memberPresence[name]?.awayText}
-                />
-              ))}
+          <div className="buddy-profile-card">
+            <div className="buddy-profile-row">
+              <span className="buddy-profile-icon" style={{ background: buddyIconColor(name) }} />
+              <div className="buddy-profile-copy">
+                <div className="buddy-profile-name">{name || "guest"}</div>
+                <div className="buddy-profile-status">{isHost ? "Host" : "Guest"} · {myStatusText}</div>
+              </div>
             </div>
-          )}
+            <button type="button" className="buddy-profile-flag" onClick={copyRoomFlag}>
+              flag: {roomId || "..."}
+            </button>
+          </div>
+          {renderGroup("inside", "Inside", availableMembers)}
+          {awayMembers.length > 0 && renderGroup("away", "Away", awayMembers)}
         </>
       ) : (
         <div className="member-panel-leaderboards">

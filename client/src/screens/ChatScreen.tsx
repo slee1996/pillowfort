@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { send } from "../services/ws";
+import { track } from "../services/analytics";
 import { showToast } from "../components/xp/Toast";
 import { TitleBar } from "../components/xp/TitleBar";
 import { MenuBar } from "../components/chat/MenuBar";
@@ -40,6 +41,17 @@ function describeQueueItem(item: GameQueueItem): string {
   }
 }
 
+function themeLabel(theme: string): string {
+  switch (theme) {
+    case "retro-green":
+      return "Retro Green";
+    case "midnight":
+      return "Midnight";
+    default:
+      return "Classic";
+  }
+}
+
 export function ChatScreen() {
   const roomId = useGameStore((s) => s.roomId);
   const isHost = useGameStore((s) => s.isHost);
@@ -52,6 +64,9 @@ export function ChatScreen() {
   const sabBombCountdown = useGameStore((s) => s.sabBombCountdown);
   const sabDetonateSignal = useGameStore((s) => s.sabDetonateSignal);
   const gameQueue = useGameStore((s) => s.gameQueue);
+  const roomTheme = useGameStore((s) => s.roomTheme);
+  const memberPresence = useGameStore((s) => s.memberPresence);
+  const fortPass = useGameStore((s) => s.fortPass);
 
   const [picker, setPicker] = useState<PickerType>(null);
   const [sabFrameFx, setSabFrameFx] = useState("");
@@ -96,6 +111,13 @@ export function ChatScreen() {
   const handleMinimize = () => {
     const m = !minimized;
     useGameStore.getState().setMinimized(m);
+    if (m) {
+      track("game_started", {
+        kind: "breakout",
+        role: isHost ? "host" : "guest",
+        memberCount: members.length,
+      });
+    }
     if (!m) useGameStore.getState().resetUnread();
   };
 
@@ -127,7 +149,14 @@ export function ChatScreen() {
   };
 
   const handleCopyRoom = () => {
-    if (roomId) navigator.clipboard.writeText(roomId).then(() => showToast("Copied!"));
+    if (roomId) navigator.clipboard.writeText(roomId).then(() => {
+      showToast("Copied!");
+      track("invite_copied", {
+        role: isHost ? "host" : "guest",
+        source: "room_code",
+        memberCount: members.length,
+      });
+    });
   };
 
   const handlePickerOpen = useCallback((type: string) => {
@@ -191,9 +220,12 @@ export function ChatScreen() {
   const chatInfoText = `You are chatting with ${
     members.length === 1 ? "0 buddies" : `${members.length - 1} ${members.length - 1 === 1 ? "buddy" : "buddies"}`
   }`;
+  const awayCount = members.filter((member) => memberPresence[member]?.status === "away").length;
+  const availableCount = Math.max(0, members.length - awayCount);
+  const activeThemeLabel = themeLabel(roomTheme);
 
   return (
-    <div className="screen screen-chat">
+    <div className={`screen screen-chat theme-${roomTheme}`}>
       <DrawCanvas />
       <BreakoutCanvas active={minimized} />
 
@@ -287,6 +319,20 @@ export function ChatScreen() {
                 <TypingIndicator />
                 <FormatToolbar onInsertEmoji={handleInsertEmoji} />
                 <MessageInput onPickerOpen={handlePickerOpen} />
+                <div className="chat-status-strip" aria-live="polite">
+                  <span className="status-strip-cell status-online">
+                    <span className="status-light" aria-hidden />
+                    {availableCount} available
+                  </span>
+                  {awayCount > 0 && (
+                    <span className="status-strip-cell status-away">{awayCount} away</span>
+                  )}
+                  <span className="status-strip-cell">theme: {activeThemeLabel}</span>
+                  <span className="status-strip-cell">encrypted</span>
+                  {fortPass?.themePack === "retro-plus" && (
+                    <span className="status-strip-cell status-fort-pass">Fort Pass</span>
+                  )}
+                </div>
               </div>
               <BuddyPanel />
             </div>

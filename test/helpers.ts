@@ -49,7 +49,7 @@ export async function startServer(): Promise<void> {
   _port = 10_000 + Math.floor(Math.random() * 50_000);
   _proc = Bun.spawn(["bun", "server.ts"], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), PILLOWFORT_RATE_ROOMS: "999", PF_ALLOW_LEGACY_PLAINTEXT: "1", NODE_ENV: "test" },
+    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), CHALLENGE_TIMEOUT_MS: "250", PILLOWFORT_RATE_ROOMS: "999", PF_ALLOW_LEGACY_PLAINTEXT: "1", STRIPE_WEBHOOK_SECRET: "whsec_test", NODE_ENV: "test" },
     stdout: "ignore",
     stderr: "ignore",
   });
@@ -237,9 +237,19 @@ export async function connectClientToRoom(roomId: string): Promise<Client> {
   return client;
 }
 
-export async function createRoomWithId(roomId: string, name = "host", password = "secret"): Promise<{ host: Client; roomId: string }> {
+export async function createRoomWithId(
+  roomId: string,
+  name = "host",
+  password = "secret",
+  fortPassSessionId?: string
+): Promise<{ host: Client; roomId: string }> {
   const host = await connectClientToRoom(roomId);
-  host.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  host.send({
+    type: "set-up",
+    name,
+    auth: await roomAuth(roomId, password),
+    ...(fortPassSessionId ? { fortPassSessionId } : {}),
+  });
   const created = await host.waitFor("room-created");
   return { host, roomId: created.room };
 }

@@ -6,20 +6,35 @@ import { Input } from "../components/xp/Input";
 import { LogoIcon } from "../components/xp/Logo";
 import { ensureAudio } from "../hooks/useSound";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
+import { normalizeFortPassCode, normalizeFortPassSessionId } from "../services/fortPass";
 
 export function HomeScreen() {
   const name = useGameStore((s) => s.name);
   const setName = useGameStore((s) => s.setName);
   const setScreen = useGameStore((s) => s.setScreen);
-  const pendingRoom = useGameStore((s) => s.pendingRoom);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Check for room link in URL on mount
   useEffect(() => {
-    const match = location.pathname.match(/^\/([a-z0-9]{8})$/);
-    if (match) {
+    const params = new URLSearchParams(location.search);
+    const fortPassCode = normalizeFortPassCode(params.get("code"));
+    const fortPassSessionId = normalizeFortPassSessionId(params.get("session_id"));
+    if (
+      params.get("fort_pass") === "success" &&
+      fortPassCode &&
+      fortPassSessionId
+    ) {
       history.replaceState(null, "", "/");
-      useGameStore.getState().setPendingRoom(match[1]);
+      useGameStore.getState().setPendingRoom(null);
+      useGameStore.getState().setPendingFortPass({ code: fortPassCode, sessionId: fortPassSessionId });
+      setScreen("setup");
+      return;
+    }
+
+    const roomFromPath = normalizeFortPassCode(location.pathname.slice(1));
+    if (roomFromPath) {
+      history.replaceState(null, "", "/");
+      useGameStore.getState().setPendingRoom(roomFromPath);
       setScreen("join");
     } else if (name && inputRef.current) {
       inputRef.current.select();
@@ -35,6 +50,7 @@ export function HomeScreen() {
     }
     setName(n);
     useGameStore.getState().setPendingRoom(null);
+    useGameStore.getState().setPendingFortPass(null);
     setScreen("setup");
   };
 

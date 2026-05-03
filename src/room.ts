@@ -1,4 +1,8 @@
 import type { Env } from "./index";
+import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
+import { fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeFortPassEntitlement, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./entitlements";
+import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./game";
+import { ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH } from "./routes";
 import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS } from "./shared";
 
 interface WSData {
@@ -15,21 +19,25 @@ const MAX_GUESTS = 20;
 const IDLE_MS = 10 * 60 * 1000;
 const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
+const CHALLENGE_TIMEOUT_MS = 30_000;
+const MAX_GAME_QUEUE = 10;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
-const SAB_BOMB_MS = (() => {
-  try {
-    const raw = parseInt(process.env.SAB_BOMB_MS || (process.env.NODE_ENV === "test" ? "1200" : "10000"));
-    return Number.isFinite(raw) && raw > 0 ? raw : 10_000;
-  } catch {
-    return 10_000;
-  }
-})();
+const SAB_BOMB_MS = 10_000;
 const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
-const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const MAX_ENC_B64_LEN = 4096;
 const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
 const ALLOW_LEGACY_PLAINTEXT = false;
+const ALARM_SCHEDULE_KEY = "alarmSchedule";
+const SAB_BOMB_KEY = "sabBomb";
+const FORT_PASS_ENTITLEMENT_KEY = "fortPassEntitlement";
+const ROOM_THEME_KEY = "roomTheme";
+
+interface SabBombState {
+  saboteur: string;
+  deadline: number;
+  durationMs: number;
+}
 
 interface EncryptedChatPayload {
   v: 1 | 2 | 3;
@@ -93,6 +101,13 @@ function validAuth(auth: any): auth is { v: 1; kdf: string; verifier: string } {
     /^[A-Za-z0-9_-]{32,128}$/.test(auth.verifier);
 }
 
+function randomIndex(length: number): number {
+  if (length <= 1) return 0;
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return bytes[0] % length;
+}
+
 export class Room implements DurableObject {
   private state: DurableObjectState;
   private authVerifier: string | null = null;
@@ -107,9 +122,9 @@ export class Room implements DurableObject {
   }> = new Map();
 
   // --- game state ---
-  private activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout>; auto?: boolean } | null = null;
-  private rpsGame: { p1: string; p2: string; pick1?: string; pick2?: string } | null = null;
-  private tttGame: { p1: string; p2: string; board: string[]; turn: number } | null = null;
+  private activeVote: { target: string; starter: string; yes: Set<string>; no: Set<string>; timer: ReturnType<typeof setTimeout>; endsAt: number; auto?: boolean } | null = null;
+  private rpsGame: { p1: string; p2: string; phase: "pending" | "playing"; timer?: ReturnType<typeof setTimeout>; pick1?: RpsPick; pick2?: RpsPick; koth?: boolean } | null = null;
+  private tttGame: { p1: string; p2: string; phase: "pending" | "playing"; timer?: ReturnType<typeof setTimeout>; board: string[]; turn: number } | null = null;
   private saboteur: string | null = null;
   private saboteurActive = false;
   private sabStrikes = 0;
@@ -121,16 +136,19 @@ export class Room implements DurableObject {
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
   private sabCanStrike = false;
-  private sabBombTimer: ReturnType<typeof setTimeout> | null = null;
   private activeGame: GameQueueItem | null = null;
   private gameQueue: GameQueueItem[] = [];
   private leaderboards: RoomLeaderboards = createLeaderboards();
+  private fortPassEntitlement: FortPassEntitlement | null = null;
+  private roomTheme: RoomTheme = "classic";
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
     state.blockConcurrencyWhile(async () => {
       this.authVerifier = (await state.storage.get("authVerifier")) as string || null;
       this.roomId = (await state.storage.get("roomId")) as string || "";
+      this.fortPassEntitlement = normalizeFortPassEntitlement(await state.storage.get(FORT_PASS_ENTITLEMENT_KEY));
+      this.roomTheme = normalizeRoomTheme(await state.storage.get(ROOM_THEME_KEY)) || "classic";
     });
   }
 
@@ -139,11 +157,46 @@ export class Room implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === ROOM_STATUS_PATH) {
+      return new Response(JSON.stringify({
+        exists: !!this.authVerifier ||
+          (!!this.fortPassEntitlement && isFortPassActive(this.fortPassEntitlement)) ||
+          this.state.getWebSockets().some(w => !!this.att(w).name),
+      }), {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    if (url.pathname === ROOM_FORT_PASS_FULFILL_PATH) {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const entitlement = normalizeFortPassEntitlement(await request.json().catch(() => null));
+      if (!entitlement || (this.roomId && entitlement.roomId !== this.roomId)) {
+        return new Response("bad entitlement", { status: 400 });
+      }
+      if (this.authVerifier || this.state.getWebSockets().some(w => !!this.att(w).name)) {
+        return new Response("room already active", { status: 409 });
+      }
+      this.roomId = entitlement.roomId;
+      this.fortPassEntitlement = entitlement;
+      await this.state.storage.put("roomId", entitlement.roomId);
+      await this.state.storage.put(FORT_PASS_ENTITLEMENT_KEY, entitlement);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        },
+      });
+    }
+
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("expected websocket", { status: 400 });
     }
 
-    const url = new URL(request.url);
     const roomId = url.searchParams.get("room") || "";
     if (roomId && !this.roomId) {
       this.roomId = roomId;
@@ -166,14 +219,15 @@ export class Room implements DurableObject {
       const msg = JSON.parse(message as string);
       switch (msg.type) {
         case "set-up":       await this.onSetUp(ws, msg); break;
-        case "join":         this.onJoin(ws, msg); break;
-        case "rejoin":       this.onRejoin(ws, msg); break;
-        case "chat":         this.onChat(ws, msg); break;
+        case "join":         await this.onJoin(ws, msg); break;
+        case "rejoin":       await this.onRejoin(ws, msg); break;
+        case "chat":         await this.onChat(ws, msg); break;
         case "knock-down":   await this.onKnockDown(ws); break;
         case "leave":        await this.onLeave(ws); break;
         case "typing":       this.onTyping(ws); break;
-        case "set-status":   this.onSetStatus(ws, msg); break;
-        case "accept-host":  this.onAcceptHost(ws); break;
+        case "set-status":   await this.onSetStatus(ws, msg); break;
+        case "set-theme":    await this.onSetTheme(ws, msg); break;
+        case "accept-host":  await this.onAcceptHost(ws); break;
         case "reject-host":  await this.onRejectHost(ws); break;
         case "toss-pillow": this.onTossPillow(ws, msg); break;
         case "draw":        this.onDraw(ws, msg); break;
@@ -190,7 +244,7 @@ export class Room implements DurableObject {
         case "ttt-move":      this.onTttMove(ws, msg); break;
         case "sab-start":     this.onSabStart(ws); break;
         case "sab-accuse":    this.onSabAccuse(ws, msg); break;
-        case "sab-strike":    this.onSabStrike(ws); break;
+        case "sab-strike":    await this.onSabStrike(ws); break;
         case "sab-vote":      this.onSabVote(ws, msg); break;
         case "koth-challenge": this.onKothChallenge(ws); break;
       }
@@ -201,8 +255,24 @@ export class Room implements DurableObject {
   async webSocketError(ws: WebSocket) { await this.onGracefulDisconnect(ws); }
 
   async alarm() {
-    this.log("idle timeout — destroying");
-    await this.destroyRoom("the fort went quiet for too long");
+    const now = Date.now();
+    const schedule = await this.loadAlarmSchedule();
+    const due = firstDueRoomAlarm(schedule, now);
+
+    if (due === "sab-bomb") {
+      const bomb = await this.state.storage.get<SabBombState>(SAB_BOMB_KEY);
+      this.log(`sab bomb alarm fired${bomb?.saboteur ? ` for ${bomb.saboteur}` : ""}`);
+      await this.destroyRoom("the saboteur's bomb exploded!");
+      return;
+    }
+
+    if (due === "idle") {
+      this.log("idle timeout — destroying");
+      await this.destroyRoom("the fort went quiet for too long");
+      return;
+    }
+
+    await this.saveAlarmSchedule(schedule);
   }
 
   // --- helpers ---
@@ -245,6 +315,13 @@ export class Room implements DurableObject {
     };
   }
 
+  private fortPassSnapshot(): { themePack?: string } | undefined {
+    if (!this.fortPassEntitlement || !isFortPassActive(this.fortPassEntitlement)) return undefined;
+    return this.fortPassEntitlement.perks.themePack
+      ? { themePack: this.fortPassEntitlement.perks.themePack }
+      : undefined;
+  }
+
   private emitGameQueue(exclude?: WebSocket) {
     this.broadcast("game-queue", { gameQueue: this.gameQueueSnapshot() }, exclude);
   }
@@ -256,6 +333,10 @@ export class Room implements DurableObject {
   private queueGame(req: GameQueueItem, ws?: WebSocket): boolean {
     if (this.activeGame && this.sameGameRequest(this.activeGame, req)) return false;
     if (this.gameQueue.some((q) => this.sameGameRequest(q, req))) return false;
+    if (this.gameQueue.length >= MAX_GAME_QUEUE) {
+      if (ws) this.send(ws, "error", { message: "game queue is full" });
+      return false;
+    }
     this.gameQueue.push(req);
     this.emitGameQueue();
     if (ws) this.send(ws, "game-queued", { ...req, position: this.gameQueue.length });
@@ -281,6 +362,60 @@ export class Room implements DurableObject {
       this.gameQueue = next;
       this.emitGameQueue();
     }
+  }
+
+  private cancelActiveGamesForMember(name: string) {
+    let cancelled = false;
+    if (this.activeVote?.target === name || this.activeVote?.starter === name) {
+      clearTimeout(this.activeVote.timer);
+      this.broadcast("vote-result", {
+        target: this.activeVote.target,
+        yes: this.activeVote.yes.size,
+        no: this.activeVote.no.size,
+        ejected: false,
+      });
+      this.activeVote = null;
+      cancelled = true;
+    }
+    if (this.rpsGame && (this.rpsGame.p1 === name || this.rpsGame.p2 === name)) {
+      if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
+      this.broadcast("rps-declined", { from: name });
+      this.rpsGame = null;
+      this.kothGame = null;
+      cancelled = true;
+    }
+    if (this.tttGame && (this.tttGame.p1 === name || this.tttGame.p2 === name)) {
+      if (this.tttGame.timer) clearTimeout(this.tttGame.timer);
+      this.broadcast("ttt-declined", { from: name });
+      this.tttGame = null;
+      cancelled = true;
+    }
+    if (this.saboteurActive && this.saboteur === name) {
+      this.saboteurActive = false;
+      this.sabCanStrike = false;
+      this.saboteur = null;
+      if (this.sabVote) {
+        clearTimeout(this.sabVote.timer);
+        this.sabVote = null;
+      }
+      this.broadcast("sab-vote-result", {
+        accuser: "the fort",
+        accused: name,
+        yes: 0,
+        no: 0,
+        passed: true,
+        wasSaboteur: true,
+        saboteur: name,
+      });
+      cancelled = true;
+    } else if (this.sabVote && (this.sabVote.accuser === name || this.sabVote.suspect === name)) {
+      clearTimeout(this.sabVote.timer);
+      this.sabVote = null;
+    } else if (this.sabVote) {
+      this.sabVote.yes.delete(name);
+      this.sabVote.no.delete(name);
+    }
+    if (cancelled) this.clearActiveGame();
   }
 
   private drainGameQueue() {
@@ -352,8 +487,38 @@ export class Room implements DurableObject {
     return out;
   }
 
-  private resetIdle() {
-    this.state.storage.setAlarm(Date.now() + IDLE_MS);
+  private async loadAlarmSchedule(): Promise<RoomAlarmSchedule> {
+    return normalizeRoomAlarmSchedule(await this.state.storage.get<RoomAlarmSchedule>(ALARM_SCHEDULE_KEY));
+  }
+
+  private async saveAlarmSchedule(schedule: RoomAlarmSchedule) {
+    const clean = normalizeRoomAlarmSchedule(schedule);
+    const nextDeadline = nextRoomAlarmDeadline(clean);
+    if (nextDeadline === null) {
+      await this.state.storage.delete(ALARM_SCHEDULE_KEY);
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+
+    await this.state.storage.put(ALARM_SCHEDULE_KEY, clean);
+    await this.state.storage.setAlarm(nextDeadline);
+  }
+
+  private async setAlarmDeadline(kind: RoomAlarmKind, deadline: number) {
+    const schedule = await this.loadAlarmSchedule();
+    schedule[kind] = deadline;
+    await this.saveAlarmSchedule(schedule);
+  }
+
+  private async resetIdle() {
+    await this.setAlarmDeadline("idle", Date.now() + fortPassIdleMs(this.fortPassEntitlement, IDLE_MS));
+  }
+
+  private async scheduleSabBomb(saboteur: string) {
+    const deadline = Date.now() + SAB_BOMB_MS;
+    await this.state.storage.put(SAB_BOMB_KEY, { saboteur, deadline, durationMs: SAB_BOMB_MS } satisfies SabBombState);
+    await this.setAlarmDeadline("sab-bomb", deadline);
+    this.broadcast("sab-bomb-start", { saboteur, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
   }
 
   private async destroyRoom(reason: string) {
@@ -363,10 +528,8 @@ export class Room implements DurableObject {
       clearTimeout(this.sabVote.timer);
       this.sabVote = null;
     }
-    if (this.sabBombTimer) {
-      clearTimeout(this.sabBombTimer);
-      this.sabBombTimer = null;
-    }
+    if (this.rpsGame?.timer) clearTimeout(this.rpsGame.timer);
+    if (this.tttGame?.timer) clearTimeout(this.tttGame.timer);
     // clear all grace timers
     for (const [, disc] of this.disconnected) clearTimeout(disc.timer);
     this.disconnected.clear();
@@ -376,17 +539,27 @@ export class Room implements DurableObject {
     }
     this.authVerifier = null;
     this.roomId = "";
+    this.fortPassEntitlement = null;
+    this.roomTheme = "classic";
     this.tossPillowFrom = null;
+    await this.state.storage.deleteAlarm();
     await this.state.storage.deleteAll();
   }
 
   // --- handlers ---
 
-  private async onSetUp(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
+  private async onSetUp(ws: WebSocket, msg: { name?: string; auth?: unknown; fortPassSessionId?: unknown }) {
     if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
-    if (this.getHost())
+    if (this.authVerifier || this.getHost())
       return this.send(ws, "error", { message: "fort already exists" });
+    if (
+      this.fortPassEntitlement &&
+      isFortPassActive(this.fortPassEntitlement) &&
+      !fortPassRedemptionMatches(this.fortPassEntitlement, msg.fortPassSessionId)
+    ) {
+      return this.send(ws, "error", { message: "paid room redemption required" });
+    }
 
     const name = msg.name.trim().slice(0, MAX_NAME_LEN);
     this.authVerifier = msg.auth.verifier;
@@ -405,11 +578,17 @@ export class Room implements DurableObject {
     ws.serializeAttachment(data);
 
     this.log(`created by ${this.tag(data)}`);
-    this.send(ws, "room-created", { room: this.roomId, leaderboards: this.leaderboards, gameQueue: this.gameQueueSnapshot() });
-    this.resetIdle();
+    this.send(ws, "room-created", {
+      room: this.roomId,
+      leaderboards: this.leaderboards,
+      gameQueue: this.gameQueueSnapshot(),
+      theme: this.roomTheme,
+      fortPass: this.fortPassSnapshot(),
+    });
+    await this.resetIdle();
   }
 
-  private onJoin(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
+  private async onJoin(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
     if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
     if (!this.getHost())
@@ -441,12 +620,14 @@ export class Room implements DurableObject {
       presence: this.getPresenceMap(),
       leaderboards: this.leaderboards,
       gameQueue: this.gameQueueSnapshot(),
+      theme: this.roomTheme,
+      fortPass: this.fortPassSnapshot(),
     });
     this.broadcast("member-joined", { name, presence: this.presenceOf(this.att(ws)) }, ws);
-    this.resetIdle();
+    await this.resetIdle();
   }
 
-  private onChat(ws: WebSocket, msg: { text?: string; enc?: unknown }) {
+  private async onChat(ws: WebSocket, msg: { text?: string; enc?: unknown }) {
     const a = this.att(ws);
     if (!a.name) return;
 
@@ -462,14 +643,14 @@ export class Room implements DurableObject {
     const style = sanitizeStyle((msg as any).style);
     if (enc) {
       this.broadcast("message", { from: a.name, enc, ...(style ? { style } : {}) });
-      this.resetIdle();
+      await this.resetIdle();
       return;
     }
 
     if (!ALLOW_LEGACY_PLAINTEXT) return this.send(ws, "error", { message: "encrypted chat required" });
     if (!msg.text?.trim()) return;
     this.broadcast("message", { from: a.name, text: msg.text.trim().slice(0, MAX_MSG_LEN), ...(style ? { style } : {}) });
-    this.resetIdle();
+    await this.resetIdle();
   }
 
   private async onKnockDown(ws: WebSocket) {
@@ -490,7 +671,7 @@ export class Room implements DurableObject {
     this.broadcast("typing", { name: a.name }, ws);
   }
 
-  private onSetStatus(ws: WebSocket, msg: { status?: string; awayText?: string }) {
+  private async onSetStatus(ws: WebSocket, msg: { status?: string; awayText?: string }) {
     const a = this.att(ws);
     if (!a.name) return;
     if (msg.status !== "available" && msg.status !== "away") return;
@@ -505,7 +686,21 @@ export class Room implements DurableObject {
     ws.serializeAttachment(a);
 
     this.broadcast("member-status", { name: a.name, status: a.status, awayText: a.awayText });
-    this.resetIdle();
+    await this.resetIdle();
+  }
+
+  private async onSetTheme(ws: WebSocket, msg: { theme?: unknown }) {
+    const a = this.att(ws);
+    if (!a.name || !a.isHost) return;
+    const theme = normalizeRoomTheme(msg.theme);
+    if (!theme) return this.send(ws, "error", { message: "invalid theme" });
+    if (!fortPassAllowsRoomTheme(this.fortPassEntitlement, theme)) {
+      return this.send(ws, "error", { message: "Fort Pass required" });
+    }
+    this.roomTheme = theme;
+    await this.state.storage.put(ROOM_THEME_KEY, theme);
+    this.broadcast("room-theme", { theme });
+    await this.resetIdle();
   }
 
   private async offerHost(oldHostName: string) {
@@ -568,18 +763,22 @@ export class Room implements DurableObject {
     if (!opts?.auto && !m.includes(starter)) return false;
     if (m.length < 3) return false;
 
+    const endsAt = Date.now() + VOTE_DURATION_MS;
     this.activeVote = {
       target,
       starter,
       yes: opts?.auto ? new Set() : new Set([starter]),
       no: new Set(),
       auto: !!opts?.auto,
+      endsAt,
       timer: setTimeout(() => this.resolveVote(), VOTE_DURATION_MS),
     };
     this.setActiveGame({ kind: "vote", by: starter, target });
     this.broadcast("vote-started", {
       target,
       starter: opts?.starterLabel || starter,
+      duration: VOTE_DURATION_MS,
+      endsAt,
       ...(opts?.auto ? { auto: true } : {}),
     });
     return true;
@@ -591,7 +790,18 @@ export class Room implements DurableObject {
     if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
     const tw = this.findWs(p2);
     if (!tw) return false;
-    this.rpsGame = { p1, p2 };
+    this.rpsGame = {
+      p1,
+      p2,
+      phase: "pending",
+      timer: setTimeout(() => {
+        if (!this.rpsGame || this.rpsGame.p1 !== p1 || this.rpsGame.p2 !== p2 || this.rpsGame.phase !== "pending") return;
+        this.broadcast("rps-declined", { from: p2 });
+        this.rpsGame = null;
+        this.kothGame = null;
+        this.clearActiveGame();
+      }, CHALLENGE_TIMEOUT_MS),
+    };
     this.setActiveGame({ kind: "rps", by: p1, target: p2 });
     this.send(tw, "rps-challenged", { from: p1 });
     this.broadcast("rps-pending", { p1, p2 });
@@ -604,7 +814,19 @@ export class Room implements DurableObject {
     if (!m.includes(p1) || !m.includes(p2) || p1 === p2) return false;
     const tw = this.findWs(p2);
     if (!tw) return false;
-    this.tttGame = { p1, p2, board: Array(9).fill(""), turn: 0 };
+    this.tttGame = {
+      p1,
+      p2,
+      phase: "pending",
+      timer: setTimeout(() => {
+        if (!this.tttGame || this.tttGame.p1 !== p1 || this.tttGame.p2 !== p2 || this.tttGame.phase !== "pending") return;
+        this.broadcast("ttt-declined", { from: p2 });
+        this.tttGame = null;
+        this.clearActiveGame();
+      }, CHALLENGE_TIMEOUT_MS),
+      board: Array(9).fill(""),
+      turn: 0,
+    };
     this.setActiveGame({ kind: "ttt", by: p1, target: p2 });
     this.send(tw, "ttt-challenged", { from: p1 });
     this.broadcast("ttt-pending", { p1, p2 });
@@ -620,7 +842,7 @@ export class Room implements DurableObject {
     this.saboteurActive = true;
     this.sabStrikes = 0;
     this.sabCanStrike = true;
-    this.saboteur = members[Math.floor(Math.random() * members.length)];
+    this.saboteur = members[randomIndex(members.length)];
     this.setActiveGame({ kind: "saboteur", by: starter });
     this.log(`saboteur mode started — ${this.saboteur} is the saboteur`);
 
@@ -646,7 +868,7 @@ export class Room implements DurableObject {
     if (!hostName) return false;
 
     this.kothGame = { challenger, host: hostName };
-    this.rpsGame = { p1: challenger, p2: hostName };
+    this.rpsGame = { p1: challenger, p2: hostName, phase: "playing", koth: true };
     this.setActiveGame({ kind: "koth", by: challenger, target: hostName });
     this.broadcast("koth-started", { challenger, host: hostName });
     this.broadcast("rps-started", { p1: challenger, p2: hostName, koth: true });
@@ -678,6 +900,7 @@ export class Room implements DurableObject {
   private onCastVote(ws: WebSocket, msg: { vote?: string }) {
     const a = this.att(ws);
     if (!a.name || !this.activeVote) return;
+    if (msg.vote !== "yes" && msg.vote !== "no") return;
     if (a.name === this.activeVote.target) return; // target can't vote
     if (this.activeVote.yes.has(a.name) || this.activeVote.no.has(a.name)) return; // already voted
 
@@ -750,12 +973,17 @@ export class Room implements DurableObject {
   private onRpsAccept(ws: WebSocket) {
     const a = this.att(ws);
     if (!this.rpsGame || a.name !== this.rpsGame.p2) return;
+    if (this.rpsGame.phase !== "pending") return;
+    if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
+    this.rpsGame.timer = undefined;
+    this.rpsGame.phase = "playing";
     this.broadcast("rps-started", { p1: this.rpsGame.p1, p2: this.rpsGame.p2 });
   }
 
   private onRpsDecline(ws: WebSocket) {
     const a = this.att(ws);
     if (!this.rpsGame || a.name !== this.rpsGame.p2) return;
+    if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
     this.broadcast("rps-declined", { from: a.name });
     this.rpsGame = null;
     if (this.kothGame) this.kothGame = null;
@@ -765,7 +993,8 @@ export class Room implements DurableObject {
   private onRpsPick(ws: WebSocket, msg: { pick?: string }) {
     const a = this.att(ws);
     if (!this.rpsGame || !msg.pick) return;
-    if (!["rock", "paper", "scissors"].includes(msg.pick)) return;
+    if (this.rpsGame.phase !== "playing") return;
+    if (!isRpsPick(msg.pick)) return;
 
     if (a.name === this.rpsGame.p1) this.rpsGame.pick1 = msg.pick;
     else if (a.name === this.rpsGame.p2) this.rpsGame.pick2 = msg.pick;
@@ -775,17 +1004,15 @@ export class Room implements DurableObject {
 
     if (this.rpsGame.pick1 && this.rpsGame.pick2) {
       const { p1, p2, pick1, pick2 } = this.rpsGame;
-      let winner: string | null = null;
-      if (pick1 !== pick2) {
-        const wins: Record<string, string> = { rock: "scissors", scissors: "paper", paper: "rock" };
-        winner = wins[pick1!] === pick2 ? p1 : p2;
-      }
+      const winner = rpsWinner(p1, p2, pick1, pick2);
       const isKoth = !!this.kothGame;
       this.broadcast("rps-result", { p1, p2, pick1, pick2, winner, koth: isKoth || undefined });
       this.log(`RPS: ${p1}(${pick1}) vs ${p2}(${pick2}) → ${winner || "draw"}`);
       if (winner) {
-        this.bumpLeaderboard("rps", winner);
-        this.emitLeaderboards();
+        if (!isKoth) {
+          this.bumpLeaderboard("rps", winner);
+          this.emitLeaderboards();
+        }
       }
       this.rpsGame = null;
       if (isKoth && winner) this.resolveKoth(winner);
@@ -817,12 +1044,17 @@ export class Room implements DurableObject {
   private onTttAccept(ws: WebSocket) {
     const a = this.att(ws);
     if (!this.tttGame || a.name !== this.tttGame.p2) return;
+    if (this.tttGame.phase !== "pending") return;
+    if (this.tttGame.timer) clearTimeout(this.tttGame.timer);
+    this.tttGame.timer = undefined;
+    this.tttGame.phase = "playing";
     this.broadcast("ttt-started", { p1: this.tttGame.p1, p2: this.tttGame.p2, board: this.tttGame.board, turn: this.tttGame.turn });
   }
 
   private onTttDecline(ws: WebSocket) {
     const a = this.att(ws);
     if (!this.tttGame || a.name !== this.tttGame.p2) return;
+    if (this.tttGame.timer) clearTimeout(this.tttGame.timer);
     this.broadcast("ttt-declined", { from: a.name });
     this.tttGame = null;
     this.clearActiveGame();
@@ -832,9 +1064,10 @@ export class Room implements DurableObject {
     const a = this.att(ws);
     if (!this.tttGame || msg.cell == null) return;
     const g = this.tttGame;
+    if (g.phase !== "playing") return;
     const currentPlayer = g.turn % 2 === 0 ? g.p1 : g.p2;
     if (a.name !== currentPlayer) return;
-    if (msg.cell < 0 || msg.cell > 8 || g.board[msg.cell]) return;
+    if (!Number.isInteger(msg.cell) || msg.cell < 0 || msg.cell > 8 || g.board[msg.cell]) return;
 
     g.board[msg.cell] = g.turn % 2 === 0 ? "X" : "O";
     g.turn++;
@@ -842,12 +1075,7 @@ export class Room implements DurableObject {
     // check win
     const mark = g.board[msg.cell];
     let winner: string | null = null;
-    for (const combo of TTT_WINS) {
-      if (combo.every(i => g.board[i] === mark)) {
-        winner = a.name;
-        break;
-      }
-    }
+    if (tttWinner(g.board, mark)) winner = a.name;
     const draw = !winner && g.board.every(c => c);
 
     this.broadcast("ttt-update", { board: g.board, turn: g.turn, lastMove: msg.cell, winner, draw });
@@ -899,6 +1127,7 @@ export class Room implements DurableObject {
       accuser: a.name,
       suspect: msg.suspect,
       duration: SABOTEUR_VOTE_MS,
+      endsAt: Date.now() + SABOTEUR_VOTE_MS,
     });
     this.log(`sab accusation started: ${a.name} accused ${msg.suspect}`);
   }
@@ -964,7 +1193,7 @@ export class Room implements DurableObject {
     }
   }
 
-  private onSabStrike(ws: WebSocket) {
+  private async onSabStrike(ws: WebSocket) {
     const a = this.att(ws);
     if (!a.name || !this.saboteurActive || a.name !== this.saboteur) return;
     if (!this.sabCanStrike) return this.send(ws, "error", { message: "you can strike after a wrong accusation vote" });
@@ -982,12 +1211,8 @@ export class Room implements DurableObject {
       this.sabCanStrike = false;
       this.saboteur = null;
       if (this.sabVote) { clearTimeout(this.sabVote.timer); this.sabVote = null; }
-      if (this.sabBombTimer) clearTimeout(this.sabBombTimer);
-      this.broadcast("sab-bomb-start", { saboteur: a.name, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
-      this.sabBombTimer = setTimeout(() => {
-        this.sabBombTimer = null;
-        this.destroyRoom("the saboteur's bomb exploded!");
-      }, SAB_BOMB_MS);
+      await this.resetIdle();
+      await this.scheduleSabBomb(a.name);
     }
   }
 
@@ -1036,7 +1261,7 @@ export class Room implements DurableObject {
     this.clearActiveGame();
   }
 
-  private onAcceptHost(ws: WebSocket) {
+  private async onAcceptHost(ws: WebSocket) {
     const a = this.att(ws);
     if (!a.name || a.isHost || this.getHost()) return;
 
@@ -1056,7 +1281,7 @@ export class Room implements DurableObject {
 
     this.broadcast("new-host", { name: a.name });
     this.log(`${this.tag(a)} caught the pillow — new host`);
-    this.resetIdle();
+    await this.resetIdle();
   }
 
   private async onRejectHost(ws: WebSocket) {
@@ -1114,11 +1339,13 @@ export class Room implements DurableObject {
       }
 
       this.broadcast("member-left", { name: a.name });
+      this.cancelActiveGamesForMember(a.name);
       this.pruneGameQueue();
       await this.offerHost(a.name);
     } else {
       this.log(`${this.tag(a)} left (${this.getMembers().length - 1} remaining)`);
       this.broadcast("member-left", { name: a.name }, ws);
+      this.cancelActiveGamesForMember(a.name);
       this.pruneGameQueue();
       try { ws.close(1000, "left"); } catch {}
     }
@@ -1139,6 +1366,7 @@ export class Room implements DurableObject {
     const timer = setTimeout(async () => {
       this.disconnected.delete(name);
       this.broadcast("member-left", { name });
+      this.cancelActiveGamesForMember(name);
       this.pruneGameQueue();
       if (wasHost) {
         const guests = this.state.getWebSockets().filter(w => {
@@ -1162,7 +1390,7 @@ export class Room implements DurableObject {
     try { ws.close(1000, "grace"); } catch {}
   }
 
-  private onRejoin(ws: WebSocket, msg: { name?: string; auth?: unknown; room?: string }) {
+  private async onRejoin(ws: WebSocket, msg: { name?: string; auth?: unknown; room?: string }) {
     if (!msg.name?.trim() || !validAuth(msg.auth))
       return this.send(ws, "error", { message: "name and password required" });
     if (!this.getHost() && this.disconnected.size === 0 && this.state.getWebSockets().filter(w => this.att(w).name).length === 0)
@@ -1197,12 +1425,14 @@ export class Room implements DurableObject {
         presence: this.getPresenceMap(),
         leaderboards: this.leaderboards,
         gameQueue: this.gameQueueSnapshot(),
+        theme: this.roomTheme,
+        fortPass: this.fortPassSnapshot(),
       });
       this.broadcast("member-back", { name }, ws);
-      this.resetIdle();
+      await this.resetIdle();
     } else {
       // grace expired, fall back to normal join
-      this.onJoin(ws, msg as any);
+      await this.onJoin(ws, msg as any);
     }
   }
 }

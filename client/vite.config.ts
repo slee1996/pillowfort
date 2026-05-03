@@ -10,6 +10,9 @@ export default defineConfig({
         target: "ws://localhost:3000",
         ws: true,
       },
+      "/analytics": {
+        target: "http://localhost:3000",
+      },
     },
   },
 });

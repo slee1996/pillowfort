@@ -14,19 +14,15 @@ export function VoteBanner() {
       setMyVote(null);
       return;
     }
-    setRemaining(30);
+    const update = () => setRemaining(Math.max(0, Math.ceil((vote.endsAt - Date.now()) / 1000)));
+    update();
     setMyVote(null);
     const timer = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return r - 1;
-      });
+      update();
+      if (Date.now() >= vote.endsAt) clearInterval(timer);
     }, 1000);
     return () => clearInterval(timer);
-  }, [vote?.target]);
+  }, [vote?.target, vote?.endsAt]);
 
   if (!vote) return null;
 

@@ -1,6 +1,28 @@
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
+import { track } from "../../services/analytics";
 import { showToast } from "../xp/Toast";
+
+function ActionButton({
+  id,
+  icon,
+  label,
+  title,
+  onClick,
+}: {
+  id?: string;
+  icon: string;
+  label: string;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button id={id} className="aim-action-btn" onClick={onClick} title={title}>
+      <span className="aim-action-icon" aria-hidden>{icon}</span>
+      <span className="aim-action-label">{label}</span>
+    </button>
+  );
+}
 
 export function ActionBar({ onPickerOpen }: { onPickerOpen: (type: string) => void }) {
   const isHost = useGameStore((s) => s.isHost);
@@ -28,16 +50,24 @@ export function ActionBar({ onPickerOpen }: { onPickerOpen: (type: string) => vo
     if (roomId) {
       const link = `${location.origin}/${roomId}`;
       const text = password ? `${link}\npassword: ${password}` : link;
-      navigator.clipboard.writeText(text).then(() => showToast("Invite link copied!"));
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Invite link copied!");
+        track("invite_copied", {
+          role: isHost ? "host" : "guest",
+          source: "action_bar",
+          memberCount: members.length,
+        });
+      });
     }
   };
 
   return (
     <div className="aim-action-bar">
-      <button id="aim-btn-toss" className="aim-action-btn" onClick={handleToss} title="Toss Pillow">🛏 Toss</button>
-      <button className="aim-action-btn" onClick={handleMute} title="Mute">🔇 Mute</button>
-      <button className="aim-action-btn" onClick={handleInfo} title="Info">ℹ Info</button>
-      <button className="aim-action-btn" onClick={handleInvite} title="Copy Invite">✉ Invite</button>
+      <ActionButton id="aim-btn-toss" icon="🛏" label="Toss" title="Toss Pillow" onClick={handleToss} />
+      <ActionButton icon="🔇" label="Mute" title="Mute" onClick={handleMute} />
+      <span className="aim-action-separator" aria-hidden />
+      <ActionButton icon="ℹ" label="Info" title="Info" onClick={handleInfo} />
+      <ActionButton icon="✉" label="Invite" title="Copy Invite" onClick={handleInvite} />
     </div>
   );
 }

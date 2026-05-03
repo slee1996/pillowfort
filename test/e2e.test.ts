@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
+import { computeStripeWebhookSignature } from "../src/stripe";
 import {
   startServer, stopServer, cleanupClients, getPort,
-  connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth,
+  connectClient, connectClientToRoom, createRoom, createRoomWithId, joinRoom, roomAuth,
 } from "./helpers";
 
 beforeAll(startServer);
@@ -71,6 +72,156 @@ describe("Invite link flow", () => {
     expect(res.status).toBe(200);
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");
+  });
+
+  it("GET /:customCode returns HTML for paid custom room links", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/party-1`);
+    expect(res.status).toBe(200);
+    const ct = res.headers.get("content-type") || "";
+    expect(ct).toContain("text/html");
+  });
+});
+
+// ---- Beta analytics ----
+
+describe("Beta analytics", () => {
+  it("POST /analytics accepts sanitized funnel events", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/analytics`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        event: "game_started",
+        props: { kind: "rps", role: "host", memberCount: 3 },
+      }),
+    });
+    expect(res.status).toBe(204);
+  });
+
+  it("POST /analytics rejects unknown events", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/analytics`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        event: "message_text",
+        props: { text: "do not collect me" },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ---- Fort Pass checkout boundary ----
+
+describe("Fort Pass custom-code availability", () => {
+  it("reports invalid, available, and taken custom room codes", async () => {
+    await createRoomWithId("taken-1", "host", "secret");
+
+    const invalid = await fetch(`http://localhost:${getPort()}/api/fort-pass/code?code=analytics`);
+    const available = await fetch(`http://localhost:${getPort()}/api/fort-pass/code?code=Party-1`);
+    const taken = await fetch(`http://localhost:${getPort()}/api/fort-pass/code?code=taken-1`);
+
+    expect(invalid.headers.get("cache-control")).toBe("no-store");
+    expect(await invalid.json()).toEqual({ code: null, available: false, reason: "invalid" });
+    expect(await available.json()).toEqual({ code: "party-1", available: true });
+    expect(await taken.json()).toEqual({ code: "taken-1", available: false, reason: "taken" });
+  });
+});
+
+describe("Fort Pass checkout boundary", () => {
+  it("validates checkout requests but does not grant paid perks without provider config", async () => {
+    await createRoomWithId("taken-2", "host", "secret");
+
+    const invalid = await fetch(`http://localhost:${getPort()}/api/fort-pass/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ customRoomCode: "analytics" }),
+    });
+    const taken = await fetch(`http://localhost:${getPort()}/api/fort-pass/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ customRoomCode: "taken-2" }),
+    });
+    const notConfigured = await fetch(`http://localhost:${getPort()}/api/fort-pass/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ customRoomCode: "Party-1", paid: true }),
+    });
+
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: "invalid_custom_room_code" });
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toEqual({ error: "custom_room_code_taken", code: "taken-2" });
+    expect(notConfigured.status).toBe(501);
+    expect(await notConfigured.json()).toEqual({ error: "checkout_not_configured", code: "party-1" });
+  });
+});
+
+describe("Fort Pass webhook fulfillment", () => {
+  it("reserves a paid custom room code after a signed Stripe webhook", async () => {
+    const event = {
+      id: "evt_test_123",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_paid_1",
+          object: "checkout.session",
+          mode: "payment",
+          payment_status: "paid",
+          metadata: {
+            kind: "fort-pass",
+            custom_room_code: "paid-1",
+          },
+        },
+      },
+    };
+    const payload = JSON.stringify(event);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = await computeStripeWebhookSignature(payload, timestamp, "whsec_test");
+
+    const webhook = await fetch(`http://localhost:${getPort()}/api/stripe/webhook`, {
+      method: "POST",
+      headers: { "stripe-signature": `t=${timestamp},v1=${signature}` },
+      body: payload,
+    });
+    const availability = await fetch(`http://localhost:${getPort()}/api/fort-pass/code?code=paid-1`);
+    const blocked = await connectClientToRoom("paid-1");
+    blocked.send({ type: "set-up", name: "intruder", auth: await roomAuth("paid-1", "secret") });
+    const blockedError = await blocked.waitFor("error");
+    const created = await createRoomWithId("paid-1", "host", "secret", "cs_test_paid_1");
+    created.host.send({ type: "set-theme", theme: "retro-green" });
+    const theme = await created.host.waitFor("room-theme");
+
+    expect(webhook.status).toBe(200);
+    expect(await webhook.json()).toEqual({ received: true, fulfilled: true, code: "paid-1" });
+    expect(await availability.json()).toEqual({ code: "paid-1", available: false, reason: "taken" });
+    expect(blockedError.message).toBe("paid room redemption required");
+    expect(created.roomId).toBe("paid-1");
+    expect(theme.theme).toBe("retro-green");
+  });
+
+  it("rejects unsigned Stripe webhooks", async () => {
+    const res = await fetch(`http://localhost:${getPort()}/api/stripe/webhook`, {
+      method: "POST",
+      body: JSON.stringify({ type: "checkout.session.completed" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "bad_webhook_signature" });
+  });
+});
+
+describe("Room creation collision", () => {
+  it("does not overwrite an existing room with the same custom code", async () => {
+    await createRoomWithId("party-1", "alice", "secret");
+    const second = await connectClientToRoom("party-1");
+    second.send({
+      type: "set-up",
+      name: "mallory",
+      auth: await roomAuth("party-1", "other-secret"),
+    });
+
+    const err = await second.waitFor("error");
+    expect(err.message).toContain("already exists");
   });
 });
 

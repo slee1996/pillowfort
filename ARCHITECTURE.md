@@ -23,11 +23,20 @@ ephemeral chat rooms. set up, hang out, knock down.
 
 ## what persists
 
-nothing meaningful. ever.
+nothing resembling chat history.
 
-durable objects hold the room password in storage while the room is alive, but when the fort is
-knocked down, `storage.deleteAll()` wipes everything. the only thing a user carries between forts
-is their **screen name**, stored client-side (localStorage).
+durable objects hold the minimum live-room coordination state while a fort exists:
+
+- room ID
+- password verifier, not the plaintext password
+- production alarm schedule
+- active Fort Pass entitlement, if the room is paid
+- per-socket member attachments such as name, host flag, presence, and short-window rate-limit data
+
+when the fort is knocked down, `storage.deleteAll()` wipes the durable object state. the only thing
+a user carries between forts is their **screen name**, stored client-side (localStorage).
+
+the server does not persist plaintext chat messages, room passwords, or derived encryption keys.
 
 ## room lifecycle
 
@@ -82,18 +91,29 @@ websockets. idle timeout uses `setTimeout`. good for development and testing.
 │                  │         │                      │
 │ routes:          │         │ - holds websockets   │
 │  /ws → DO        │         │ - manages chat       │
+│  /analytics      │         │ - manages games      │
+│  /api/fort-pass  │         │ - paid entitlements  │
+│  /api/stripe     │         │ - alarm schedule     │
 │  /* → static     │         │ - host migration     │
-│      assets      │         │ - idle alarm         │
+│      assets      │         │                      │
 └─────────────────┘         └─────────────────────┘
 ```
 
 the worker entry point routes `/ws?room=XXXXX` to a durable object named by the room ID.
-everything else is served from cloudflare assets (the single `index.html`).
+`/analytics` accepts sanitized beta funnel events. `/api/fort-pass/code` checks custom-code
+availability without revealing room metadata. `/api/fort-pass/checkout` creates Stripe Checkout
+Sessions when provider config is present. `/api/stripe/webhook` verifies signed Stripe webhook
+payloads before fulfilling paid entitlements. the checkout success redirect carries the room code
+and Stripe Checkout Session ID so the buyer can redeem a paid room without an account. everything
+else is served from cloudflare assets (the single `index.html`).
 
 each durable object uses the **hibernation API**:
 - `state.acceptWebSocket(server)` instead of manual connection tracking
 - `serializeAttachment()` / `deserializeAttachment()` for per-socket state (name, hash, isHost, etc.)
-- `state.storage.setAlarm()` for idle timeout instead of `setTimeout`
+- `state.storage.setAlarm()` for the nearest production deadline instead of critical `setTimeout`s
+
+the current alarm schedule covers idle destruction and the saboteur bomb countdown. vote and
+challenge timers are still best-effort game state for beta.
 
 ## user identity
 
@@ -166,7 +186,7 @@ interface WSData {
 | name length           | 24 chars     | —      |
 | message length        | 2000 chars   | —      |
 | guests per fort       | 20           | per fort |
-| idle timeout          | 10 minutes   | per fort |
+| idle timeout          | 10 minutes free / 6 hours Fort Pass | per fort |
 
 ## tech
 
@@ -175,7 +195,7 @@ interface WSData {
 | server  | bun        | cloudflare workers      |
 | rooms   | in-memory  | durable objects         |
 | client  | react + vite | react + vite          |
-| storage | none       | none (ephemeral DO)     |
+| storage | process memory | ephemeral durable object storage |
 | build   | vite       | vite + wrangler         |
 | styling | XP/AIM     | XP/AIM                  |
 
@@ -195,6 +215,7 @@ interface WSData {
   and passed to the server. on cloudflare, this becomes the durable object name.
 - **presence is room-scoped only.** available/away is visible only to members already inside the same fort; no cross-room or global presence index.
 - **chat encryption is room-key based.** message payload (text + style) can be end-to-end encrypted using a key derived from room ID + password, bound to sender identity via AES-GCM additional authenticated data, with basic replay-drop in-session; relay still sees metadata (sender/events/timing).
+- **Fort Pass monetizes hosts, not guests.** paid custom codes and longer idle windows are granted only after signed Stripe webhook fulfillment. guests still join without accounts or billing.
 
 ## prior art
 

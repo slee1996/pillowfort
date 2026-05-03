@@ -1,8 +1,9 @@
 import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
-import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem } from "./protocol";
+import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem, RoomTheme, FortPassRoomPerks } from "./protocol";
 import { decryptChatPayload, roomSafetyCode } from "./chatCrypto";
+import { track, trackOnce } from "./analytics";
 
 const SABOTEUR_EXPLOSION_MS = 1200;
 let sabBombInterval: ReturnType<typeof setInterval> | null = null;
@@ -27,6 +28,16 @@ function normalizeGameQueue(src?: RoomGameQueue): RoomGameQueue {
     current: src?.current ? { ...src.current } : null,
     queue: (src?.queue || []).map((q) => ({ ...q })),
   };
+}
+
+function normalizeRoomTheme(theme: unknown): RoomTheme {
+  return theme === "retro-green" || theme === "midnight" ? theme : "classic";
+}
+
+function normalizeFortPass(src: unknown): FortPassRoomPerks | null {
+  if (!src || typeof src !== "object") return null;
+  const raw = src as Record<string, unknown>;
+  return raw.themePack === "retro-plus" ? { themePack: "retro-plus" } : null;
 }
 
 function queueItemText(item: GameQueueItem): string {
@@ -112,6 +123,9 @@ export function handleMessage(msg: IncomingMessage) {
       s.setMemberPresenceMap({ [s.name]: { status: "available" } });
       s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
+      s.setRoomTheme(normalizeRoomTheme(msg.theme));
+      s.setFortPass(normalizeFortPass(msg.fortPass));
+      s.setPendingFortPass(null);
       s.setScreen("chat");
       s.clearMessages();
       s.addSystemMessage("Welcome to the fort.");
@@ -126,6 +140,7 @@ export function handleMessage(msg: IncomingMessage) {
       }
       playDoorOpen();
       requestWakeLock();
+      track("room_created", { role: "host", memberCount: 1 });
       break;
     }
 
@@ -139,6 +154,8 @@ export function handleMessage(msg: IncomingMessage) {
       else s.setMemberPresenceMap(Object.fromEntries(msg.members.map((m) => [m, { status: "available" as const }])));
       s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
+      s.setRoomTheme(normalizeRoomTheme(msg.theme));
+      s.setFortPass(normalizeFortPass(msg.fortPass));
       s.setScreen("chat");
       s.clearMessages();
       if (renamed) s.addSystemMessage(`That name's taken — you're ${msg.name} now`);
@@ -152,6 +169,7 @@ export function handleMessage(msg: IncomingMessage) {
       }
       playDoorOpen();
       requestWakeLock();
+      track("room_joined", { role: "guest", memberCount: msg.members.length });
       break;
     }
 
@@ -166,6 +184,8 @@ export function handleMessage(msg: IncomingMessage) {
       else s.setMemberPresenceMap(Object.fromEntries(msg.members.map((m) => [m, { status: "available" as const }])));
       s.setLeaderboards(normalizeLeaderboards(msg.leaderboards));
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
+      s.setRoomTheme(normalizeRoomTheme(msg.theme));
+      s.setFortPass(normalizeFortPass(msg.fortPass));
       s.addSystemMessage("Reconnected!");
       requestWakeLock();
       break;
@@ -178,6 +198,11 @@ export function handleMessage(msg: IncomingMessage) {
 
     case "game-queue": {
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
+      break;
+    }
+
+    case "room-theme": {
+      s.setRoomTheme(normalizeRoomTheme(msg.theme));
       break;
     }
 
@@ -207,6 +232,12 @@ export function handleMessage(msg: IncomingMessage) {
       s.setMemberPresence(msg.name, msg.presence?.status || "available", msg.presence?.awayText);
       s.addSystemMessage(`${msg.name} entered the fort.`);
       playDoorOpen();
+      if (s.isHost) {
+        track("guest_joined", {
+          role: "host",
+          memberCount: useGameStore.getState().members.length,
+        });
+      }
       break;
     }
 
@@ -268,6 +299,10 @@ export function handleMessage(msg: IncomingMessage) {
 
     case "knocked-down": {
       const stateNow = useGameStore.getState();
+      trackOnce(`room-knocked-down:${stateNow.roomId || "unknown"}`, "room_knocked_down", {
+        role: stateNow.isHost ? "host" : "guest",
+        memberCount: stateNow.members.length,
+      });
       const isSabBombDetonation = stateNow.sabStrikes >= 3;
       if (isSabBombDetonation) {
         stateNow.triggerSabDetonation();
@@ -319,12 +354,19 @@ export function handleMessage(msg: IncomingMessage) {
 
     // --- Vote ---
     case "vote-started": {
+      const duration = msg.duration || 30_000;
+      const endsAt = msg.endsAt || Date.now() + duration;
+      if (msg.starter === s.name) {
+        track("game_started", { kind: "vote", role: s.isHost ? "host" : "guest", memberCount: s.members.length });
+      }
       s.addSystemMessage(`⚔ PILLOW FIGHT! ${msg.starter} wants to kick ${msg.target}!`);
       s.setActiveVote({
         target: msg.target,
         starter: msg.starter,
         auto: msg.auto,
-        timerStart: Date.now(),
+        duration,
+        endsAt,
+        timerStart: endsAt - duration,
       });
       break;
     }
@@ -359,6 +401,13 @@ export function handleMessage(msg: IncomingMessage) {
       break;
 
     case "rps-started": {
+      if (!msg.koth && msg.p1 === s.name) {
+        track("game_started", {
+          kind: "rps",
+          role: s.isHost ? "host" : "guest",
+          memberCount: s.members.length,
+        });
+      }
       s.addSystemMessage(
         `✊ ${msg.p1} vs ${msg.p2} — Rock Paper Scissors!${msg.koth ? " (King of the Hill!)" : ""}`
       );
@@ -421,6 +470,9 @@ export function handleMessage(msg: IncomingMessage) {
       break;
 
     case "ttt-started": {
+      if (msg.p1 === s.name) {
+        track("game_started", { kind: "ttt", role: s.isHost ? "host" : "guest", memberCount: s.members.length });
+      }
       s.addSystemMessage(`⬜ ${msg.p1} (X) vs ${msg.p2} (O) — Tic-Tac-Toe!`);
       if (msg.p1 === s.name || msg.p2 === s.name) {
         s.setTttState({
@@ -465,6 +517,9 @@ export function handleMessage(msg: IncomingMessage) {
 
     // --- Saboteur ---
     case "sab-started": {
+      if (msg.starter === s.name) {
+        track("game_started", { kind: "saboteur", role: s.isHost ? "host" : "guest", memberCount: s.members.length });
+      }
       stopSabBombCountdown();
       s.setSabBombCountdown(0);
       s.setSabVote(null);
@@ -488,11 +543,13 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "sab-vote-start": {
+      const endsAt = msg.endsAt || Date.now() + msg.duration;
       s.setSabVote({
         accuser: msg.accuser,
         suspect: msg.suspect,
         duration: msg.duration,
-        timerStart: Date.now(),
+        endsAt,
+        timerStart: endsAt - msg.duration,
       });
       s.addSystemMessage(`🕵 ACCUSATION! ${msg.accuser} accused ${msg.suspect}. Vote yes/no.`);
       break;
@@ -546,6 +603,9 @@ export function handleMessage(msg: IncomingMessage) {
 
     // --- KOTH ---
     case "koth-started": {
+      if (msg.challenger === s.name) {
+        track("game_started", { kind: "koth", role: "guest", memberCount: s.members.length });
+      }
       s.addSystemMessage(`👑 ${msg.challenger} challenges ${msg.host} for the crown! RPS duel!`);
       break;
     }

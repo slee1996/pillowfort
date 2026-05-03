@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients,
-  createRoom, joinRoom,
+  createRoom, joinRoom, TEST_GRACE_MS,
 } from "./helpers";
 
 beforeAll(startServer);
@@ -79,6 +79,50 @@ describe("Rock Paper Scissors", () => {
     // queued duel should begin automatically
     const nextChallenge = await host.waitFor("rps-challenged");
     expect(nextChallenge.from).toBe("bob");
+  });
+
+  it("ignores picks before challenge is accepted", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+    host.send({ type: "rps-pick", pick: "rock" });
+    bob.send({ type: "rps-pick", pick: "scissors" });
+
+    bob.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+    host.send({ type: "rps-pick", pick: "rock" });
+    bob.send({ type: "rps-pick", pick: "scissors" });
+
+    const result = await host.waitFor("rps-result");
+    expect(result.winner).toBe("alice");
+  });
+
+  it("auto-declines stale challenges", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+
+    const declined = await host.waitFor("rps-declined", 1000);
+    expect(declined.from).toBe("bob");
+  });
+
+  it("cancels an active duel when a player disconnects through grace", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+    bob.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+
+    await bob.close();
+    await host.waitFor("member-away");
+    const declined = await host.waitFor("rps-declined", TEST_GRACE_MS + 1000);
+    expect(declined.from).toBe("bob");
   });
 });
 
@@ -183,6 +227,33 @@ describe("Tic-Tac-Toe", () => {
     expect(update.board[0]).toBe("X");
     expect(update.turn).toBe(1);
   });
+
+  it("ignores moves before challenge is accepted", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "ttt-challenge", target: "bob" });
+    await bob.waitFor("ttt-challenged");
+    host.send({ type: "ttt-move", cell: 0 });
+
+    bob.send({ type: "ttt-accept" });
+    await host.waitFor("ttt-started");
+    host.send({ type: "ttt-move", cell: 0 });
+    const [, update] = await Promise.all([host.waitFor("ttt-update"), bob.waitFor("ttt-update")]);
+    expect(update.board[0]).toBe("X");
+    expect(update.turn).toBe(1);
+  });
+
+  it("auto-declines stale challenges", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    host.send({ type: "ttt-challenge", target: "bob" });
+    await bob.waitFor("ttt-challenged");
+
+    const declined = await host.waitFor("ttt-declined", 1000);
+    expect(declined.from).toBe("bob");
+  });
 });
 
 // ---- Pillow Fight (Vote to Eject) ----
@@ -228,6 +299,23 @@ describe("Pillow Fight (Vote)", () => {
     host.send({ type: "start-vote", target: "bob" });
     const err = await host.waitFor("error");
     expect(err.message).toContain("need at least 3 people");
+  });
+
+  it("ignores invalid vote values", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+
+    host.send({ type: "start-vote", target: "bob" });
+    await carol.waitFor("vote-started");
+
+    carol.send({ type: "cast-vote", vote: "maybe" });
+    carol.send({ type: "cast-vote", vote: "yes" });
+
+    const result = await host.waitFor("vote-result");
+    expect(result.ejected).toBe(true);
+    expect(result.yes).toBe(2);
+    expect(result.no).toBe(0);
   });
 });
 
@@ -641,6 +729,22 @@ describe("Roomwide leaderboards", () => {
     if (first.leaderboards.koth.bob === 1) return;
     const second = await host.waitFor("leaderboards");
     expect(second.leaderboards.koth.bob).toBe(1);
+  });
+
+  it("does not count KOTH duels as normal RPS wins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+
+    bob.send({ type: "koth-challenge" });
+    await host.waitFor("koth-started");
+    await host.waitFor("rps-started");
+    bob.send({ type: "rps-pick", pick: "paper" });
+    host.send({ type: "rps-pick", pick: "rock" });
+    await host.waitFor("rps-result");
+
+    const lb = await host.waitFor("leaderboards");
+    expect(lb.leaderboards.koth.bob).toBe(1);
+    expect(lb.leaderboards.rps.bob || 0).toBe(0);
   });
 });
 

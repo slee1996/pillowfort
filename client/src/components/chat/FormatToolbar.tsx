@@ -3,7 +3,12 @@ import { useFormatStore } from "../../stores/formatStore";
 import { useGameStore } from "../../stores/gameStore";
 
 const FMT_COLORS = ["#FF0000", "#0000FF", "#008000", "#FF8C00", "#800080", "#000000", "#FF69B4", "#8B4513"];
-const EMOJIS = ["😊", "😂", "😍", "👍", "👋", "🎉", "🔥", "❤️"];
+const EMOJIS = [
+  "😊", "😂", "😉", "😍",
+  "😎", "😛", "😢", "😡",
+  "😳", "🤔", "👍", "👋",
+  "🎉", "🔥", "❤️", "💤",
+];
 
 export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string) => void }) {
   const { bold, italic, underline, color, toggleBold, toggleItalic, toggleUnderline, setColor } = useFormatStore();

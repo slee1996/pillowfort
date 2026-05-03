@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus, RoomLeaderboards, RoomGameQueue } from "../services/protocol";
+import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus, RoomLeaderboards, RoomGameQueue, RoomTheme, FortPassRoomPerks } from "../services/protocol";
 import { clearChatCryptoState } from "../services/chatCrypto";
 
 let msgId = 0;
@@ -26,7 +26,9 @@ export interface VoteState {
   starter: string;
   auto?: boolean;
   myVote?: "yes" | "no";
+  duration: number;
   timerStart: number;
+  endsAt: number;
 }
 
 export interface RpsState {
@@ -56,6 +58,7 @@ export interface SabVoteState {
   suspect: string;
   duration: number;
   timerStart: number;
+  endsAt: number;
   myVote?: "yes" | "no";
 }
 
@@ -66,6 +69,8 @@ export interface GameStore {
   roomId: string | null;
   password: string | null;
   isHost: boolean;
+  roomTheme: RoomTheme;
+  fortPass: FortPassRoomPerks | null;
 
   // Room
   members: string[];
@@ -103,6 +108,7 @@ export interface GameStore {
 
   // Pending room from URL
   pendingRoom: string | null;
+  pendingFortPass: { code: string; sessionId: string } | null;
 
   // Error
   errorMessage: string | null;
@@ -114,6 +120,8 @@ export interface GameStore {
   setRoomId: (roomId: string | null) => void;
   setPassword: (password: string | null) => void;
   setIsHost: (isHost: boolean) => void;
+  setRoomTheme: (theme: RoomTheme) => void;
+  setFortPass: (fortPass: FortPassRoomPerks | null) => void;
   setMembers: (members: string[]) => void;
   setMemberPresenceMap: (presence: Record<string, MemberPresence>) => void;
   setMemberPresence: (name: string, status: PresenceStatus, awayText?: string) => void;
@@ -145,6 +153,7 @@ export interface GameStore {
   setReconnectAttempts: (attempts: number) => void;
   setIntentionalLeave: (intentional: boolean) => void;
   setPendingRoom: (room: string | null) => void;
+  setPendingFortPass: (fortPass: { code: string; sessionId: string } | null) => void;
   showError: (message: string) => void;
   cleanup: () => void;
 }
@@ -166,6 +175,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   roomId: null,
   password: null,
   isHost: false,
+  roomTheme: "classic",
+  fortPass: null,
 
   // Room
   members: [],
@@ -203,6 +214,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Pending room
   pendingRoom: null,
+  pendingFortPass: null,
 
   // Error
   errorMessage: null,
@@ -217,6 +229,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setRoomId: (roomId) => set({ roomId }),
   setPassword: (password) => set({ password }),
   setIsHost: (isHost) => set({ isHost }),
+  setRoomTheme: (roomTheme) => set({ roomTheme }),
+  setFortPass: (fortPass) => set({ fortPass }),
   setMembers: (members) => set({ members }),
   setMemberPresenceMap: (presence) => set({ memberPresence: presence }),
   setMemberPresence: (name, status, awayText) =>
@@ -304,6 +318,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setReconnectAttempts: (attempts) => set({ reconnectAttempts: attempts }),
   setIntentionalLeave: (intentional) => set({ intentionalLeave: intentional }),
   setPendingRoom: (room) => set({ pendingRoom: room }),
+  setPendingFortPass: (fortPass) => set({ pendingFortPass: fortPass }),
 
   showError: (message) => {
     const prev = get().errorTimer;
@@ -318,6 +333,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       roomId: null,
       password: null,
       isHost: false,
+      roomTheme: "classic",
+      fortPass: null,
       members: [],
       memberPresence: {},
       mutedNames: new Set(),

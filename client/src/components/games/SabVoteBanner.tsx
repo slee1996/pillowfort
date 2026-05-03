@@ -10,14 +10,13 @@ export function SabVoteBanner() {
     if (!sabVote) return;
     const totalSeconds = Math.max(1, Math.ceil(sabVote.duration / 1000));
     setRemaining(totalSeconds);
-    const endAt = sabVote.timerStart + sabVote.duration;
     const timer = setInterval(() => {
-      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      const next = Math.max(0, Math.ceil((sabVote.endsAt - Date.now()) / 1000));
       setRemaining(next);
       if (next <= 0) clearInterval(timer);
     }, 1000);
     return () => clearInterval(timer);
-  }, [sabVote?.timerStart, sabVote?.duration]);
+  }, [sabVote?.endsAt, sabVote?.duration]);
 
   if (!sabVote) return null;
 

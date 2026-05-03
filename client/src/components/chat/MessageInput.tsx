@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
+import { track, trackOnce } from "../../services/analytics";
 import { encryptChatPayload, isChatCryptoAvailable } from "../../services/chatCrypto";
 import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
@@ -103,6 +104,10 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     }
 
     playSendSound();
+    trackOnce(`first-message:${roomId}`, "first_message_sent", {
+      role: isHost ? "host" : "guest",
+      memberCount: members.length,
+    });
     inputRef.current!.value = "";
     inputRef.current!.focus();
   };
@@ -155,6 +160,7 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
           Send
         </Button>
         <div className="message-game-controls">
+          <span className="message-game-label">Games</span>
           <button id="aim-btn-vote" className="game-shortcut-btn" title="Pillow Fight" onClick={() => {
             if (members.length < 3) return showToast("Need at least 3 people");
             onPickerOpen("vote");

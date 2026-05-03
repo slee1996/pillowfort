@@ -1,13 +1,14 @@
 // --- Outgoing messages (client → server) ---
 
 export type OutgoingMessage =
-  | { type: "set-up"; name: string; auth: RoomAuthPayload }
+  | { type: "set-up"; name: string; auth: RoomAuthPayload; fortPassSessionId?: string }
   | { type: "join"; name: string; auth: RoomAuthPayload; room: string }
   | { type: "rejoin"; name: string; auth: RoomAuthPayload; room: string }
   | { type: "chat"; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "knock-down" }
   | { type: "typing" }
   | { type: "leave" }
+  | { type: "set-theme"; theme: RoomTheme }
   | { type: "accept-host" }
   | { type: "reject-host" }
   | { type: "toss-pillow"; target: string }
@@ -32,11 +33,12 @@ export type OutgoingMessage =
 // --- Incoming messages (server → client) ---
 
 export type IncomingMessage =
-  | { type: "room-created"; room: string; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
-  | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
-  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue }
+  | { type: "room-created"; room: string; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
+  | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
+  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "leaderboards"; leaderboards: RoomLeaderboards }
   | { type: "game-queue"; gameQueue: RoomGameQueue }
+  | { type: "room-theme"; theme: RoomTheme }
   | { type: "game-queued"; kind: QueueGameKind; by: string; target?: string; position: number }
   | { type: "message"; from: string; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
   | { type: "member-joined"; name: string; presence?: MemberPresence }
@@ -54,7 +56,7 @@ export type IncomingMessage =
   | { type: "error"; message: string }
   | { type: "ejected"; reason: string }
   // Vote
-  | { type: "vote-started"; target: string; starter: string; auto?: boolean }
+  | { type: "vote-started"; target: string; starter: string; duration?: number; endsAt?: number; auto?: boolean }
   | { type: "vote-cast"; voter: string; vote: "yes" | "no" }
   | { type: "vote-result"; target: string; yes: number; no: number; ejected: boolean }
   // RPS
@@ -73,7 +75,7 @@ export type IncomingMessage =
   // Saboteur
   | { type: "sab-started"; starter: string }
   | { type: "sab-role"; role: "saboteur" | "defender"; canStrike?: boolean }
-  | { type: "sab-vote-start"; accuser: string; suspect: string; duration: number }
+  | { type: "sab-vote-start"; accuser: string; suspect: string; duration: number; endsAt?: number }
   | { type: "sab-vote-result"; accuser: string; accused: string; yes: number; no: number; passed: boolean; wasSaboteur: boolean; saboteur: string | null }
   | { type: "sab-strike-ready"; reason: "wrong-accusation" }
   | { type: "sab-strike"; saboteur: string; strikes: number }
@@ -108,6 +110,11 @@ export interface RoomAuthPayload {
 
 export type RpsPick = "rock" | "paper" | "scissors";
 export type PresenceStatus = "available" | "away";
+export type RoomTheme = "classic" | "retro-green" | "midnight";
+
+export interface FortPassRoomPerks {
+  themePack?: "retro-plus";
+}
 
 export interface MemberPresence {
   status: PresenceStatus;
