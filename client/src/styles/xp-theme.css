@@ -587,6 +587,14 @@
   min-width: 216px;
 }
 
+.xp-fort-menu-dropdown {
+  min-width: 236px;
+}
+
+.xp-fort-menu-dropdown .xp-menu-detail {
+  font-family: "Courier New", monospace;
+}
+
 .theme-menu-item {
   grid-template-columns: 18px 14px minmax(0, 1fr) auto;
 }

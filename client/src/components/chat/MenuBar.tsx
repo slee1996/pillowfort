@@ -69,6 +69,7 @@ export function MenuBar() {
   const isHost = useGameStore((s) => s.isHost);
   const name = useGameStore((s) => s.name);
   const roomId = useGameStore((s) => s.roomId);
+  const roomSafetyCode = useGameStore((s) => s.roomSafetyCode);
   const messages = useGameStore((s) => s.messages);
   const memberPresence = useGameStore((s) => s.memberPresence);
   const roomTheme = useGameStore((s) => s.roomTheme);
@@ -124,6 +125,14 @@ export function MenuBar() {
     e.stopPropagation();
     setOpenMenu(null);
     if (roomId) navigator.clipboard.writeText(roomId).then(() => showToast("Copied!"));
+  };
+
+  const handleCopySafetyCode = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setOpenMenu(null);
+    if (roomSafetyCode) {
+      navigator.clipboard.writeText(roomSafetyCode).then(() => showToast("Safety code copied"));
+    }
   };
 
   const handleClearMsgs = (e: React.MouseEvent<HTMLElement>) => {
@@ -197,6 +206,23 @@ export function MenuBar() {
         <div className="xp-menu-dropdown" role="menu">
           <MenuItem label="Copy Fort Flag" icon="✉" onClick={handleCopyCode} />
           <MenuItem label="Clear Messages" icon="⌫" onClick={handleClearMsgs} />
+        </div>
+      </span>
+      <span
+        className={`xp-menu-bar-item ${openMenu === "fort" ? "open" : ""}`}
+        onClick={toggle("fort")}
+        onMouseEnter={hover("fort")}
+      >
+        Fort
+        <div className="xp-menu-dropdown xp-fort-menu-dropdown" role="menu">
+          <MenuItem label="Fort Flag" icon="⚑" detail={roomId || "none"} onClick={handleCopyCode} />
+          <MenuItem
+            label="Safety Code"
+            icon="⌘"
+            detail={roomSafetyCode || "calculating"}
+            disabled={!roomSafetyCode}
+            onClick={handleCopySafetyCode}
+          />
         </div>
       </span>
       <span

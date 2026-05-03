@@ -68,6 +68,7 @@ export interface GameStore {
   name: string;
   roomId: string | null;
   password: string | null;
+  roomSafetyCode: string | null;
   isHost: boolean;
   roomTheme: RoomTheme;
   fortPass: FortPassRoomPerks | null;
@@ -119,6 +120,7 @@ export interface GameStore {
   setName: (name: string) => void;
   setRoomId: (roomId: string | null) => void;
   setPassword: (password: string | null) => void;
+  setRoomSafetyCode: (code: string | null) => void;
   setIsHost: (isHost: boolean) => void;
   setRoomTheme: (theme: RoomTheme) => void;
   setFortPass: (fortPass: FortPassRoomPerks | null) => void;
@@ -174,6 +176,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   name: localStorage.getItem("pillowfort-name") || "",
   roomId: null,
   password: null,
+  roomSafetyCode: null,
   isHost: false,
   roomTheme: "classic",
   fortPass: null,
@@ -228,6 +231,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   setRoomId: (roomId) => set({ roomId }),
   setPassword: (password) => set({ password }),
+  setRoomSafetyCode: (roomSafetyCode) => set({ roomSafetyCode }),
   setIsHost: (isHost) => set({ isHost }),
   setRoomTheme: (roomTheme) => set({ roomTheme }),
   setFortPass: (fortPass) => set({ fortPass }),
@@ -332,6 +336,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       roomId: null,
       password: null,
+      roomSafetyCode: null,
       isHost: false,
       roomTheme: "classic",
       fortPass: null,

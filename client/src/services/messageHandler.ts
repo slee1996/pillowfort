@@ -13,6 +13,18 @@ const ALLOW_LEGACY_PLAINTEXT = viteEnv?.DEV === true && viteEnv?.VITE_ALLOW_LEGA
 
 type IncomingChatMessage = Extract<IncomingMessage, { type: "message" }>;
 
+function updateRoomSafetyCode(roomId: string, password: string | null) {
+  useGameStore.getState().setRoomSafetyCode(null);
+  if (!password) return;
+
+  void roomSafetyCode(roomId, password).then((code) => {
+    const state = useGameStore.getState();
+    if (state.roomId === roomId && state.password === password) {
+      state.setRoomSafetyCode(code);
+    }
+  });
+}
+
 function normalizeLeaderboards(src?: RoomLeaderboards): RoomLeaderboards {
   return {
     pillowFight: { ...(src?.pillowFight || {}) },
@@ -131,13 +143,7 @@ export function handleMessage(msg: IncomingMessage) {
       s.addSystemMessage("Welcome to the fort.");
       s.addSystemMessage(`Fort: ${msg.room} — Password: ${s.password}`);
       s.addSystemMessage("Share the fort flag and password to let your friends in.");
-      if (s.password) {
-        void roomSafetyCode(msg.room, s.password).then((code) => {
-          if (code && useGameStore.getState().roomId === msg.room) {
-            useGameStore.getState().addSystemMessage(`Room safety code: ${code}`);
-          }
-        });
-      }
+      updateRoomSafetyCode(msg.room, s.password);
       playDoorOpen();
       requestWakeLock();
       track("room_created", { role: "host", memberCount: 1 });
@@ -160,13 +166,7 @@ export function handleMessage(msg: IncomingMessage) {
       s.clearMessages();
       if (renamed) s.addSystemMessage(`That name's taken — you're ${msg.name} now`);
       s.addSystemMessage(`You're inside. ${msg.members.length} people in the fort.`);
-      if (s.password) {
-        void roomSafetyCode(msg.room, s.password).then((code) => {
-          if (code && useGameStore.getState().roomId === msg.room) {
-            useGameStore.getState().addSystemMessage(`Room safety code: ${code}`);
-          }
-        });
-      }
+      updateRoomSafetyCode(msg.room, s.password);
       playDoorOpen();
       requestWakeLock();
       track("room_joined", { role: "guest", memberCount: msg.members.length });
@@ -186,6 +186,7 @@ export function handleMessage(msg: IncomingMessage) {
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
       s.setRoomTheme(normalizeRoomTheme(msg.theme));
       s.setFortPass(normalizeFortPass(msg.fortPass));
+      updateRoomSafetyCode(msg.room, s.password);
       s.addSystemMessage("Reconnected!");
       requestWakeLock();
       break;
