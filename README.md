@@ -115,6 +115,9 @@ For paid beta support and refunds, see
 For the current Stripe sandbox setup, see
 [docs/STRIPE_TEST_SETUP.md](docs/STRIPE_TEST_SETUP.md).
 
+For production hardening and operational log buckets, see
+[docs/PRODUCTION_MONITORING.md](docs/PRODUCTION_MONITORING.md).
+
 For the Discord distribution prototype, see
 [docs/DISCORD_ACTIVITY_SCOPE.md](docs/DISCORD_ACTIVITY_SCOPE.md).
 
@@ -287,6 +290,7 @@ If you are trying to understand the app quickly, start here:
 - [`src/room.ts`](src/room.ts) for production room behavior
 - [`src/game.ts`](src/game.ts) for shared mini-game rule helpers
 - [`src/analytics.ts`](src/analytics.ts) for privacy-safe analytics validation
+- [`src/security.ts`](src/security.ts) for scanner blocking and response headers
 - [`src/entitlements.ts`](src/entitlements.ts) for host-only paid SKU entitlement helpers
 - [`src/alarms.ts`](src/alarms.ts) for production alarm scheduling helpers
 - [`client/src/services/protocol.ts`](client/src/services/protocol.ts) for websocket message shapes
@@ -298,6 +302,7 @@ If you are trying to understand the app quickly, start here:
 - [`docs/PRODUCTION_STATE_POLICY.md`](docs/PRODUCTION_STATE_POLICY.md) for Durable Object state rules
 - [`docs/BETA_ANALYTICS.md`](docs/BETA_ANALYTICS.md) for privacy-safe beta analytics
 - [`docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md`](docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md) for public beta release steps
+- [`docs/PRODUCTION_MONITORING.md`](docs/PRODUCTION_MONITORING.md) for edge hardening and operational buckets
 - [`docs/FIRST_PAID_SKU.md`](docs/FIRST_PAID_SKU.md) for the first host-only paid offer
 - [`docs/DISCORD_ACTIVITY_SCOPE.md`](docs/DISCORD_ACTIVITY_SCOPE.md) for the Discord Activity prototype scope
 

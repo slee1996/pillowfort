@@ -5,14 +5,21 @@ type AnalyticsEventName =
   | "invite_copied"
   | "first_message_sent"
   | "game_started"
-  | "room_knocked_down";
+  | "room_knocked_down"
+  | "fort_pass_code_checked"
+  | "fort_pass_checkout_started"
+  | "fort_pass_checkout_failed"
+  | "fort_pass_checkout_returned";
 
 type AnalyticsProps = {
   kind?: string;
   role?: "host" | "guest";
   source?: string;
+  reason?: string;
+  surface?: string;
   memberCount?: number;
   queueDepth?: number;
+  status?: number;
   mobile?: boolean;
 };
 
@@ -39,14 +46,20 @@ function cleanProps(props: AnalyticsProps = {}): AnalyticsProps {
   const kind = cleanString(props.kind);
   const role = cleanString(props.role);
   const source = cleanString(props.source);
+  const reason = cleanString(props.reason);
+  const surface = cleanString(props.surface);
   const memberCount = cleanNumber(props.memberCount);
   const queueDepth = cleanNumber(props.queueDepth);
+  const status = cleanNumber(props.status);
 
   if (kind) out.kind = kind;
   if (role === "host" || role === "guest") out.role = role;
   if (source) out.source = source;
+  if (reason) out.reason = reason;
+  if (surface) out.surface = surface;
   if (memberCount !== undefined) out.memberCount = memberCount;
   if (queueDepth !== undefined) out.queueDepth = queueDepth;
+  if (status !== undefined) out.status = status;
   if (typeof props.mobile === "boolean") out.mobile = props.mobile;
   return out;
 }

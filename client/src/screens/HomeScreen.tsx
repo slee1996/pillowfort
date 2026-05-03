@@ -6,6 +6,7 @@ import { Input } from "../components/xp/Input";
 import { LogoIcon } from "../components/xp/Logo";
 import { ensureAudio } from "../hooks/useSound";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
+import { track } from "../services/analytics";
 import { normalizeFortPassCode, normalizeFortPassSessionId } from "../services/fortPass";
 
 export function HomeScreen() {
@@ -27,6 +28,7 @@ export function HomeScreen() {
       history.replaceState(null, "", "/");
       useGameStore.getState().setPendingRoom(null);
       useGameStore.getState().setPendingFortPass({ code: fortPassCode, sessionId: fortPassSessionId });
+      track("fort_pass_checkout_returned", { source: "stripe" });
       setScreen("setup");
       return;
     }

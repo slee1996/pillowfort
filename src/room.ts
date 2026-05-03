@@ -1,5 +1,6 @@
 import type { Env } from "./index";
 import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
+import { opsLogLine } from "./analytics";
 import { fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeFortPassEntitlement, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./entitlements";
 import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./game";
 import { ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH } from "./routes";
@@ -154,6 +155,10 @@ export class Room implements DurableObject {
 
   private log(msg: string) {
     console.log(`[room:${this.roomId || "?"}] ${msg}`);
+  }
+
+  private metric(event: "room_setup_failed" | "room_join_failed", reason: string) {
+    console.log(opsLogLine(event, { reason, surface: "room" }));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -549,15 +554,20 @@ export class Room implements DurableObject {
   // --- handlers ---
 
   private async onSetUp(ws: WebSocket, msg: { name?: string; auth?: unknown; fortPassSessionId?: unknown }) {
-    if (!msg.name?.trim() || !validAuth(msg.auth))
+    if (!msg.name?.trim() || !validAuth(msg.auth)) {
+      this.metric("room_setup_failed", "bad_auth");
       return this.send(ws, "error", { message: "name and password required" });
-    if (this.authVerifier || this.getHost())
+    }
+    if (this.authVerifier || this.getHost()) {
+      this.metric("room_setup_failed", "exists");
       return this.send(ws, "error", { message: "fort already exists" });
+    }
     if (
       this.fortPassEntitlement &&
       isFortPassActive(this.fortPassEntitlement) &&
       !fortPassRedemptionMatches(this.fortPassEntitlement, msg.fortPassSessionId)
     ) {
+      this.metric("room_setup_failed", "paid_redemption");
       return this.send(ws, "error", { message: "paid room redemption required" });
     }
 
@@ -589,16 +599,24 @@ export class Room implements DurableObject {
   }
 
   private async onJoin(ws: WebSocket, msg: { name?: string; auth?: unknown }) {
-    if (!msg.name?.trim() || !validAuth(msg.auth))
+    if (!msg.name?.trim() || !validAuth(msg.auth)) {
+      this.metric("room_join_failed", "bad_auth");
       return this.send(ws, "error", { message: "name and password required" });
-    if (!this.getHost())
+    }
+    if (!this.getHost()) {
+      this.metric("room_join_failed", "not_found");
       return this.send(ws, "error", { message: "fort not found" });
-    if (this.authVerifier !== msg.auth.verifier)
+    }
+    if (this.authVerifier !== msg.auth.verifier) {
+      this.metric("room_join_failed", "wrong_password");
       return this.send(ws, "error", { message: "wrong password" });
+    }
 
     const registered = this.state.getWebSockets().filter(w => this.att(w).name);
-    if (registered.length > MAX_GUESTS)
+    if (registered.length > MAX_GUESTS) {
+      this.metric("room_join_failed", "full");
       return this.send(ws, "error", { message: "fort is full (20 max)" });
+    }
 
     const name = uniqueName(msg.name.trim().slice(0, MAX_NAME_LEN), new Set(this.getMembers()));
     const prev = this.att(ws);

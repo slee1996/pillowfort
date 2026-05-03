@@ -202,6 +202,40 @@ describe("Worker production entrypoint", () => {
     expect(rejected.status).toBe(400);
   });
 
+  it("blocks commodity scanner paths before assets or rooms", async () => {
+    const { env, routed, assetRequests } = createWorkerEnv();
+
+    const paths = [
+      "/.env.prod",
+      "/.%65%6Ev.%62%61%6B",
+      "/.git/refs/heads/main",
+      "/wp-content/sallu.php",
+      "/cgi-bin/",
+      "/test.php",
+    ];
+
+    for (const path of paths) {
+      const res = await worker.fetch(new Request(`https://pillow.test${path}`), env);
+      expect(res.status).toBe(404);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    }
+    expect(routed).toHaveLength(0);
+    expect(assetRequests).toHaveLength(0);
+  });
+
+  it("adds security headers to normal asset responses", async () => {
+    const { env } = createWorkerEnv();
+
+    const res = await worker.fetch(new Request("https://pillow.test/"), env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+    expect(res.headers.get("strict-transport-security")).toContain("includeSubDomains");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+  });
+
   it("reports Fort Pass custom-code availability through room status only", async () => {
     const { env, roomStatus } = createWorkerEnv();
     roomStatus.set("taken-1", true);

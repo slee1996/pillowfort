@@ -1,6 +1,7 @@
 import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./src/game";
-import { analyticsLogLine, readAnalyticsEvent } from "./src/analytics";
+import { analyticsLogLine, opsLogLine, readAnalyticsEvent } from "./src/analytics";
 import { customRoomCodeAvailability, fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./src/entitlements";
+import { blockedProbeResponse, logBlockedProbe, probeReasonForPath, withSecurityHeaders } from "./src/security";
 import { createFortPassStripeCheckoutSession, fortPassEntitlementFromStripeEvent, verifyStripeWebhookSignature } from "./src/stripe";
 import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS as DEFAULT_GRACE_MS } from "./src/shared";
 
@@ -225,6 +226,23 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+function contentTypeForPath(path: string): string {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".json")) return "application/json; charset=utf-8";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".ico")) return "image/x-icon";
+  return "application/octet-stream";
+}
+
+function staticFileResponse(path: string): Response {
+  return new Response(Bun.file(`./client/dist${path}`), {
+    headers: { "content-type": contentTypeForPath(path) },
+  });
+}
+
 function randomIndex(length: number): number {
   if (length <= 1) return 0;
   const bytes = new Uint32Array(1);
@@ -440,18 +458,27 @@ function rateLimitedMsg(data: WSData): boolean {
 // --- handlers ---
 
 function onSetUp(ws: any, d: WSData, msg: any) {
-  if (!msg.name?.trim() || !validAuth(msg.auth))
+  if (!msg.name?.trim() || !validAuth(msg.auth)) {
+    console.log(opsLogLine("room_setup_failed", { reason: "bad_auth", surface: "local" }));
     return send(ws, "error", { message: "name and password required" });
-  if (d.isHost)
+  }
+  if (d.isHost) {
+    console.log(opsLogLine("room_setup_failed", { reason: "already_inside", surface: "local" }));
     return send(ws, "error", { message: "already in a fort" });
-  if (rateLimitedIP(d.ip))
+  }
+  if (rateLimitedIP(d.ip)) {
+    console.log(opsLogLine("room_setup_failed", { reason: "rate_limited", surface: "local" }));
     return send(ws, "error", { message: "slow down — too many forts" });
+  }
 
   const id = d.roomId || rid();
-  if (rooms.has(id))
+  if (rooms.has(id)) {
+    console.log(opsLogLine("room_setup_failed", { reason: "exists", surface: "local" }));
     return send(ws, "error", { message: "fort already exists" });
+  }
   const fortPassEntitlement = pendingFortPassEntitlements.get(id) || null;
   if (fortPassEntitlement && !fortPassRedemptionMatches(fortPassEntitlement, msg.fortPassSessionId)) {
+    console.log(opsLogLine("room_setup_failed", { reason: "paid_redemption", surface: "local" }));
     return send(ws, "error", { message: "paid room redemption required" });
   }
 
@@ -503,17 +530,28 @@ function onSetUp(ws: any, d: WSData, msg: any) {
 }
 
 function onJoin(ws: any, d: WSData, msg: any) {
-  if (!msg.name?.trim() || !validAuth(msg.auth) || !msg.room?.trim())
+  if (!msg.name?.trim() || !validAuth(msg.auth) || !msg.room?.trim()) {
+    console.log(opsLogLine("room_join_failed", { reason: "bad_auth", surface: "local" }));
     return send(ws, "error", { message: "name, password, and fort flag required" });
-  if (d.isHost)
+  }
+  if (d.isHost) {
+    console.log(opsLogLine("room_join_failed", { reason: "already_inside", surface: "local" }));
     return send(ws, "error", { message: "already in a fort" });
+  }
 
   const room = rooms.get(msg.room.trim());
-  if (!room) return send(ws, "error", { message: "fort not found" });
-  if (room.authVerifier !== msg.auth.verifier)
+  if (!room) {
+    console.log(opsLogLine("room_join_failed", { reason: "not_found", surface: "local" }));
+    return send(ws, "error", { message: "fort not found" });
+  }
+  if (room.authVerifier !== msg.auth.verifier) {
+    console.log(opsLogLine("room_join_failed", { reason: "wrong_password", surface: "local" }));
     return send(ws, "error", { message: "wrong password" });
-  if (room.guests.size >= MAX_GUESTS)
+  }
+  if (room.guests.size >= MAX_GUESTS) {
+    console.log(opsLogLine("room_join_failed", { reason: "full", surface: "local" }));
     return send(ws, "error", { message: "fort is full (20 max)" });
+  }
 
   d.roomId = room.id;
   d.isHost = false;
@@ -1354,112 +1392,134 @@ function onDraw(ws: any, d: WSData, msg: any) {
   broadcast(room, "draw", payload, ws);
 }
 
+async function handleHttp(req: Request, server: any): Promise<Response | undefined> {
+  const url = new URL(req.url);
+
+  const probeReason = probeReasonForPath(url.pathname);
+  if (probeReason) {
+    logBlockedProbe(url.pathname);
+    return blockedProbeResponse();
+  }
+
+  if (url.pathname === "/analytics") {
+    if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+    const event = await readAnalyticsEvent(req);
+    if (!event) return new Response("bad analytics event", { status: 400 });
+    console.log(analyticsLogLine(event));
+    return new Response(null, { status: 204 });
+  }
+
+  if (url.pathname === "/api/stripe/webhook") {
+    if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      console.log(opsLogLine("stripe_webhook_failed", { reason: "not_configured", status: 501 }));
+      return json({ error: "webhook_not_configured" }, 501);
+    }
+    const payload = await readLimitedText(req, 64 * 1024);
+    if (!payload) {
+      console.log(opsLogLine("stripe_webhook_failed", { reason: "bad_payload", status: 400 }));
+      return json({ error: "bad_webhook_payload" }, 400);
+    }
+    const verification = await verifyStripeWebhookSignature(
+      payload,
+      req.headers.get("stripe-signature"),
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+    if (!verification.ok) {
+      console.log(opsLogLine("stripe_webhook_failed", { reason: "bad_signature", status: 400 }));
+      return json({ error: "bad_webhook_signature" }, 400);
+    }
+
+    let event: unknown;
+    try {
+      event = JSON.parse(payload);
+    } catch {
+      console.log(opsLogLine("stripe_webhook_failed", { reason: "bad_payload", status: 400 }));
+      return json({ error: "bad_webhook_payload" }, 400);
+    }
+    const entitlement = fortPassEntitlementFromStripeEvent(event);
+    if (!entitlement) return json({ received: true, ignored: true });
+    if (rooms.has(entitlement.roomId)) {
+      console.log(opsLogLine("stripe_webhook_failed", { reason: "fulfillment_failed", status: 409 }));
+      return json({ error: "entitlement_fulfillment_failed" }, 409);
+    }
+    pendingFortPassEntitlements.set(entitlement.roomId, entitlement);
+    return json({ received: true, fulfilled: true, code: entitlement.roomId });
+  }
+
+  if (url.pathname === "/api/fort-pass/code") {
+    if (req.method !== "GET") return new Response("method not allowed", { status: 405 });
+    const code = normalizeCustomRoomCode(url.searchParams.get("code"));
+    const availability = code
+      ? customRoomCodeAvailability(code, rooms.has(code) || hasActivePendingFortPass(code))
+      : customRoomCodeAvailability(null, false);
+    return json(availability);
+  }
+
+  if (url.pathname === "/api/fort-pass/checkout") {
+    if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+    const checkout = normalizeFortPassCheckoutRequest(await readSmallJson(req));
+    if (!checkout) return json({ error: "invalid_custom_room_code" }, 400);
+    if (rooms.has(checkout.customRoomCode) || hasActivePendingFortPass(checkout.customRoomCode)) {
+      return json({ error: "custom_room_code_taken", code: checkout.customRoomCode }, 409);
+    }
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.FORT_PASS_PRICE_ID) {
+      return json({ error: "checkout_not_configured", code: checkout.customRoomCode }, 501);
+    }
+    try {
+      const session = await createFortPassStripeCheckoutSession({
+        secretKey: process.env.STRIPE_SECRET_KEY,
+        priceId: process.env.FORT_PASS_PRICE_ID,
+        publicBaseUrl: process.env.PUBLIC_BASE_URL || url.origin,
+        customRoomCode: checkout.customRoomCode,
+      });
+      return json({ code: checkout.customRoomCode, checkoutUrl: session.url, sessionId: session.id });
+    } catch {
+      return json({ error: "checkout_provider_error" }, 502);
+    }
+  }
+
+  if (url.pathname === "/ws") {
+    const ip = server.requestIP(req)?.address || "unknown";
+    const roomParam = url.searchParams.get("room") || "";
+    if (roomParam && !normalizeCustomRoomCode(roomParam)) {
+      console.log(opsLogLine("ws_rejected", { reason: "invalid_room", surface: "local", status: 400 }));
+      return new Response("invalid room", { status: 400 });
+    }
+    const ok = server.upgrade(req, {
+      data: {
+        roomId: roomParam || null,
+        isHost: false,
+        hostRejected: false,
+        name: "",
+        status: "available",
+        awayText: null,
+        hash: Math.random().toString(16).slice(2, 6),
+        ip,
+        msgTimestamps: [],
+      } satisfies WSData,
+    });
+    return ok ? undefined : new Response("upgrade failed", { status: 400 });
+  }
+
+  // room links: /abc123 → serve index.html
+  if (normalizeCustomRoomCode(url.pathname.slice(1))) {
+    return staticFileResponse("/index.html");
+  }
+
+  const path = url.pathname === "/" ? "/index.html" : url.pathname;
+  const file = Bun.file(`./client/dist${path}`);
+  return (await file.exists()) ? staticFileResponse(path) : new Response("not found", { status: 404 });
+}
+
 // --- server ---
 
 Bun.serve({
   port: PORT,
 
   async fetch(req, server) {
-    const url = new URL(req.url);
-
-    if (url.pathname === "/analytics") {
-      if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const event = await readAnalyticsEvent(req);
-      if (!event) return new Response("bad analytics event", { status: 400 });
-      console.log(analyticsLogLine(event));
-      return new Response(null, { status: 204 });
-    }
-
-    if (url.pathname === "/api/stripe/webhook") {
-      if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
-      if (!process.env.STRIPE_WEBHOOK_SECRET) return json({ error: "webhook_not_configured" }, 501);
-      const payload = await readLimitedText(req, 64 * 1024);
-      if (!payload) return json({ error: "bad_webhook_payload" }, 400);
-      const verification = await verifyStripeWebhookSignature(
-        payload,
-        req.headers.get("stripe-signature"),
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-      if (!verification.ok) return json({ error: "bad_webhook_signature" }, 400);
-
-      let event: unknown;
-      try {
-        event = JSON.parse(payload);
-      } catch {
-        return json({ error: "bad_webhook_payload" }, 400);
-      }
-      const entitlement = fortPassEntitlementFromStripeEvent(event);
-      if (!entitlement) return json({ received: true, ignored: true });
-      if (rooms.has(entitlement.roomId)) return json({ error: "entitlement_fulfillment_failed" }, 409);
-      pendingFortPassEntitlements.set(entitlement.roomId, entitlement);
-      return json({ received: true, fulfilled: true, code: entitlement.roomId });
-    }
-
-    if (url.pathname === "/api/fort-pass/code") {
-      if (req.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const code = normalizeCustomRoomCode(url.searchParams.get("code"));
-      const availability = code
-        ? customRoomCodeAvailability(code, rooms.has(code) || hasActivePendingFortPass(code))
-        : customRoomCodeAvailability(null, false);
-      return json(availability);
-    }
-
-    if (url.pathname === "/api/fort-pass/checkout") {
-      if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const checkout = normalizeFortPassCheckoutRequest(await readSmallJson(req));
-      if (!checkout) return json({ error: "invalid_custom_room_code" }, 400);
-      if (rooms.has(checkout.customRoomCode) || hasActivePendingFortPass(checkout.customRoomCode)) {
-        return json({ error: "custom_room_code_taken", code: checkout.customRoomCode }, 409);
-      }
-      if (!process.env.STRIPE_SECRET_KEY || !process.env.FORT_PASS_PRICE_ID) {
-        return json({ error: "checkout_not_configured", code: checkout.customRoomCode }, 501);
-      }
-      try {
-        const session = await createFortPassStripeCheckoutSession({
-          secretKey: process.env.STRIPE_SECRET_KEY,
-          priceId: process.env.FORT_PASS_PRICE_ID,
-          publicBaseUrl: process.env.PUBLIC_BASE_URL || url.origin,
-          customRoomCode: checkout.customRoomCode,
-        });
-        return json({ code: checkout.customRoomCode, checkoutUrl: session.url, sessionId: session.id });
-      } catch {
-        return json({ error: "checkout_provider_error" }, 502);
-      }
-    }
-
-    if (url.pathname === "/ws") {
-      const ip = server.requestIP(req)?.address || "unknown";
-      const roomParam = url.searchParams.get("room") || "";
-      if (roomParam && !normalizeCustomRoomCode(roomParam)) {
-        return new Response("invalid room", { status: 400 });
-      }
-      const ok = server.upgrade(req, {
-        data: {
-          roomId: roomParam || null,
-          isHost: false,
-          hostRejected: false,
-          name: "",
-          status: "available",
-          awayText: null,
-          hash: Math.random().toString(16).slice(2, 6),
-          ip,
-          msgTimestamps: [],
-        } satisfies WSData,
-      });
-      return ok ? undefined : new Response("upgrade failed", { status: 400 });
-    }
-
-    // static files
-    if (url.pathname.includes("..")) return new Response("forbidden", { status: 403 });
-
-    // room links: /abc123 → serve index.html
-    if (normalizeCustomRoomCode(url.pathname.slice(1))) {
-      return new Response(Bun.file("./client/dist/index.html"));
-    }
-
-    const path = url.pathname === "/" ? "/index.html" : url.pathname;
-    const file = Bun.file(`./client/dist${path}`);
-    return (await file.exists()) ? new Response(file) : new Response("not found", { status: 404 });
+    const response = await handleHttp(req, server);
+    return response ? withSecurityHeaders(response) : undefined;
   },
 
   websocket: {

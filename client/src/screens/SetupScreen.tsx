@@ -4,9 +4,12 @@ import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { connect, send } from "../services/ws";
+import { track } from "../services/analytics";
 import { createRoomAuthPayload } from "../services/chatCrypto";
 import { checkFortPassCode, normalizeFortPassCode, startFortPassCheckout } from "../services/fortPass";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
+
+type FortPassPreviewTheme = "retro-green" | "midnight";
 
 function generateRoomId(): string {
   const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
@@ -28,6 +31,7 @@ export function SetupScreen() {
   const [fortPassCode, setFortPassCode] = useState("");
   const [fortPassStatus, setFortPassStatus] = useState("");
   const [fortPassBusy, setFortPassBusy] = useState(false);
+  const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("retro-green");
   const passwordRef = useRef<HTMLInputElement>(null);
 
   const handleCreate = async () => {
@@ -55,6 +59,7 @@ export function SetupScreen() {
     const code = normalizeFortPassCode(fortPassCode);
     if (!code) {
       setFortPassStatus("Invalid code.");
+      track("fort_pass_code_checked", { reason: "invalid", source: "setup" });
       return;
     }
 
@@ -64,9 +69,12 @@ export function SetupScreen() {
       const availability = await checkFortPassCode(code);
       if (!availability.available) {
         setFortPassStatus(availability.reason === "taken" ? "That code is taken." : "Invalid code.");
+        track("fort_pass_code_checked", { reason: availability.reason, source: "setup" });
         return;
       }
 
+      track("fort_pass_code_checked", { reason: "available", source: "setup" });
+      track("fort_pass_checkout_started", { source: "setup" });
       setFortPassStatus("Starting checkout...");
       const checkout = await startFortPassCheckout(code);
       if (checkout.ok) {
@@ -82,8 +90,10 @@ export function SetupScreen() {
         unknown: "Checkout failed.",
       };
       setFortPassStatus(messages[checkout.error]);
+      track("fort_pass_checkout_failed", { reason: checkout.error, source: "setup" });
     } catch {
       setFortPassStatus("Checkout failed.");
+      track("fort_pass_checkout_failed", { reason: "network", source: "setup" });
     } finally {
       setFortPassBusy(false);
     }
@@ -102,9 +112,15 @@ export function SetupScreen() {
             Pick a secret password. Share it with people you want to let inside.
           </p>
           {pendingFortPass && (
-            <p className="auth-note">
-              Fort Pass code: {pendingFortPass.code}
-            </p>
+            <div className="fort-pass-redeemed-panel" role="status">
+              <div className="fort-pass-title">Fort Pass unlocked</div>
+              <div className="fort-pass-redeemed-code">flag: {pendingFortPass.code}</div>
+              <div className="fort-pass-perk-row">
+                <span>custom code</span>
+                <span>6-hour idle</span>
+                <span>retro themes</span>
+              </div>
+            </div>
           )}
           <Input
             id="setup-password"
@@ -120,7 +136,48 @@ export function SetupScreen() {
 
           {!pendingFortPass && (
             <div className="fort-pass-panel">
-              <div className="fort-pass-title">Fort Pass</div>
+              <div className="fort-pass-heading">
+                <div>
+                  <div className="fort-pass-title">Fort Pass</div>
+                  <div className="fort-pass-subtitle">custom flag · 6-hour idle · retro themes</div>
+                </div>
+                <div className="fort-pass-price">$5</div>
+              </div>
+              <div className={`fort-pass-preview preview-${previewTheme}`} aria-hidden>
+                <div className="fort-pass-preview-title">pillowfort — party-1</div>
+                <div className="fort-pass-preview-body">
+                  <div className="fort-pass-preview-lines">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="fort-pass-preview-buddies">
+                    <span />
+                    <span />
+                  </div>
+                </div>
+              </div>
+              <div className="fort-pass-theme-toggle" role="group" aria-label="Theme preview">
+                <button
+                  type="button"
+                  className={previewTheme === "retro-green" ? "active" : ""}
+                  onClick={() => setPreviewTheme("retro-green")}
+                >
+                  Retro Green
+                </button>
+                <button
+                  type="button"
+                  className={previewTheme === "midnight" ? "active" : ""}
+                  onClick={() => setPreviewTheme("midnight")}
+                >
+                  Midnight
+                </button>
+              </div>
+              <div className="fort-pass-perk-row">
+                <span>custom code</span>
+                <span>6-hour idle</span>
+                <span>theme pack</span>
+              </div>
               <div className="fort-pass-controls">
                 <Input
                   id="setup-fort-pass-code"
@@ -143,7 +200,7 @@ export function SetupScreen() {
                   onClick={() => void handleFortPassCheckout()}
                   disabled={fortPassBusy}
                 >
-                  Upgrade
+                  Upgrade $5
                 </Button>
               </div>
               {fortPassStatus && (

@@ -72,6 +72,7 @@ describe("Invite link flow", () => {
     expect(res.status).toBe(200);
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
   it("GET /:customCode returns HTML for paid custom room links", async () => {
@@ -79,6 +80,17 @@ describe("Invite link flow", () => {
     expect(res.status).toBe(200);
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");
+  });
+
+  it("blocks scanner paths in the local runtime", async () => {
+    const blocked = await fetch(`http://localhost:${getPort()}/.%65%6Ev.%70%72%6F%64`);
+    const php = await fetch(`http://localhost:${getPort()}/wp-content/sallu.php`);
+
+    expect(blocked.status).toBe(404);
+    expect(blocked.headers.get("cache-control")).toBe("no-store");
+    expect(blocked.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await blocked.text()).toBe("");
+    expect(php.status).toBe(404);
   });
 });
 

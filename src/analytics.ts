@@ -6,6 +6,15 @@ export const ANALYTICS_EVENTS = [
   "first_message_sent",
   "game_started",
   "room_knocked_down",
+  "fort_pass_code_checked",
+  "fort_pass_checkout_started",
+  "fort_pass_checkout_failed",
+  "fort_pass_checkout_returned",
+  "probe_blocked",
+  "stripe_webhook_failed",
+  "ws_rejected",
+  "room_setup_failed",
+  "room_join_failed",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
@@ -16,8 +25,8 @@ export interface SanitizedAnalyticsEvent {
 }
 
 const EVENT_SET = new Set<string>(ANALYTICS_EVENTS);
-const STRING_PROPS = new Set(["kind", "role", "source"]);
-const NUMBER_PROPS = new Set(["memberCount", "queueDepth"]);
+const STRING_PROPS = new Set(["kind", "role", "source", "reason", "surface"]);
+const NUMBER_PROPS = new Set(["memberCount", "queueDepth", "status"]);
 const BOOLEAN_PROPS = new Set(["mobile"]);
 const MAX_BODY_BYTES = 2048;
 
@@ -85,4 +94,9 @@ export async function readAnalyticsEvent(request: Request): Promise<SanitizedAna
 
 export function analyticsLogLine(event: SanitizedAnalyticsEvent): string {
   return `[analytics] ${JSON.stringify(event)}`;
+}
+
+export function opsLogLine(event: AnalyticsEventName, props: Record<string, unknown> = {}): string {
+  const sanitized = sanitizeAnalyticsEvent({ event, props });
+  return analyticsLogLine(sanitized || { event, props: {} });
 }

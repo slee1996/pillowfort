@@ -131,11 +131,155 @@
   background: #f7f4e8;
 }
 
+.fort-pass-redeemed-panel {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border: 1px solid #7fac7f;
+  background: linear-gradient(180deg, #fbfff7 0%, #e1f0d8 100%);
+}
+
+.fort-pass-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
 .fort-pass-title {
   color: #003c74;
   font-size: 11px;
   font-weight: bold;
+}
+
+.fort-pass-subtitle {
+  color: #555;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.fort-pass-price {
+  color: #003c74;
+  font-size: 18px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.fort-pass-redeemed-code {
+  color: #1f5938;
+  font-size: 11px;
+  font-weight: bold;
+  margin-top: 4px;
+}
+
+.fort-pass-preview {
+  border: 1px solid #aca899;
+  background: #fff;
+  height: 84px;
+  margin: 8px 0 7px;
+}
+
+.fort-pass-preview-title {
+  height: 18px;
+  padding: 3px 6px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.preview-retro-green .fort-pass-preview-title {
+  background: linear-gradient(180deg, #74ad78 0%, #28623f 100%);
+}
+
+.preview-midnight .fort-pass-preview-title {
+  background: linear-gradient(180deg, #777ca9 0%, #383d66 100%);
+}
+
+.fort-pass-preview-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  height: 64px;
+}
+
+.fort-pass-preview-lines {
+  padding: 8px;
+  border-right: 1px solid #d6d2c2;
+}
+
+.fort-pass-preview-lines span {
+  display: block;
+  height: 6px;
+  margin-bottom: 7px;
+  background: #d6d2c2;
+}
+
+.preview-retro-green .fort-pass-preview-lines {
+  background: repeating-linear-gradient(0deg, #fbfff7 0, #fbfff7 10px, #f0f8ec 10px, #f0f8ec 20px);
+}
+
+.preview-midnight .fort-pass-preview-lines {
+  background: linear-gradient(90deg, rgba(67, 71, 116, 0.06) 1px, transparent 1px) 0 0 / 16px 100%, #fbfbff;
+}
+
+.fort-pass-preview-buddies {
+  padding: 8px 6px;
+  background: #f9f8f1;
+}
+
+.preview-retro-green .fort-pass-preview-buddies {
+  background: #f6fff1;
+}
+
+.preview-midnight .fort-pass-preview-buddies {
+  background: #f7f7ff;
+}
+
+.fort-pass-preview-buddies span {
+  display: block;
+  width: 100%;
+  height: 7px;
   margin-bottom: 8px;
+  background: #b7c8dc;
+}
+
+.fort-pass-theme-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.fort-pass-theme-toggle button {
+  font-family: Tahoma, Arial, sans-serif;
+  font-size: 10px;
+  padding: 3px 4px;
+  border: 1px solid #aca899;
+  background: linear-gradient(180deg, #fff 0%, #ece9d8 100%);
+  color: #333;
+  cursor: pointer;
+}
+
+.fort-pass-theme-toggle button.active {
+  border-color: #003c74;
+  color: #003c74;
+  background: #dfe8f2;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.fort-pass-perk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+
+.fort-pass-perk-row span {
+  border: 1px solid #c9c4b6;
+  background: #fffef8;
+  color: #555;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 5px;
 }
 
 .fort-pass-controls {
@@ -2385,6 +2529,32 @@
     font-size: 14px;
   }
 
+  .auth-window {
+    max-height: calc(var(--vvh, 100dvh) - 32px);
+  }
+
+  .auth-window .xp-window-body {
+    max-height: calc(var(--vvh, 100dvh) - 82px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fort-pass-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .fort-pass-controls .xp-btn {
+    width: 100%;
+  }
+
+  .fort-pass-preview {
+    height: 76px;
+  }
+
+  .fort-pass-preview-body {
+    height: 56px;
+  }
+
   .chat-window {
     width: 100vw;
     max-width: none;
@@ -2410,6 +2580,13 @@
 
   .chat-status-strip {
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .status-strip-cell {
+    flex: 0 0 auto;
+    min-height: 22px;
+    padding: 3px 7px;
   }
 
   .member-panel {
@@ -2419,18 +2596,45 @@
   .xp-menu-bar {
     font-size: 10px;
     padding: 2px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .xp-menu-bar::-webkit-scrollbar,
+  .aim-action-bar::-webkit-scrollbar,
+  .format-toolbar::-webkit-scrollbar,
+  .message-game-controls::-webkit-scrollbar,
+  .chat-status-strip::-webkit-scrollbar {
+    display: none;
   }
 
   .aim-action-bar {
-    padding: 2px 4px;
+    padding: 2px 4px 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   .aim-action-btn {
-    font-size: 11px;
-    padding: 6px 10px;
+    flex: 0 0 auto;
+    min-width: 46px;
+    font-size: 10px;
+    padding: 3px 6px;
+    justify-content: center;
+  }
+
+  .aim-action-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  .aim-action-label {
+    line-height: 20px;
   }
 
   .format-toolbar {
     padding: 1px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   .format-btn {
     width: 32px;
@@ -2578,6 +2782,7 @@
 
   .message-input-wrap {
     gap: 8px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
   }
 
   .message-input-field {
@@ -2587,11 +2792,16 @@
 
   .message-input-controls {
     gap: 6px;
+    flex-wrap: nowrap;
+    align-items: center;
   }
 
   .message-game-controls {
+    flex: 1;
+    min-width: 0;
     max-width: 100%;
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .message-game-label {
@@ -2614,12 +2824,12 @@
   }
 
   .message-btn-send {
-    order: 3;
+    order: 1;
     margin-left: 2px;
   }
 
   .message-btn-leave {
-    order: 1;
+    order: 3;
     margin-right: 2px;
   }
 

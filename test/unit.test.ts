@@ -17,6 +17,7 @@ import {
   normalizeRoomTheme,
 } from "../src/entitlements";
 import { isRpsPick, rpsWinner, tttWinner } from "../src/game";
+import { probeReasonForPath, withSecurityHeaders } from "../src/security";
 import { sanitizeStyle, uniqueName, STYLE_COLORS, MAX_NAME_LEN } from "../src/shared";
 import {
   computeStripeWebhookSignature,
@@ -154,23 +155,29 @@ describe("game helpers", () => {
 describe("sanitizeAnalyticsEvent", () => {
   it("keeps allowed event names and safe props", () => {
     expect(sanitizeAnalyticsEvent({
-      event: "game_started",
+      event: "stripe_webhook_failed",
       props: {
         kind: "rps",
         role: "host",
         source: "action_bar",
+        reason: "bad_signature",
+        surface: "edge",
         memberCount: 4,
         queueDepth: 1,
+        status: 400,
         mobile: false,
       },
     })).toEqual({
-      event: "game_started",
+      event: "stripe_webhook_failed",
       props: {
         kind: "rps",
         role: "host",
         source: "action_bar",
+        reason: "bad_signature",
+        surface: "edge",
         memberCount: 4,
         queueDepth: 1,
+        status: 400,
         mobile: false,
       },
     });
@@ -521,5 +528,29 @@ describe("Stripe Fort Pass webhooks", () => {
     expect(fortPassEntitlementFromStripeEvent(stripeEvent({
       metadata: { kind: "fort-pass", custom_room_code: "analytics" },
     }), now)).toBeNull();
+  });
+});
+
+describe("HTTP security helpers", () => {
+  it("classifies common scanner probe paths including encoded variants", () => {
+    expect(probeReasonForPath("/.env.prod")).toBe("dotfile");
+    expect(probeReasonForPath("/.%65%6Ev.%70%72%6F%64")).toBe("dotfile");
+    expect(probeReasonForPath("/.git/refs/heads/main")).toBe("dotfile");
+    expect(probeReasonForPath("/wp-content/sallu.php")).toBe("wordpress");
+    expect(probeReasonForPath("/cgi-bin/")).toBe("cgi");
+    expect(probeReasonForPath("/_profiler/phpinfo")).toBe("profiler");
+    expect(probeReasonForPath("/party-1")).toBeNull();
+  });
+
+  it("adds browser hardening headers without dropping existing headers", async () => {
+    const res = withSecurityHeaders(new Response("ok", {
+      headers: { "content-type": "text/plain" },
+    }));
+
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    expect(res.headers.get("strict-transport-security")).toContain("max-age");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(await res.text()).toBe("ok");
   });
 });
