@@ -3,7 +3,7 @@ import { SECURE_ROOM_ID_BYTES, canonicalBase64UrlByteLength } from "../../../src
 
 const ROOM_SECRET_PREFIX = "pf2_";
 const GENERATED_SECRET_BYTES = 32;
-export const CUSTOM_ROOM_SECRET_MIN_LENGTH = 15;
+export const CUSTOM_ROOM_SECRET_MIN_LENGTH = 6;
 export const CUSTOM_ROOM_SECRET_MAX_LENGTH = 64;
 export const CUSTOM_ROOM_SECRET_MAX_UTF8_BYTES = 256;
 export const CUSTOM_ROOM_SECRET_KDF = "pbkdf2-sha256-600k-room-v1" as const;
@@ -79,7 +79,7 @@ function isRepeatedPattern(value: string): boolean {
 function customSecretIsObviouslyWeak(secret: string, context: readonly string[]): boolean {
   const folded = secret.toLocaleLowerCase("en-US");
   const compact = compactForStrength(folded);
-  if (new Set([...folded]).size < 6 || isRepeatedPattern(compact)) return true;
+  if (new Set([...folded]).size < 3 || isRepeatedPattern(compact)) return true;
   if (COMMON_CUSTOM_SECRET_PARTS.some((part) => compact.includes(part))) return true;
   if (OBVIOUS_SEQUENCES.some((sequence) => {
     for (let start = 0; start <= sequence.length - 6; start += 1) {

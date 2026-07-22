@@ -190,7 +190,7 @@ export function JoinScreen() {
           <div id="join-secret-help" className="secret-help">
             {recoveryRequired
               ? "Recovery mode: re-enter the exact copied password; the fort flag and name stay locked."
-              : "Custom room passwords are 15–64 characters and are case-sensitive."}
+              : "Custom room passwords are 6–64 characters and are case-sensitive."}
           </div>
           {secretError && <div id="join-secret-error" className="secret-error" role="alert">{secretError}</div>}
           <div className="auth-actions">

@@ -67,7 +67,7 @@ for completing mandatory protocol fanout.
 
 The first-party client defaults to a generated 32-byte invitation secret,
 encoded as canonical `pf2_` plus 43 unpadded base64url characters. A host may
-instead explicitly choose a custom password of 15–64 Unicode scalar values.
+instead explicitly choose a custom password of 6–64 Unicode scalar values.
 Custom input is NFC-normalized; leading/trailing whitespace, control/default-
 ignorable/line-separator characters, lone surrogates, oversized UTF-8
 encodings, noncharacters/non-ASCII separators, and malformed values in the

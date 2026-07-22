@@ -60,7 +60,7 @@ Core user flow:
 
 1. User picks a screen name.
 2. The app generates and locks a `pf2_` 256-bit room secret by default; the
-   host can explicitly switch to a 15–64 character custom password with
+   host can explicitly switch to a 6–64 character custom password with
    creation-time strength checks and an offline-guessing warning.
 3. App generates `f-` plus ten lowercase base32 symbols (50 random bits) for a
    free-room flag; human 4–10 character flags are Fort Pass-only.

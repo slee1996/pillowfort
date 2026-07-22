@@ -97,16 +97,18 @@ describe("room secrets", () => {
   it("accepts bounded custom passwords without weakening generated-secret parsing", () => {
     const variedUnicode = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x400 + index)).join("");
     const variedEmoji = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x1f300 + index)).join("");
-    expect(CUSTOM_ROOM_SECRET_MIN_LENGTH).toBe(15);
+    expect(CUSTOM_ROOM_SECRET_MIN_LENGTH).toBe(6);
     expect(CUSTOM_ROOM_SECRET_MAX_LENGTH).toBe(64);
     expect(CUSTOM_ROOM_SECRET_KDF).toBe("pbkdf2-sha256-600k-room-v1");
     expect(validateRoomSecret("Velvet!Orbit7-Cedar")).toEqual({ valid: true, secret: "Velvet!Orbit7-Cedar" });
     expect(validateRoomSecret("four cozy pillows")).toEqual({ valid: true, secret: "four cozy pillows" });
+    expect(validateRoomSecret("orb!7x")).toEqual({ valid: true, secret: "orb!7x" });
+    expect(validateCustomRoomSecret("orchid")).toEqual({ valid: true, secret: "orchid" });
     expect(validateRoomSecret("cafe\u0301-night-4821")).toEqual({ valid: true, secret: "café-night-4821" });
     expect(validateRoomSecret(variedUnicode).valid).toBe(true);
     expect(validateRoomSecret(variedEmoji).valid).toBe(true);
 
-    expect(validateRoomSecret("eight888").valid).toBe(false);
+    expect(validateRoomSecret("five5").valid).toBe(false);
     expect(validateRoomSecret(variedUnicode + "Ж").valid).toBe(false);
     expect(validateRoomSecret(variedEmoji + "🧸").valid).toBe(false);
     expect(validateRoomSecret(" outer-space").valid).toBe(false);
@@ -120,6 +122,8 @@ describe("room secrets", () => {
     expect(validateRoomSecret("hidden\u200bvalue").valid).toBe(false);
     expect(validateRoomSecret("broken\ud800value").valid).toBe(false);
     expect(validateCustomRoomSecret("password-for-room").valid).toBe(false);
+    expect(validateCustomRoomSecret("qwerty").valid).toBe(false);
+    expect(validateCustomRoomSecret("123456").valid).toBe(false);
     expect(validateCustomRoomSecret("z".repeat(15)).valid).toBe(false);
     expect(validateCustomRoomSecret("abcd".repeat(16)).valid).toBe(false);
     expect(validateCustomRoomSecret("correcthorsebatterystaple").valid).toBe(false);

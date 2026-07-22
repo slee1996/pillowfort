@@ -259,7 +259,7 @@ export function SetupScreen() {
             autoCorrect="off"
             ref={passwordRef}
             disabled={connecting || (recoveryRequired && recoveryCredentialLocked)}
-            placeholder={recoveryRequired ? "Re-enter the exact prior password" : customSecret ? "15–64 characters" : undefined}
+            placeholder={recoveryRequired ? "Re-enter the exact prior password" : customSecret ? "6–64 characters" : undefined}
             onChange={(event) => {
               setSecret(event.currentTarget.value);
               if (secretError) setSecretError("");
@@ -363,7 +363,7 @@ export function SetupScreen() {
             {recoveryRequired
               ? "Recovery mode: re-enter the exact password you copied. Pillowfort stores only the non-secret room pointer."
               : customSecret
-              ? "Custom passwords can be guessed offline. Use 16+ characters or four unrelated words; never reuse an account password."
+              ? "Short custom passwords are easier to guess offline. Never reuse an account password."
               : "Generated securely and locked. Copy it, then share it privately with your guests."}
           </div>
           {secretError && <div id="setup-secret-error" className="secret-error" role="alert">{secretError}</div>}

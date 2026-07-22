@@ -129,7 +129,7 @@ Current protocol-v4 design:
   Add commit are separately required before a new device becomes active.
 - The invitation public key is deterministic and can confirm a guessed secret.
   The first-party client therefore defaults to a generated 256-bit `pf2_`
-  secret. Explicit new custom passwords require 15–64 safe characters and pass
+  secret. Explicit new custom passwords require 6–64 safe characters and pass
   creation-only common/repetition/sequence/context checks before a
   room-instance-bound 600,000-round PBKDF2 derivation into canonical secret
   material. Join keeps a stable syntax policy so future strength-list updates

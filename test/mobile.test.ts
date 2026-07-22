@@ -329,7 +329,7 @@ describe("Mobile E2E", () => {
   });
 
   it("creates, shares, and joins with a custom room password", async () => {
-    const customPassword = "bob lantern blanket orbit";
+    const customPassword = "orchid";
     const host = await mobilePage();
     const code = await createFort(host, "alice", customPassword);
 
