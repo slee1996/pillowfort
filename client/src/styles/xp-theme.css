@@ -124,6 +124,21 @@
   margin-top: 12px;
 }
 
+.secret-controls {
+  display: flex;
+  gap: 6px;
+  margin: -8px 0 6px;
+}
+
+.secret-help,
+.secret-error {
+  margin: 0 0 10px;
+  font-size: 11px;
+}
+
+.secret-help { color: #555; }
+.secret-error { color: #a40000; font-weight: bold; }
+
 .fort-pass-panel {
   margin-top: 4px;
   padding: 10px;

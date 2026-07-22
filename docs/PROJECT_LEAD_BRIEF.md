@@ -2,6 +2,8 @@
 
 Analysis date: 2026-05-02
 
+Security-state refresh: 2026-07-22
+
 This document is the product, technical, and business brief for taking over
 Pillowfort as project lead. It complements `ARCHITECTURE.md`, which covers the
 system design and WebSocket protocol in more detail.
@@ -9,8 +11,9 @@ system design and WebSocket protocol in more detail.
 ## Executive Summary
 
 Pillowfort is a small, private, disposable hangout room for friends. A host
-creates a fort, shares an 8-character room code plus a password, people join in
-real time, chat, doodle, play small games, and then knock the room down.
+creates a fort, shares a generated `f-` room flag plus a 256-bit room
+secret, people join in real time, chat, doodle, play small games, and then knock
+the room down.
 
 The product is not just "chat." Its strongest shape is:
 
@@ -43,17 +46,24 @@ Primary runtime pieces:
 - `src/entitlements.ts`: host-only paid SKU entitlement helpers.
 - `src/alarms.ts`: Durable Object alarm schedule helpers.
 - `client/src/services/protocol.ts`: typed WebSocket protocol.
-- `client/src/services/chatCrypto.ts`: browser-side room-key chat encryption.
+- `client/src/services/secureRoomController.ts`: protocol-v4 socket lifecycle,
+  admission, ordered recovery, and client automations.
+- `client/src/services/secureRoomEngine.ts`: crash-safe MLS and encrypted
+  application-state transitions.
+- `crypto/openmls-wasm/`: pinned OpenMLS adapter and reviewed browser artifacts.
+- `src/secureRelayV4.ts`: shared opaque relay state machine used by local and
+  production runtimes.
 - `test/`: Bun, WebSocket, Playwright, and visual regression tests.
 - `video/`: Remotion-based demo and marketing video pipeline.
 
 Core user flow:
 
 1. User picks a screen name.
-2. Host creates a fort with a secret password.
-3. App generates an 8-character room code.
-4. Host shares code/link and password out of band.
-5. Guests join with screen name, code, and password.
+2. The app generates and locks a `pf2_` 256-bit room secret for the host.
+3. App generates `f-` plus ten lowercase base32 symbols (50 random bits) for a
+   free-room flag; human 4–10 character flags are Fort Pass-only.
+4. Host shares the code/link and room secret out of band.
+5. Guests join with screen name, code, and room secret.
 6. Members chat, draw, and play games.
 7. Host knocks the fort down, or the room expires after idle time.
 
@@ -71,7 +81,8 @@ Core room behavior:
 
 - Invite-only rooms.
 - Host-created room codes.
-- Password-gated entry.
+- Generated-secret-gated entry with one-use invitation/device challenge proofs,
+  host approval, and a single-use MLS KeyPackage.
 - Auto-suffixed duplicate names.
 - Typing indicators.
 - Room-scoped presence and away messages.
@@ -86,11 +97,12 @@ Chat and UX:
 
 - AIM / Windows XP inspired UI.
 - Desktop and mobile layouts.
-- AES-GCM encrypted chat payloads.
+- MLS-encrypted protocol-v4 application events for chat, formatting, drawing,
+  presence, room controls, and games.
 - Message formatting.
 - Emoji insertion.
 - Save-chat export from the local UI.
-- Invite-copy flow with room link and password.
+- Intentional invite-copy flow with room link and room secret.
 
 Games and social mechanics:
 
@@ -117,7 +129,7 @@ open quickly without asking anyone to create an account or install an app.
 
 The strongest attributes are:
 
-- Fast setup: room code plus password is enough.
+- Fast setup: room code plus generated room secret is enough.
 - Clear privacy posture: no public discovery and no durable chat history.
 - Differentiated identity: the XP/AIM interface is memorable.
 - Small-group play: games are part of the room, not bolted on as external links.
@@ -141,21 +153,26 @@ The codebase has several real strengths:
 - Production routing is simple: `/ws?room=...` goes to the room Durable Object,
   static assets serve the SPA, and `/:roomId` resolves room links.
 - The frontend state model is centralized with Zustand.
-- Chat encryption is client-side, room-key based, and binds sender/session data
-  into AES-GCM additional authenticated data for newer payloads.
-- The server validates message length, name length, style colors, encrypted
-  payload shape, auth verifier shape, and game actions.
-- Core tests cover lifecycle, joins, wrong password, duplicate names, capacity,
-  reconnect, host handoff, games, leaderboards, queueing, rate limiting, and
-  invite-link behavior.
+- Content encryption is client-side and per-device. Protocol v4 uses pinned
+  OpenMLS ciphersuite 1 for forward-secure, authenticated group epochs and
+  encrypts the complete application-event union instead of chat alone.
+- Admission uses one-use relay challenges, invitation-signed member bindings,
+  device credential proofs, explicit host approval, and MLS Add/Welcome
+  barriers. Removed devices cannot process later epochs.
+- The server caps v4 WebSocket frames at 96 KiB before parsing, validates exact
+  bounded schemas, applies causal order grants, and persists only routing,
+  membership, liveness, commerce, and opaque encrypted delivery state.
+- Browser MLS/application state is wrapped and transactionally persisted in
+  IndexedDB under an exclusive per-room Web Lock. Mutation is durable before
+  send, acknowledgement, or UI delivery.
+- Core and security tests cover lifecycle, admission, forged/stale/reordered
+  frames, replay across restart, concurrent tabs, membership changes, recovery,
+  host handoff, games, rate limiting, payments, and invite behavior.
 - Design snapshot tests exist for desktop and mobile screens.
 
-As of this brief, the core suite passes:
-
-```text
-79 pass
-0 fail
-```
+Exact test counts change as coverage grows. Treat `npm test`,
+`npm run typecheck`, and `npm run build` on the release commit as the
+authoritative core status.
 
 ## Main Risks
 
@@ -182,10 +199,12 @@ That is the right architectural direction, but Cloudflare hibernation discards
 in-memory state. This means anything important after hibernation must be
 recoverable from Durable Object storage or WebSocket attachments.
 
-Currently persisted state appears intentionally minimal: room ID and auth
-verifier. Active games, queues, leaderboards, and some transient timers are
-mostly in memory. That may be acceptable for an ephemeral app, but it needs an
-explicit decision.
+Persisted security/lifecycle state is intentionally bounded: protocol identity,
+invitation-auth public key, signed member bindings, causal order and replay
+ledgers, opaque backlog, socket attachments, entitlement/theme state, and
+alarm-backed deadlines. Application/game content is encrypted and reduced in
+the clients; the relay does not persist or interpret plaintext game state. The
+current policy is documented in `docs/PRODUCTION_STATE_POLICY.md`.
 
 Project-lead recommendation:
 
@@ -384,7 +403,7 @@ Work:
 Current status:
 
 - Home/setup copy now states invite-only, accountless, temporary room, and
-  password-storage boundaries without adding an onboarding wall.
+  room-secret storage boundaries without adding an onboarding wall.
 - Chat now shows activation nudges for empty rooms and first-game starts.
 - `npm run metrics:report` turns sanitized analytics logs into a weekly funnel
   readout.
@@ -446,8 +465,9 @@ Work:
 Current status:
 
 - `/activity` serves the shared app shell with Discord frame headers.
-- Client-side Discord Activity detection maps an Activity launch to a
-  deterministic `dc-......` room flag.
+- Client-side Discord Activity detection is presentation-only. Unverified
+  instance/channel/frame parameters cannot select or reserve a room; setup uses
+  a fresh random room and hides paid controls.
 - SDK installation/authentication is intentionally deferred until a Discord
   client ID and token exchange endpoint are ready.
 
@@ -510,8 +530,14 @@ Keep rooms small:
 
 Keep privacy claims precise:
 
-- Message payloads can be encrypted.
-- Server still sees metadata such as room, sender name, event timing, and joins.
+- Protocol v4 end-to-end encrypts the complete room-content event union,
+  including chat/style, drawings, presence, controls, and games.
+- The relay still sees room/device routing identifiers, protocol/destination
+  class, connection and delivery timing/count, and coarse padded size. It can
+  disrupt availability and influence liveness, but cannot forge valid MLS
+  application content.
+- Browser E2EE does not protect against deliberately modified first-party
+  JavaScript, a compromised endpoint, or a participant who leaks plaintext.
 - Local export exists because the user's browser can save what it sees.
 
 Keep the vibe:
@@ -537,6 +563,8 @@ Keep the room disposable:
 
 Current supporting docs:
 
+- [Secure room protocol v4](SECURE_ROOM_PROTOCOL_V4.md)
+- [Encryption security review and remediation record](../security_best_practices_report.md)
 - [Production state policy](PRODUCTION_STATE_POLICY.md)
 - [Beta analytics contract](BETA_ANALYTICS.md)
 - [Public beta deploy checklist](PUBLIC_BETA_DEPLOY_CHECKLIST.md)

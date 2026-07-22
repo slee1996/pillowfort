@@ -1,3 +1,5 @@
+import { readByteLimitedText } from "./requestBody";
+
 export const ANALYTICS_EVENTS = [
   "room_created",
   "room_joined",
@@ -23,12 +25,26 @@ export const ANALYTICS_EVENTS = [
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
+// Only configuration/commerce events that happen outside a room may be
+// submitted by a browser. Room lifecycle, membership, invitations, messages,
+// and games are protected application metadata in protocol v4. Operational
+// events below are emitted by trusted server code through opsLogLine instead.
+export const PUBLIC_ANALYTICS_EVENTS = [
+  "fort_pass_code_checked",
+  "fort_pass_status_checked",
+  "fort_pass_checkout_started",
+  "fort_pass_checkout_failed",
+  "fort_pass_checkout_returned",
+  "discord_activity_detected",
+] as const satisfies readonly AnalyticsEventName[];
+
 export interface SanitizedAnalyticsEvent {
   event: AnalyticsEventName;
   props: Record<string, string | number | boolean>;
 }
 
 const EVENT_SET = new Set<string>(ANALYTICS_EVENTS);
+const PUBLIC_EVENT_SET = new Set<string>(PUBLIC_ANALYTICS_EVENTS);
 const STRING_PROPS = new Set(["kind", "role", "source", "reason", "surface"]);
 const NUMBER_PROPS = new Set(["memberCount", "queueDepth", "status"]);
 const BOOLEAN_PROPS = new Set(["mobile"]);
@@ -82,15 +98,17 @@ export function sanitizeAnalyticsEvent(input: unknown): SanitizedAnalyticsEvent 
   return { event: event as AnalyticsEventName, props };
 }
 
-export async function readAnalyticsEvent(request: Request): Promise<SanitizedAnalyticsEvent | null> {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) return null;
+export function sanitizePublicAnalyticsEvent(input: unknown): SanitizedAnalyticsEvent | null {
+  const event = sanitizeAnalyticsEvent(input);
+  return event && PUBLIC_EVENT_SET.has(event.event) ? event : null;
+}
 
-  const text = await request.text();
-  if (!text || text.length > MAX_BODY_BYTES) return null;
+export async function readAnalyticsEvent(request: Request): Promise<SanitizedAnalyticsEvent | null> {
+  const body = await readByteLimitedText(request, MAX_BODY_BYTES);
+  if (!body.ok || !body.text) return null;
 
   try {
-    return sanitizeAnalyticsEvent(JSON.parse(text));
+    return sanitizePublicAnalyticsEvent(JSON.parse(body.text));
   } catch {
     return null;
   }

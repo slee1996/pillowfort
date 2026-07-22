@@ -2,60 +2,46 @@
  * WebSocket client helpers shared by end-to-end tests.
  * These mirror the local capture tooling without depending on ignored files.
  */
-import { encryptChatPayload } from "../client/src/services/chatCrypto";
+import { createRoomAuthPayload, encryptChatPayload } from "../client/src/services/chatCrypto";
+import { generateRoomId } from "../client/src/services/roomSecret";
 
 export type Client = {
   ws: WebSocket;
   name: string;
   roomId?: string;
   password?: string;
+  authChallenge: string;
   messages: any[];
   send: (msg: any) => void;
   waitFor: (type: string, timeout?: number) => Promise<any>;
   close: () => Promise<void>;
 };
 
-const KDF_ID = "pbkdf2-sha256-600k-v1";
-
-function toBase64Url(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
-export async function roomAuth(roomId: string, password: string) {
-  const baseKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
-  const authKey = await crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: new TextEncoder().encode(`pillowfort:auth:${roomId}`),
-      iterations: 600_000,
-      hash: "SHA-256",
-    },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
-  );
-  const raw = await crypto.subtle.exportKey("raw", authKey);
-  const hash = await crypto.subtle.digest("SHA-256", raw);
-  return { v: 1, kdf: KDF_ID, verifier: toBase64Url(new Uint8Array(hash)) };
+export async function roomAuth(
+  client: Client,
+  roomId: string,
+  password: string,
+  action: "set-up" | "join" | "rejoin",
+  name: string
+) {
+  return createRoomAuthPayload(roomId, password, client.authChallenge, action, name);
 }
 
 export async function connectUrl(url: string): Promise<Client> {
-  const ws = new WebSocket(url);
+  const ws = testWebSocket(url);
   return setupClient(ws);
 }
 
 export async function connect(port: number): Promise<Client> {
-  const ws = new WebSocket(`ws://localhost:${port}/ws`);
+  const ws = testWebSocket(`ws://localhost:${port}/ws`);
   return setupClient(ws);
+}
+
+function testWebSocket(url: string): WebSocket {
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has("protocol")) parsed.searchParams.set("protocol", "legacy");
+  const origin = `${parsed.protocol === "wss:" ? "https:" : "http:"}//${parsed.host}`;
+  return new WebSocket(parsed, { headers: { Origin: origin } } as never);
 }
 
 async function setupClient(ws: WebSocket): Promise<Client> {
@@ -64,10 +50,16 @@ async function setupClient(ws: WebSocket): Promise<Client> {
   const waiters = new Map<string, { resolve: (msg: any) => void; timer: ReturnType<typeof setTimeout> }[]>();
   let client: Client;
   let delivery = Promise.resolve();
+  let resolveChallenge!: (challenge: string) => void;
+  const challengePromise = new Promise<string>((resolve) => { resolveChallenge = resolve; });
 
   ws.addEventListener("message", (e) => {
+    const parsed = JSON.parse(e.data as string);
+    if (parsed.type === "auth-challenge" && typeof parsed.challenge === "string") {
+      resolveChallenge(parsed.challenge);
+    }
     delivery = delivery.then(async () => {
-      const msg = JSON.parse(e.data as string);
+      const msg = parsed;
       if (msg.type === "message" && msg.enc && client.roomId && client.password) {
         const decrypted = await decryptForTest(client.roomId, client.password, msg.from, msg.enc);
         if (decrypted) Object.assign(msg, decrypted);
@@ -90,10 +82,12 @@ async function setupClient(ws: WebSocket): Promise<Client> {
     ws.addEventListener("open", () => resolve());
     ws.addEventListener("error", () => reject(new Error("ws connect failed")));
   });
+  const authChallenge = await challengePromise;
 
   client = {
     ws,
     name: "",
+    authChallenge,
     messages,
     send(msg) {
       ws.send(JSON.stringify(msg));
@@ -166,7 +160,7 @@ export async function createRoom(
   roomClient.name = name;
   roomClient.roomId = roomId;
   roomClient.password = password;
-  roomClient.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  roomClient.send({ type: "set-up", name, auth: await roomAuth(roomClient, roomId, password, "set-up", name) });
   const created = await roomClient.waitFor("room-created");
   return { client: roomClient, roomId: created.room };
 }
@@ -181,20 +175,9 @@ export async function joinRoom(
   client.name = name;
   client.roomId = roomId;
   client.password = password;
-  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
+  client.send({ type: "join", name, auth: await roomAuth(client, roomId, password, "join", name), room: roomId });
   await client.waitFor("joined");
   return client;
-}
-
-function generateRoomId(): string {
-  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
-  const consonants = "bcdfghjklmnprstvwz0123456789";
-  const vowels = "o0ua";
-  const all = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const soft = "rln";
-  const hard = "xksz";
-  const [a, b] = Math.random() < 0.5 ? [soft, hard] : [hard, soft];
-  return pick(consonants) + pick(vowels) + pick(a) + pick(consonants) + pick(vowels) + pick(b) + pick(all) + pick(all);
 }
 
 export async function createRoomUrl(
@@ -207,7 +190,7 @@ export async function createRoomUrl(
   client.name = name;
   client.roomId = roomId;
   client.password = password;
-  client.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  client.send({ type: "set-up", name, auth: await roomAuth(client, roomId, password, "set-up", name) });
   const created = await client.waitFor("room-created");
   return { client, roomId: created.room };
 }
@@ -222,7 +205,7 @@ export async function joinRoomUrl(
   client.name = name;
   client.roomId = roomId;
   client.password = password;
-  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
+  client.send({ type: "join", name, auth: await roomAuth(client, roomId, password, "join", name), room: roomId });
   await client.waitFor("joined");
   return client;
 }

@@ -2,16 +2,32 @@ import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
 import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem, RoomTheme, FortPassRoomPerks } from "./protocol";
-import { decryptChatPayload, roomSafetyCode } from "./chatCrypto";
+import { ChatCryptoStateError, decryptChatPayload, roomSafetyCode } from "./chatCrypto";
 import { track, trackOnce } from "./analytics";
 
 const SABOTEUR_EXPLOSION_MS = 1200;
 let sabBombInterval: ReturnType<typeof setInterval> | null = null;
 let sabBombEndsAt = 0;
-const viteEnv = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env;
-const ALLOW_LEGACY_PLAINTEXT = viteEnv?.DEV === true && viteEnv?.VITE_ALLOW_LEGACY_PLAINTEXT === "1";
-
 type IncomingChatMessage = Extract<IncomingMessage, { type: "message" }>;
+let encryptedDeliveryQueue: Promise<void> = Promise.resolve();
+let encryptedDeliveryRoom: string | null = null;
+let encryptedDeliveryGeneration = 0;
+let encryptedStorageFailureGeneration = -1;
+
+function resetEncryptedDeliveryQueue(roomId: string | null) {
+  encryptedDeliveryGeneration += 1;
+  encryptedDeliveryRoom = roomId;
+  encryptedDeliveryQueue = Promise.resolve();
+  encryptedStorageFailureGeneration = -1;
+}
+
+function queueEncryptedChatMessage(msg: IncomingChatMessage, roomId: string, password: string) {
+  if (encryptedDeliveryRoom !== roomId) resetEncryptedDeliveryQueue(roomId);
+  const generation = encryptedDeliveryGeneration;
+  encryptedDeliveryQueue = encryptedDeliveryQueue
+    .then(() => handleEncryptedChatMessage(msg, roomId, password, generation))
+    .catch(() => {});
+}
 
 function updateRoomSafetyCode(roomId: string, password: string | null) {
   useGameStore.getState().setRoomSafetyCode(null);
@@ -109,18 +125,33 @@ function startSabBombCountdown(seconds: number, durationMs?: number) {
 async function handleEncryptedChatMessage(
   msg: IncomingChatMessage,
   roomId: string,
-  password: string
+  password: string,
+  generation: number
 ) {
   const current = useGameStore.getState();
   const muted = current.mutedNames.has(msg.from);
   if (muted) return;
 
-  const decrypted = msg.enc
-    ? await decryptChatPayload(roomId, password, msg.from, msg.enc, msg.style)
-    : null;
+  let decrypted;
+  try {
+    decrypted = await decryptChatPayload(roomId, password, msg.from, msg.enc);
+  } catch (error) {
+    if (error instanceof ChatCryptoStateError) {
+      const now = useGameStore.getState();
+      if (generation === encryptedDeliveryGeneration && now.roomId === roomId) {
+        now.showError("Secure storage failed. Encrypted messages are blocked until this page is reloaded.");
+        if (encryptedStorageFailureGeneration !== generation) {
+          encryptedStorageFailureGeneration = generation;
+          now.addSystemMessage("Encrypted delivery stopped because durable replay protection is unavailable.");
+        }
+      }
+    }
+    return;
+  }
   const text = (decrypted?.text || "[unable to decrypt message]").slice(0, 2000);
 
   const now = useGameStore.getState();
+  if (generation !== encryptedDeliveryGeneration) return;
   if (now.roomId !== roomId) return;
   if (now.mutedNames.has(msg.from)) return;
 
@@ -134,6 +165,7 @@ export function handleMessage(msg: IncomingMessage) {
 
   switch (msg.type) {
     case "room-created": {
+      resetEncryptedDeliveryQueue(msg.room);
       s.setRoomId(msg.room);
       s.setIsHost(true);
       s.setMembers([s.name]);
@@ -146,8 +178,8 @@ export function handleMessage(msg: IncomingMessage) {
       s.setScreen("chat");
       s.clearMessages();
       s.addSystemMessage("Welcome to the fort.");
-      s.addSystemMessage(`Fort: ${msg.room} — Password: ${s.password}`);
-      s.addSystemMessage("Share the fort flag and password to let your friends in.");
+      s.addSystemMessage(`Fort flag: ${msg.room}`);
+      s.addSystemMessage("Share the fort flag and room secret privately to let your friends in.");
       updateRoomSafetyCode(msg.room, s.password);
       playDoorOpen();
       requestWakeLock();
@@ -156,6 +188,7 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "joined": {
+      resetEncryptedDeliveryQueue(msg.room);
       const renamed = msg.name && msg.name !== s.name;
       if (renamed) s.setName(msg.name);
       s.setRoomId(msg.room);
@@ -179,6 +212,7 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "rejoined": {
+      if (encryptedDeliveryRoom !== msg.room) resetEncryptedDeliveryQueue(msg.room);
       s.setReconnecting(false);
       s.setReconnectAttempts(0);
       s.setRoomId(msg.room);
@@ -222,22 +256,22 @@ export function handleMessage(msg: IncomingMessage) {
       break;
     }
 
+    case "fort-pass-updated": {
+      s.setFortPass(normalizeFortPass(msg.fortPass));
+      break;
+    }
+
     case "game-queued": {
       s.addSystemMessage(`⏳ Queued (#${msg.position}): ${queueItemText(msg)}`);
       break;
     }
 
     case "message": {
-      if (msg.enc) {
-        if (s.roomId && s.password) {
-          void handleEncryptedChatMessage(msg, s.roomId, s.password);
-        } else if (!s.mutedNames.has(msg.from)) {
-          s.addChatMessage(msg.from, "[encrypted message]", msg.style);
-          if (s.minimized) s.incrementUnread();
-          playMsgSound();
-        }
-      } else if (ALLOW_LEGACY_PLAINTEXT && typeof msg.text === "string" && !s.mutedNames.has(msg.from)) {
-        s.addChatMessage(msg.from, msg.text, msg.style);
+      if (!msg.enc) break;
+      if (s.roomId && s.password) {
+        queueEncryptedChatMessage(msg, s.roomId, s.password);
+      } else if (!s.mutedNames.has(msg.from)) {
+        s.addChatMessage(msg.from, "[encrypted message]");
         if (s.minimized) s.incrementUnread();
         playMsgSound();
       }
@@ -315,6 +349,7 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "knocked-down": {
+      resetEncryptedDeliveryQueue(null);
       const stateNow = useGameStore.getState();
       trackOnce(`room-knocked-down:${stateNow.roomId || "unknown"}`, "room_knocked_down", {
         role: stateNow.isHost ? "host" : "guest",
@@ -361,6 +396,7 @@ export function handleMessage(msg: IncomingMessage) {
     }
 
     case "ejected": {
+      resetEncryptedDeliveryQueue(null);
       stopSabBombCountdown();
       s.setScreen("knocked");
       playDoorClose();

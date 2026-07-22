@@ -1,6 +1,12 @@
 import { useRef, useEffect } from "react";
 import { send, getWs } from "../../services/ws";
 
+const MAX_DRAW_POINTS_PER_EVENT = 128;
+
+function normalizedCoordinate(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
 export function DrawCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -47,8 +53,8 @@ export function DrawCanvas() {
       colorRef.current = `hsl(${Math.floor(Math.random() * 360)}, 80%, 65%)`;
       isNewStrokeRef.current = true;
       const rect = cv.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
+      const x = normalizedCoordinate((e.clientX - rect.left) / rect.width);
+      const y = normalizedCoordinate((e.clientY - rect.top) / rect.height);
       ctx.beginPath();
       ctx.moveTo(x * cv.width, y * cv.height);
       ctx.strokeStyle = colorRef.current;
@@ -62,11 +68,18 @@ export function DrawCanvas() {
     const onPointerMove = (e: PointerEvent) => {
       if (!drawingRef.current) return;
       const rect = cv.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
+      const x = normalizedCoordinate((e.clientX - rect.left) / rect.width);
+      const y = normalizedCoordinate((e.clientY - rect.top) / rect.height);
       ctx.lineTo(x * cv.width, y * cv.height);
       ctx.stroke();
-      pendingPtsRef.current.push([x, y]);
+      if (pendingPtsRef.current.length < MAX_DRAW_POINTS_PER_EVENT) {
+        pendingPtsRef.current.push([x, y]);
+      } else {
+        // Pointer coalescing can produce far more samples than one animation
+        // frame. Keep the newest endpoint while respecting the signed event's
+        // hard point cap, so an input device cannot grow an unbounded buffer.
+        pendingPtsRef.current[MAX_DRAW_POINTS_PER_EVENT - 1] = [x, y];
+      }
     };
 
     const stopDraw = () => {

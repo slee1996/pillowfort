@@ -1,8 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { send } from "../../services/ws";
 import { beep } from "../../hooks/useSound";
-import { useGameStore } from "../../stores/gameStore";
-import { encryptChatPayload } from "../../services/chatCrypto";
 
 const BRICK_COLORS = ["#FF6B6B", "#FFA94D", "#FFD43B", "#69DB7C", "#4DABF7", "#9775FA", "#F06595", "#20C997"];
 const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
@@ -22,13 +20,8 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
   const animRef = useRef<number>(0);
   const keysRef = useRef<Record<string, boolean>>({});
 
-  const sendBreakoutMessage = useCallback(async (text: string) => {
-    const { roomId, password, name } = useGameStore.getState();
-    if (!roomId || !password) return;
-    try {
-      const enc = await encryptChatPayload(roomId, password, name, text);
-      if (enc) send("chat", { enc });
-    } catch {}
+  const sendBreakoutMessage = useCallback((text: string) => {
+    send("chat", { text });
   }, []);
 
   const reset = useCallback(() => {

@@ -15,6 +15,7 @@ import { MobileBuddyOverlay } from "../components/sidebar/MobileBuddyOverlay";
 import { MobileInviteSheet } from "../components/sidebar/MobileInviteSheet";
 import { MemberPicker } from "../components/overlays/MemberPicker";
 import { HostOfferDialog } from "../components/overlays/HostOfferDialog";
+import { AdmissionApprovalDialog } from "../components/overlays/AdmissionApprovalDialog";
 import { VoteBanner } from "../components/games/VoteBanner";
 import { RpsOverlay } from "../components/games/RpsOverlay";
 import { TttOverlay } from "../components/games/TttOverlay";
@@ -142,8 +143,6 @@ export function ChatScreen() {
     } else {
       useGameStore.getState().setIntentionalLeave(true);
       send("leave");
-      useGameStore.getState().cleanup();
-      useGameStore.getState().setScreen("home");
     }
   };
 
@@ -448,6 +447,7 @@ export function ChatScreen() {
       </DraggableWindow>
 
       {/* Overlays */}
+      <AdmissionApprovalDialog />
       <HostOfferDialog />
       <RpsOverlay />
       <TttOverlay />

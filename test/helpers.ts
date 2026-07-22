@@ -1,6 +1,10 @@
+import { createRoomAuthPayload, encryptChatPayload } from "../client/src/services/chatCrypto";
+import { generateRoomId } from "../client/src/services/roomSecret";
+
 export type Client = {
   ws: WebSocket;
   messages: any[];
+  authChallenge: string;
   send: (msg: any) => void;
   waitFor: (type: string, timeout?: number) => Promise<any>;
   close: () => Promise<void>;
@@ -9,7 +13,6 @@ export type Client = {
 export const TEST_GRACE_MS = 300;
 export const allClients: Client[] = [];
 const ROOT_DIR = import.meta.dir + "/..";
-const KDF_ID = "pbkdf2-sha256-600k-v1";
 
 let _port = 0;
 let _proc: ReturnType<typeof Bun.spawn> | null = null;
@@ -49,7 +52,7 @@ export async function startServer(): Promise<void> {
   _port = 10_000 + Math.floor(Math.random() * 50_000);
   _proc = Bun.spawn(["bun", "server.ts"], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), CHALLENGE_TIMEOUT_MS: "250", PILLOWFORT_RATE_ROOMS: "999", PF_ALLOW_LEGACY_PLAINTEXT: "1", STRIPE_WEBHOOK_SECRET: "whsec_test", NODE_ENV: "test" },
+    env: { ...process.env, PORT: String(_port), PILLOWFORT_GRACE_MS: String(TEST_GRACE_MS), CHALLENGE_TIMEOUT_MS: "250", PILLOWFORT_RATE_ROOMS: "999", PILLOWFORT_ALLOW_LEGACY_WS: "1", STRIPE_WEBHOOK_SECRET: "whsec_test", NODE_ENV: "test" },
     stdout: "ignore",
     stderr: "ignore",
   });
@@ -80,13 +83,18 @@ export async function cleanupClients(): Promise<void> {
 }
 
 export async function connectClient(): Promise<Client> {
-  const ws = new WebSocket(`ws://localhost:${_port}/ws`);
+  const ws = new WebSocket(`ws://localhost:${_port}/ws?protocol=legacy`, {
+    headers: { Origin: `http://localhost:${_port}` },
+  } as never);
   const messages: any[] = [];
   const queues = new Map<string, any[]>();
   const waiters = new Map<string, { resolve: (msg: any) => void; timer: ReturnType<typeof setTimeout> }[]>();
+  let resolveChallenge!: (challenge: string) => void;
+  const challengePromise = new Promise<string>((resolve) => { resolveChallenge = resolve; });
 
   ws.addEventListener("message", (e) => {
     const msg = JSON.parse(e.data as string);
+    if (msg.type === "auth-challenge") resolveChallenge(msg.challenge);
     messages.push(msg);
     const list = waiters.get(msg.type);
     if (list?.length) {
@@ -104,10 +112,12 @@ export async function connectClient(): Promise<Client> {
     ws.addEventListener("open", () => res());
     ws.addEventListener("error", () => rej(new Error("ws connect failed")));
   });
+  const authChallenge = await challengePromise;
 
   const client: Client = {
     ws,
     messages,
+    authChallenge,
     send(msg) { ws.send(JSON.stringify(msg)); },
     waitFor(type, timeout = 2000) {
       const q = queues.get(type);
@@ -143,55 +153,39 @@ export async function connectClient(): Promise<Client> {
   return client;
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
-export async function roomAuth(roomId: string, password: string) {
-  const baseKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
-  const authKey = await crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: new TextEncoder().encode(`pillowfort:auth:${roomId}`),
-      iterations: 600_000,
-      hash: "SHA-256",
-    },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
-  );
-  const raw = await crypto.subtle.exportKey("raw", authKey);
-  const hash = await crypto.subtle.digest("SHA-256", raw);
-  return { v: 1, kdf: KDF_ID, verifier: toBase64Url(new Uint8Array(hash)) };
+export async function roomAuth(
+  client: Client,
+  roomId: string,
+  password: string,
+  action: "set-up" | "join" | "rejoin",
+  name: string
+) {
+  return createRoomAuthPayload(roomId, password, client.authChallenge, action, name);
 }
 
 export async function createRoom(name = "host", password = "secret"): Promise<{ host: Client; roomId: string }> {
   const host = await connectClient();
-  const roomId = `t${Math.random().toString(36).slice(2, 9)}`;
+  const roomId = generateRoomId();
   host.ws.close();
   const realHost = await connectClientToRoom(roomId);
-  realHost.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
+  realHost.send({ type: "set-up", name, auth: await roomAuth(realHost, roomId, password, "set-up", name) });
   const created = await realHost.waitFor("room-created");
   return { host: realHost, roomId: created.room };
 }
 
 export async function connectClientToRoom(roomId: string): Promise<Client> {
-  const ws = new WebSocket(`ws://localhost:${_port}/ws?room=${roomId}`);
+  const ws = new WebSocket(`ws://localhost:${_port}/ws?room=${roomId}&protocol=legacy`, {
+    headers: { Origin: `http://localhost:${_port}` },
+  } as never);
   const messages: any[] = [];
   const queues = new Map<string, any[]>();
   const waiters = new Map<string, { resolve: (msg: any) => void; timer: ReturnType<typeof setTimeout> }[]>();
+  let resolveChallenge!: (challenge: string) => void;
+  const challengePromise = new Promise<string>((resolve) => { resolveChallenge = resolve; });
 
   ws.addEventListener("message", (e) => {
     const msg = JSON.parse(e.data as string);
+    if (msg.type === "auth-challenge") resolveChallenge(msg.challenge);
     messages.push(msg);
     const list = waiters.get(msg.type);
     if (list?.length) {
@@ -209,10 +203,12 @@ export async function connectClientToRoom(roomId: string): Promise<Client> {
     ws.addEventListener("open", () => res());
     ws.addEventListener("error", () => rej(new Error("ws connect failed")));
   });
+  const authChallenge = await challengePromise;
 
   const client: Client = {
     ws,
     messages,
+    authChallenge,
     send(msg) { ws.send(JSON.stringify(msg)); },
     waitFor(type, timeout = 2000) {
       const q = queues.get(type);
@@ -247,7 +243,7 @@ export async function createRoomWithId(
   host.send({
     type: "set-up",
     name,
-    auth: await roomAuth(roomId, password),
+    auth: await roomAuth(host, roomId, password, "set-up", name),
     ...(fortPassSessionId ? { fortPassSessionId } : {}),
   });
   const created = await host.waitFor("room-created");
@@ -256,7 +252,20 @@ export async function createRoomWithId(
 
 export async function joinRoom(roomId: string, name = "guest", password = "secret"): Promise<Client> {
   const client = await connectClientToRoom(roomId);
-  client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
+  client.send({ type: "join", name, auth: await roomAuth(client, roomId, password, "join", name), room: roomId });
   await client.waitFor("joined");
   return client;
+}
+
+export async function sendEncryptedChat(
+  client: Client,
+  roomId: string,
+  password: string,
+  sender: string,
+  text: string,
+  style?: { bold?: boolean; italic?: boolean; underline?: boolean; color?: string }
+) {
+  const enc = await encryptChatPayload(roomId, password, sender, text, style);
+  if (!enc) throw new Error("failed to encrypt test chat");
+  client.send({ type: "chat", enc });
 }

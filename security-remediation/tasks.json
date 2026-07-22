@@ -1,0 +1,303 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/tasks.schema.json",
+  "schemaVersion": 2,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "state": "success",
+  "objective": "Remediate the protocol-v4 cryptographic, persistence, membership, relay-causality, application-state, and build-boundary findings with repository-grounded controls and authoritative regression evidence.",
+  "owner": "Pillowfort release coordinator",
+  "source": [
+    "User directive: keep going until all security holes are patched",
+    "security_best_practices_report.md",
+    "docs/SECURE_ROOM_PROTOCOL_V4.md",
+    "RFC 9420 and RFC 9750"
+  ],
+  "trackingPolicy": "versioned",
+  "workspace": {
+    "vcs": "git",
+    "root": ".",
+    "baseRevision": "57f2559a167df4c460d15a4f99e736349715d33d",
+    "branch": "main",
+    "isolation": "shared_worktree"
+  },
+  "authoritativeCompletionProof": "The complete npm test security and product matrices, focused protocol-v4 browser and relay regressions, pinned OpenMLS/Rust checks, dependency audits, typecheck, production build, UI browser suites, and Wrangler dry-run all pass against the reconciled working tree.",
+  "behavioralOracle": "Protected room/game content remains inside authenticated MLS application messages; membership, causal order, replay, crash recovery, and terminal teardown fail closed under malformed, stale, reordered, duplicated, disconnected, or barrier-conflicting traffic while valid multi-member gameplay remains usable.",
+  "createdAt": "2026-07-22T06:16:54Z",
+  "updatedAt": "2026-07-22T14:08:01Z",
+  "autonomy": {
+    "allowedExternalMutations": [],
+    "requiresApproval": [
+      "production deployment",
+      "source-control push",
+      "credential or secret changes"
+    ],
+    "globalStopConditions": [
+      "a required cryptographic primitive has no production-suitable browser implementation",
+      "the only apparent repair would silently weaken an existing protection",
+      "unrelated user changes overlap a required security edit and intent cannot be safely preserved"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "T001",
+      "title": "Implement and pin the protocol-v4 MLS cryptographic boundary",
+      "status": "success",
+      "required": true,
+      "owner": "Pillowfort release coordinator",
+      "summary": "Replace static shared room encryption with strict protocol-v4 per-device MLS identities, bounded wire contracts, audited WASM adapters, and reproducibly pinned browser artifacts.",
+      "scope": {
+        "in": ["MLS create/join/add/remove/update/encrypt/decrypt", "strict protocol-v4 schemas", "browser WASM adapter", "dependency and artifact pinning", "downgrade rejection"],
+        "out": ["independently signed native client", "anonymity network", "custom cryptographic primitives", "production deployment"]
+      },
+      "surfaces": ["cryptography", "protocol", "browser WASM", "dependency boundary"],
+      "keyFiles": ["docs/SECURE_ROOM_PROTOCOL_V4.md", "src/protocolV4.ts", "src/secureTransportV4.ts", "client/src/services/mlsCrypto.ts", "crypto/openmls-wasm/src/lib.rs", "scripts/verify-openmls-artifacts.mjs"],
+      "dependencies": [],
+      "owns": ["protocol-v4 wire contract", "OpenMLS browser adapter", "pinned browser cryptographic artifacts"],
+      "coordinationHazards": [
+        {
+          "id": "H001",
+          "description": "Protocol consumers and generated browser artifacts could drift from the reviewed MLS source contract.",
+          "severity": "critical",
+          "owner": "Pillowfort release coordinator",
+          "mitigation": "Use strict shared parsers plus source-input and browser-artifact hash verification before build.",
+          "verification": "Protocol/security tests, pinned Rust checks, and the OpenMLS artifact verifier pass.",
+          "status": "resolved"
+        }
+      ],
+      "deliverables": ["protocol-v4 specification", "strict bounded schemas", "OpenMLS WASM adapter", "verified pinned browser artifacts"],
+      "acceptance": [
+        {
+          "id": "AC-001",
+          "property": "Room cryptography uses standards-based per-device MLS epochs with Add, Remove, Update, forward secrecy after erasure, and post-compromise recovery after fresh honest entropy.",
+          "oracle": "OpenMLS protocol/browser regressions and pinned Rust tests exercise create, join, membership changes, update, application encryption, restore, and obsolete-state rejection.",
+          "required": true,
+          "requiredEvidenceClasses": ["focused_test", "dependency_probe", "source_review"],
+          "verdict": "pass",
+          "evidence": ["P001"]
+        },
+        {
+          "id": "AC-002",
+          "property": "Protocol v4 rejects malformed, oversized, non-canonical, cross-room, cross-suite, unknown-field, and downgrade traffic, and build artifacts match reviewed inputs.",
+          "oracle": "The complete security suite and artifact verifier pass before the production build.",
+          "required": true,
+          "requiredEvidenceClasses": ["focused_test", "build_verification"],
+          "verdict": "pass",
+          "evidence": ["P001"]
+        }
+      ],
+      "coverageContract": {
+        "changedSurfaces": [
+          {"id": "S001", "kind": "contract", "name": "protocol-v4 wire and MLS contract", "location": "src/protocolV4.ts and docs/SECURE_ROOM_PROTOCOL_V4.md", "required": true, "disposition": "exercised", "evidence": ["P001"], "rationale": null},
+          {"id": "S002", "kind": "integration_boundary", "name": "OpenMLS browser/WASM and pinned artifact boundary", "location": "crypto/openmls-wasm and client/src/services/mlsCrypto.ts", "required": true, "disposition": "exercised", "evidence": ["P001"], "rationale": null}
+        ],
+        "requiredProfiles": ["Bun WebCrypto", "Chromium", "Rust 1.94.1", "Vite production build"]
+      },
+      "initialProbe": {
+        "kind": "absence_proof",
+        "command": "rg -n \"deriveRoomKey|EncryptedChatPayload|v: 3\" client/src/services/chatCrypto.ts client/src/services/protocol.ts",
+        "expectedResult": "The earlier protocol exposes a deterministic shared room key and lacks per-device epochs.",
+        "observedResult": "Confirmed before remediation: the legacy path had one shared symmetric room key and no authenticated membership epochs.",
+        "rationale": "This establishes the original forward-secrecy and membership defect without relying on the replacement implementation."
+      },
+      "verification": [
+        {
+          "id": "V001", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm test", "cwd": ".", "timeoutSeconds": 900,
+          "environment": {"class": "local", "runtime": "Bun, Node.js, Chromium, and browser-compatible WebCrypto", "services": ["local test relay"], "credentialClasses": []},
+          "mutation": "reversible_local", "rollback": "Test fixtures and browser profiles are isolated and disposable.", "provesAcceptance": ["AC-001", "AC-002"], "exercisesSurfaces": ["S001", "S002"], "replay": "npm test", "rationale": "The authoritative repository gate includes the isolated protocol-v4 security suites."
+        },
+        {
+          "id": "V002", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm run verify:openmls", "cwd": ".", "timeoutSeconds": 180,
+          "environment": {"class": "local", "runtime": "Node.js", "services": [], "credentialClasses": []},
+          "mutation": "none", "rollback": null, "provesAcceptance": ["AC-002"], "exercisesSurfaces": ["S002"], "replay": "npm run verify:openmls", "rationale": "Verifies four pinned browser artifacts against 27 reviewed source inputs."
+        },
+        {
+          "id": "V003", "required": true, "executionState": "complete", "verdict": "pass", "command": "cargo +1.94.1 fmt --all -- --check && cargo +1.94.1 test --locked && cargo +1.94.1 clippy --locked --all-targets -- -D warnings", "cwd": "crypto/openmls-wasm", "timeoutSeconds": 900,
+          "environment": {"class": "local", "runtime": "rustup Cargo 1.94.1", "services": [], "credentialClasses": []},
+          "mutation": "none", "rollback": null, "provesAcceptance": ["AC-001", "AC-002"], "exercisesSurfaces": ["S002"], "replay": "cargo +1.94.1 fmt --all -- --check && cargo +1.94.1 test --locked && cargo +1.94.1 clippy --locked --all-targets -- -D warnings", "rationale": "Checks the pinned Rust implementation, locked dependency graph, and warning-free source."
+        }
+      ],
+      "proofRequirements": [{"id": "PR-001", "type": "cryptographic_test_and_build_output", "strength": "authoritative", "supportsAcceptance": ["AC-001", "AC-002"]}],
+      "externalTracking": [],
+      "autonomy": {"allowedFiles": ["docs/SECURE_ROOM_PROTOCOL_V4.md", "src/protocolV4.ts", "src/secureTransportV4.ts", "client/src/services/mlsCrypto.ts", "crypto/openmls-wasm", "scripts/verify-openmls-artifacts.mjs", "test/protocol-v4.test.ts", "test/mls-protocol-v4.test.ts", "test/openmls-wasm-zeroization.test.ts"], "allowedExternalMutations": [], "requiresApproval": [], "maxRepairAttempts": 3, "stopConditions": ["a production-suitable browser MLS implementation cannot satisfy the strict contract"]},
+      "latestAttempt": 1,
+      "latestReport": "security-remediation/reports/T001/attempt-1.json",
+      "reportDirectory": "security-remediation/reports/T001"
+    },
+    {
+      "id": "T002",
+      "title": "Make cryptographic and replay state durable and single-writer",
+      "status": "success",
+      "required": true,
+      "owner": "Pillowfort release coordinator",
+      "summary": "Persist one authenticated, encrypted, revisioned room/device state in IndexedDB under a live Web Lock, with CAS writes, rollback state, outbox state, and durable replay tombstones.",
+      "scope": {
+        "in": ["IndexedDB opaque state", "authenticated state wrapping", "Web Lock ownership", "CAS revisions", "persist-before-send", "restart replay protection"],
+        "out": ["malicious operating-system rollback prevention", "physical disk erasure guarantees", "cross-device history restoration", "production deployment"]
+      },
+      "surfaces": ["browser storage", "concurrency", "crash recovery", "replay"],
+      "keyFiles": ["client/src/services/cryptoStateStore.ts", "client/src/services/roomCryptoLock.ts", "client/src/services/secureRoomState.ts", "client/src/services/secureRoomEngine.ts", "test/replay-persistence.test.ts"],
+      "dependencies": ["T001"],
+      "owns": ["opaque secure-room state store", "single-writer lease", "durable replay and rollback invariants"],
+      "coordinationHazards": [
+        {"id": "H002", "description": "Concurrent tabs or a crash between cryptographic mutation and network output could fork state or reuse causal material.", "severity": "critical", "owner": "Pillowfort release coordinator", "mitigation": "Require a live per-room Web Lock and a successful CAS of the complete wrapped state before returning wire output.", "verification": "Restart, takeover, CAS-failure, lock-loss, replay, and mutation-boundary regressions pass.", "status": "resolved"}
+      ],
+      "deliverables": ["opaque revisioned IndexedDB store", "room-bound authenticated wrapping", "single-writer lease", "persistent replay and crash recovery tests"],
+      "acceptance": [
+        {"id": "AC-003", "property": "Accepted relay and application identifiers remain rejected after reload, reconnect, and local room-state erasure where a tombstone is required.", "oracle": "Persistent replay tests restore state and submit exact stale identifiers/ciphertexts, observing fail-closed rejection.", "required": true, "requiredEvidenceClasses": ["focused_test", "browser_test"], "verdict": "pass", "evidence": ["P002"]},
+        {"id": "AC-004", "property": "Only one tab can mutate a device state and any persistence, revision, or lease failure prevents dependent wire output.", "oracle": "Two-tab takeover and injected persistence/lock-loss tests prove one writer and restoration or terminal failure before send.", "required": true, "requiredEvidenceClasses": ["browser_test", "fault_injection"], "verdict": "pass", "evidence": ["P002"]}
+      ],
+      "coverageContract": {
+        "changedSurfaces": [
+          {"id": "S003", "kind": "integration_boundary", "name": "wrapped IndexedDB state and persistent replay ledger", "location": "client/src/services/cryptoStateStore.ts and client/src/services/secureRoomState.ts", "required": true, "disposition": "exercised", "evidence": ["P002"], "rationale": null},
+          {"id": "S004", "kind": "ui_flow", "name": "cross-tab ownership, takeover, and terminal lock-loss handling", "location": "client/src/services/roomCryptoLock.ts and client/src/services/secureRoomController.ts", "required": true, "disposition": "exercised", "evidence": ["P002"], "rationale": null}
+        ],
+        "requiredProfiles": ["Chromium IndexedDB", "Web Locks", "reload/restart", "two same-origin tabs", "injected persistence failure"]
+      },
+      "initialProbe": {"kind": "absence_proof", "command": "rg -n \"sessionStorage|REPLAY_STORAGE_KEY\" client/src/services/chatCrypto.ts", "expectedResult": "Legacy replay authority is tab-scoped and disappears with its session.", "observedResult": "Confirmed before remediation: replay state was held in sessionStorage and could not provide durable cross-tab or restart authority.", "rationale": "Source inspection directly established the persistence gap."},
+      "verification": [
+        {"id": "V004", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm test", "cwd": ".", "timeoutSeconds": 900, "environment": {"class": "local", "runtime": "Bun and Chromium", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Tests use isolated IndexedDB databases and browser contexts.", "provesAcceptance": ["AC-003", "AC-004"], "exercisesSurfaces": ["S003", "S004"], "replay": "npm test", "rationale": "Authoritative security gate includes seven persistent replay tests and browser crash/lease paths."}
+      ],
+      "proofRequirements": [{"id": "PR-002", "type": "persistent_browser_and_fault_injection_output", "strength": "authoritative", "supportsAcceptance": ["AC-003", "AC-004"]}],
+      "externalTracking": [],
+      "autonomy": {"allowedFiles": ["client/src/services/cryptoStateStore.ts", "client/src/services/roomCryptoLock.ts", "client/src/services/secureRoomState.ts", "client/src/services/secureRoomEngine.ts", "client/src/services/secureRoomController.ts", "test/replay-persistence.test.ts", "test/secure-room-engine.test.ts"], "allowedExternalMutations": [], "requiresApproval": [], "maxRepairAttempts": 3, "stopConditions": ["required browser persistence or locking APIs are unavailable in a supported target"]},
+      "latestAttempt": 1,
+      "latestReport": "security-remediation/reports/T002/attempt-1.json",
+      "reportDirectory": "security-remediation/reports/T002"
+    },
+    {
+      "id": "T003",
+      "title": "Enforce authenticated membership and durable relay causality",
+      "status": "success",
+      "required": true,
+      "owner": "Pillowfort release coordinator",
+      "summary": "Bind invitation-authorized device credentials and KeyPackages to explicit host admission; enforce membership barriers, durable causal grants/results, exact resume, bounded rate classes, and persisted terminal teardown in both relay runtimes.",
+      "scope": {
+        "in": ["invitation/member binding", "explicit admission", "active-device resume", "membership and zombie-removal barriers", "durable grant/result/ACK ordering", "terminal teardown", "local and Durable Object relays"],
+        "out": ["availability against a malicious relay or host", "external transcript witness", "real-world identity accounts", "production deployment"]
+      },
+      "surfaces": ["membership", "relay state machine", "WebSocket lifecycle", "Durable Object", "rate limits"],
+      "keyFiles": ["src/secureRelayV4.ts", "src/room.ts", "server.ts", "client/src/services/secureRoomController.ts", "client/src/services/secureRoomEngine.ts", "test/secure-relay-v4.test.ts", "test/secure-room-engine.test.ts"],
+      "dependencies": ["T001", "T002"],
+      "owns": ["secure relay state machine", "admission/resume protocol", "membership barriers", "sender result and terminal delivery ordering"],
+      "coordinationHazards": [
+        {"id": "H003", "description": "Lost results, reconnect races, or membership epoch changes can deadlock or fork client and relay causal state.", "severity": "critical", "owner": "Pillowfort release coordinator", "mitigation": "Persist exact grants, results, backlog prefixes, barriers, cancellation reasons, snapshots, and terminal state before dependent effects.", "verification": "Adversarial relay/controller/runtime tests cover duplicate, stale, reordered, disconnected, close-race, barrier, and terminal paths.", "status": "resolved"}
+      ],
+      "deliverables": ["bound explicit admission", "credential-only resume", "durable relay ordering and replay", "membership barrier provenance", "terminal and rate-limit hardening"],
+      "acceptance": [
+        {"id": "AC-005", "property": "Only an invitation-bound per-device credential and fresh KeyPackage can be explicitly admitted, and active resume cannot introduce new membership key material.", "oracle": "Admission, substitution, challenge, deduplication, activation, and resume regressions reject rebinding and automatic admission.", "required": true, "requiredEvidenceClasses": ["focused_test", "browser_test"], "verdict": "pass", "evidence": ["P003"]},
+        {"id": "AC-006", "property": "Relay grants, sender results, backlog replay, membership barriers, and lifecycle transitions remain exact and durable across rejection, disconnect, restart, and resume.", "oracle": "Relay and controller suites prove persist-before-effect/ACK, exact prefix replay, authoritative snapshot reconciliation, FIFO removal provenance, and barrier exclusivity.", "required": true, "requiredEvidenceClasses": ["focused_test", "fault_injection", "runtime_test"], "verdict": "pass", "evidence": ["P003"]},
+        {"id": "AC-011", "property": "Mandatory protocol fanout remains live within bounded abuse budgets; blocked immediate order requests cannot wedge client intent; socket close cannot discard an already-received terminal frame; and terminal retirement is persisted before exact-member notification.", "oracle": "Local/DO rate and terminal tests, exact durable cancellation replay, queued-close controller coverage, and rapid four-member browser banter all pass without spurious rate-limit disconnects.", "required": true, "requiredEvidenceClasses": ["adversarial_test", "runtime_test", "browser_flow"], "verdict": "pass", "evidence": ["P003"]}
+      ],
+      "coverageContract": {
+        "changedSurfaces": [
+          {"id": "S005", "kind": "worker_transition", "name": "durable protocol-v4 relay and causal membership state machine", "location": "src/secureRelayV4.ts", "required": true, "disposition": "exercised", "evidence": ["P003"], "rationale": null},
+          {"id": "S006", "kind": "integration_boundary", "name": "local and Durable Object WebSocket runtimes", "location": "server.ts and src/room.ts", "required": true, "disposition": "exercised", "evidence": ["P003"], "rationale": null},
+          {"id": "S011", "kind": "ui_flow", "name": "controller admission/barrier/close/terminal recovery", "location": "client/src/services/secureRoomController.ts", "required": true, "disposition": "exercised", "evidence": ["P003"], "rationale": null}
+        ],
+        "requiredProfiles": ["pure relay reducer", "local Bun WebSocket relay", "Cloudflare Durable Object runtime", "Chromium four-member room"]
+      },
+      "initialProbe": {"kind": "red_test", "command": "bun test test/secure-relay-v4.test.ts test/secure-room-engine.test.ts", "expectedResult": "Pre-repair tests expose admission rebinding, replay/order, reconnect, barrier, and terminal lifecycle gaps.", "observedResult": "The security audit reproduced those state-machine failures before implementing protocol-v4 controls and adversarial regressions.", "rationale": "Membership and distributed causal safety require behavioral state-machine oracles, not source shape alone."},
+      "verification": [
+        {"id": "V005", "required": true, "executionState": "complete", "verdict": "pass", "command": "bun test --timeout 60000 --max-concurrency 1 test/secure-room-engine.test.ts test/secure-relay-v4.test.ts", "cwd": ".", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "Bun and Chromium", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Tests use disposable relay and browser state.", "provesAcceptance": ["AC-005", "AC-006", "AC-011"], "exercisesSurfaces": ["S005", "S011"], "replay": "bun test --timeout 60000 --max-concurrency 1 test/secure-room-engine.test.ts test/secure-relay-v4.test.ts", "rationale": "Exercises 48 exact controller/relay cases with 458 assertions."},
+        {"id": "V006", "required": true, "executionState": "complete", "verdict": "pass", "command": "bun test --timeout 60000 --max-concurrency 1 test/secure-server-runtime-v4.test.ts test/secure-room-do-runtime-v4.test.ts", "cwd": ".", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "Bun with local and Durable Object runtime harnesses", "services": [], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Runtime harness state is in-memory and disposable.", "provesAcceptance": ["AC-005", "AC-006", "AC-011"], "exercisesSurfaces": ["S006"], "replay": "bun test --timeout 60000 --max-concurrency 1 test/secure-server-runtime-v4.test.ts test/secure-room-do-runtime-v4.test.ts", "rationale": "31 runtime tests and 630 assertions cover split budgets, terminal notification, authentication, and durable runtime transitions."},
+        {"id": "V007", "required": true, "executionState": "complete", "verdict": "pass", "command": "env PILLOWFORT_COMPARE_SNAPSHOTS=0 bun test --timeout 120000 --max-concurrency 1 -t 'banter flows' test/game-night.test.ts", "cwd": ".", "timeoutSeconds": 180, "environment": {"class": "local", "runtime": "Chromium through Bun test", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Browser rooms and profiles are disposable.", "provesAcceptance": ["AC-011"], "exercisesSurfaces": ["S006", "S011"], "replay": "env PILLOWFORT_COMPARE_SNAPSHOTS=0 bun test --timeout 120000 --max-concurrency 1 -t 'banter flows' test/game-night.test.ts", "rationale": "A real four-member room completes three admissions and nine rapid application events without spurious rate limiting or socket closure."}
+      ],
+      "proofRequirements": [{"id": "PR-003", "type": "adversarial_relay_runtime_and_browser_output", "strength": "authoritative", "supportsAcceptance": ["AC-005", "AC-006", "AC-011"]}],
+      "externalTracking": [],
+      "autonomy": {"allowedFiles": ["src/secureRelayV4.ts", "src/secureRelayPersistenceV4.ts", "src/room.ts", "server.ts", "client/src/services/secureRoomController.ts", "client/src/services/secureRoomEngine.ts", "test/secure-relay-v4.test.ts", "test/secure-room-engine.test.ts", "test/secure-server-runtime-v4.test.ts", "test/secure-room-do-runtime-v4.test.ts", "test/game-night.test.ts"], "allowedExternalMutations": [], "requiresApproval": [], "maxRepairAttempts": 3, "stopConditions": ["the only repair would allow relay state to override authenticated MLS or signed application authority"]},
+      "latestAttempt": 1,
+      "latestReport": "security-remediation/reports/T003/attempt-1.json",
+      "reportDirectory": "security-remediation/reports/T003"
+    },
+    {
+      "id": "T004",
+      "title": "Move room and game semantics inside the authenticated E2EE log",
+      "status": "success",
+      "required": true,
+      "owner": "Pillowfort release coordinator",
+      "summary": "Represent profiles, presence, chat, drawing, room controls, and every game as strict device-signed MLS application events reduced deterministically with bounded snapshots and history redaction.",
+      "scope": {
+        "in": ["strict application-event union", "device signatures and causal sequence", "deterministic room/game reducers", "bootstrap redaction", "commit-reveal game randomness", "secure UI projections"],
+        "out": ["DRM against authorized participants", "cryptographically private Saboteur role", "forced completion of commit-reveal", "production deployment"]
+      },
+      "surfaces": ["application events", "game reducers", "room UI", "browser multiplayer"],
+      "keyFiles": ["src/applicationEventsV4.ts", "src/secureGameReducer.ts", "client/src/services/secureUiV4.ts", "client/src/stores/gameStore.ts", "test/application-events-v4.test.ts", "test/secure-game-reducer.test.ts", "test/games.test.ts"],
+      "dependencies": ["T001", "T002", "T003"],
+      "owns": ["signed application-event contract", "deterministic reducer semantics", "secure-room UI projection"],
+      "coordinationHazards": [
+        {"id": "H004", "description": "Legacy direct WebSocket actions or nondeterministic clients could bypass signed causal state and diverge game outcomes.", "severity": "high", "owner": "Pillowfort release coordinator", "mitigation": "Map every protected action to one strict signed event and apply it through a shared deterministic reducer.", "verification": "Application, reducer, game, integration, full-tour, mobile, quad-view, and game-night suites pass.", "status": "resolved"}
+      ],
+      "deliverables": ["strict signed event union", "bounded/redacted snapshot contract", "deterministic reducers", "secure multiplayer UI integration"],
+      "acceptance": [
+        {"id": "AC-007", "property": "All protected room and game semantics are authenticated inside MLS and reject forgery, replay, sequence/order regression, non-members, malformed content, and invalid reducer transitions.", "oracle": "Application-event and reducer suites cover every event family, signature/order failures, snapshots, and game preconditions.", "required": true, "requiredEvidenceClasses": ["focused_test", "source_review"], "verdict": "pass", "evidence": ["P004"]},
+        {"id": "AC-008", "property": "Valid chat, drawing, RPS, tic-tac-toe, Saboteur, King of the Hill, pillow fight, host transfer, and terminal flows remain usable across desktop and mobile multiplayer UI.", "oracle": "Game/unit/integration plus deterministic UI, full-tour, quad-view, mobile, design-snapshot, and four-member game-night browser suites pass.", "required": true, "requiredEvidenceClasses": ["browser_flow", "visual_regression", "integration_test"], "verdict": "pass", "evidence": ["P004"]}
+      ],
+      "coverageContract": {
+        "changedSurfaces": [
+          {"id": "S007", "kind": "contract", "name": "signed application-event and deterministic reducer contract", "location": "src/applicationEventsV4.ts and src/secureGameReducer.ts", "required": true, "disposition": "exercised", "evidence": ["P004"], "rationale": null},
+          {"id": "S008", "kind": "ui_flow", "name": "secure room and multiplayer game UI", "location": "client/src and test browser journeys", "required": true, "disposition": "exercised", "evidence": ["P004"], "rationale": null}
+        ],
+        "requiredProfiles": ["desktop Chromium", "mobile Chromium viewport", "four simultaneous room members", "deterministic visual baselines"]
+      },
+      "initialProbe": {"kind": "absence_proof", "command": "rg -n \"type: \\\"chat\\\"|type: \\\"rps\\\"|type: \\\"ttt\\\"\" src/applicationEventsV4.ts", "expectedResult": "Before remediation, no single signed and bounded application-event contract covers every feature.", "observedResult": "The audit confirmed protected semantics escaped the prior chat-only encryption boundary.", "rationale": "A complete event inventory was necessary to prevent security-by-feature omission."},
+      "verification": [
+        {"id": "V008", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm test", "cwd": ".", "timeoutSeconds": 900, "environment": {"class": "local", "runtime": "Bun, Node.js, and Chromium", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "All game and browser fixtures are disposable.", "provesAcceptance": ["AC-007", "AC-008"], "exercisesSurfaces": ["S007", "S008"], "replay": "npm test", "rationale": "Authoritative gate passed 239 base tests/1004 assertions plus 18 isolated security files, including application, reducer, game, and integration coverage."},
+        {"id": "V009", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm run test:ui", "cwd": ".", "timeoutSeconds": 900, "environment": {"class": "local", "runtime": "Chromium", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Visual outputs are versioned deterministic baselines.", "provesAcceptance": ["AC-008"], "exercisesSurfaces": ["S008"], "replay": "npm run test:ui", "rationale": "36 UI tests and 154 assertions pass across mobile, quad, demo, full-tour, and game-night journeys."},
+        {"id": "V010", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm run test:design-snapshots", "cwd": ".", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "Chromium", "services": ["local test relay"], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Snapshot outputs are versioned deterministic baselines.", "provesAcceptance": ["AC-008"], "exercisesSurfaces": ["S008"], "replay": "npm run test:design-snapshots", "rationale": "Five design snapshot tests and ten assertions pass."
+        }
+      ],
+      "proofRequirements": [{"id": "PR-004", "type": "signed_event_reducer_and_browser_output", "strength": "authoritative", "supportsAcceptance": ["AC-007", "AC-008"]}],
+      "externalTracking": [],
+      "autonomy": {"allowedFiles": ["src/applicationEventsV4.ts", "src/secureGameReducer.ts", "client/src/services/secureUiV4.ts", "client/src/stores/gameStore.ts", "client/src/components", "client/src/screens", "test/application-events-v4.test.ts", "test/secure-game-reducer.test.ts", "test/games.test.ts", "test/integration.test.ts", "test/mobile.test.ts", "test/quad-view.test.ts", "test/demo-reel.test.ts", "test/full-tour.test.ts", "test/game-night.test.ts", "test/design-snapshots.test.ts"], "allowedExternalMutations": [], "requiresApproval": [], "maxRepairAttempts": 3, "stopConditions": ["a protected product action cannot be represented deterministically without a product decision"]},
+      "latestAttempt": 1,
+      "latestReport": "security-remediation/reports/T004/attempt-1.json",
+      "reportDirectory": "security-remediation/reports/T004"
+    },
+    {
+      "id": "T005",
+      "title": "Reconcile security claims and complete the release verification boundary",
+      "status": "success",
+      "required": true,
+      "owner": "Pillowfort release coordinator",
+      "summary": "Audit changed surfaces and dependencies, document fixed findings and residual limits without overclaiming, and prove the tree typechecks, builds, and packages for Cloudflare without performing deployment.",
+      "scope": {
+        "in": ["security report", "protocol design record", "changed-surface verification", "dependency audit", "typecheck", "production build", "Wrangler dry-run", "governed artifact reconciliation"],
+        "out": ["source-control commit", "source-control push", "production deployment", "external issue synchronization", "claims of absolute security"]
+      },
+      "surfaces": ["documentation", "supply chain", "build", "Cloudflare packaging", "release evidence"],
+      "keyFiles": ["security_best_practices_report.md", "docs/SECURE_ROOM_PROTOCOL_V4.md", "package.json", "wrangler.toml", "security-remediation/tasks.json", "security-remediation/STATUS.json"],
+      "dependencies": ["T001", "T002", "T003", "T004"],
+      "owns": ["security claim reconciliation", "release verification evidence", "governed task status"],
+      "coordinationHazards": [
+        {"id": "H005", "description": "A green focused suite could hide integration, dependency, build, or documentation drift, and a dry-run could be mistaken for deployment.", "severity": "high", "owner": "Pillowfort release coordinator", "mitigation": "Require the broad product/security matrix, offline dependency evidence, typecheck/build, line-reference audit, Wrangler dry-run, and an explicit no-deployment scope statement.", "verification": "All local release gates pass and versioned artifacts make no deployment or external synchronization claim.", "status": "resolved"}
+      ],
+      "deliverables": ["reconciled protocol-v4 security report", "residual risk register", "broad local verification matrix", "schema-valid immutable attempt reports and status"],
+      "acceptance": [
+        {"id": "AC-009", "property": "Security documentation accurately maps each fixed finding class and late adversarial subcase to existing source/tests while retaining material architectural and operational limits.", "oracle": "Every backticked file/range exists, report claims match the final controls, residual risks remain explicit, and no deployment is claimed.", "required": true, "requiredEvidenceClasses": ["source_review", "documentation_audit"], "verdict": "pass", "evidence": ["P005"]},
+        {"id": "AC-010", "property": "The complete tree passes authoritative tests, typecheck, pinned cryptographic checks, dependency review, production build, marketing checks, and Cloudflare packaging dry-run.", "oracle": "All commands recorded in the final attempt report return zero against the same working tree; offline audits are described with their actual cache limitations.", "required": true, "requiredEvidenceClasses": ["full_test", "typecheck", "build", "dependency_audit", "deployment_dry_run"], "verdict": "pass", "evidence": ["P005"]}
+      ],
+      "coverageContract": {
+        "changedSurfaces": [
+          {"id": "S009", "kind": "other", "name": "security claims, residual limits, and source/test traceability", "location": "security_best_practices_report.md and docs/SECURE_ROOM_PROTOCOL_V4.md", "required": true, "disposition": "exercised", "evidence": ["P005"], "rationale": null},
+          {"id": "S010", "kind": "runtime_profile", "name": "production build and Cloudflare package boundary", "location": "package.json, client build, wrangler.toml, and marketing", "required": true, "disposition": "exercised", "evidence": ["P005"], "rationale": null}
+        ],
+        "requiredProfiles": ["root test matrix", "TypeScript typecheck", "Vite production build", "Wrangler 4 dry-run", "offline npm audit", "local Rust advisory cache", "marketing build/test"]
+      },
+      "initialProbe": {"kind": "baseline", "command": "git status --short && rg -n \"Remaining boundary|Residual risk\" security_best_practices_report.md docs/SECURE_ROOM_PROTOCOL_V4.md", "expectedResult": "The broad dirty-tree scope and documented limitations require reconciliation before a release claim.", "observedResult": "The working tree contains integrated product/security changes; stale manifest owners/paths and late security subcases required final evidence reconciliation.", "rationale": "Release proof must describe the exact integrated tree, not an earlier task plan."},
+      "verification": [
+        {"id": "V011", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm run typecheck && npm run build", "cwd": ".", "timeoutSeconds": 900, "environment": {"class": "local", "runtime": "TypeScript, Node.js, and Vite", "services": [], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Generated dist output is reproducible.", "provesAcceptance": ["AC-010"], "exercisesSurfaces": ["S010"], "replay": "npm run typecheck && npm run build", "rationale": "Typecheck passes; build verifies OpenMLS inputs and emits the production client bundle with only the standard size warning."},
+        {"id": "V012", "required": true, "executionState": "complete", "verdict": "pass", "command": "npx wrangler deploy --dry-run --outdir /private/tmp/pillowfort-wrangler-dryrun.QlYULH", "cwd": ".", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "Wrangler 4.113.0", "services": [], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Remove the temporary dry-run output directory.", "provesAcceptance": ["AC-010"], "exercisesSurfaces": ["S010"], "replay": "npx wrangler deploy --dry-run --outdir <temporary-directory>", "rationale": "Packages 8 assets and the ROOM Durable Object/ASSETS bindings without publishing or changing Cloudflare state."},
+        {"id": "V013", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm audit --offline --omit=dev", "cwd": "., client, and marketing", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "npm offline advisory cache", "services": [], "credentialClasses": []}, "mutation": "none", "rollback": null, "provesAcceptance": ["AC-010"], "exercisesSurfaces": ["S010"], "replay": "Run npm audit --offline --omit=dev separately in ., client, and marketing", "rationale": "All three production dependency trees report zero vulnerabilities from the available offline npm advisory cache."},
+        {"id": "V014", "required": true, "executionState": "complete", "verdict": "pass", "command": "cargo audit --no-fetch", "cwd": "crypto/openmls-wasm", "timeoutSeconds": 300, "environment": {"class": "local", "runtime": "cargo-audit local advisory database", "services": [], "credentialClasses": []}, "mutation": "none", "rollback": null, "provesAcceptance": ["AC-009", "AC-010"], "exercisesSurfaces": ["S009", "S010"], "replay": "cargo audit --no-fetch", "rationale": "Scans 136 locked dependencies with no vulnerability advisory; the report retains the allowed unmaintained instant 0.1.13 warning and the no-fetch/index limitations."},
+        {"id": "V015", "required": true, "executionState": "complete", "verdict": "pass", "command": "npm run lint && npm test", "cwd": "marketing", "timeoutSeconds": 600, "environment": {"class": "local", "runtime": "Node.js marketing build/test", "services": [], "credentialClasses": []}, "mutation": "reversible_local", "rollback": "Generated marketing output is reproducible.", "provesAcceptance": ["AC-010"], "exercisesSurfaces": ["S010"], "replay": "cd marketing && npm run lint && npm test", "rationale": "Marketing build and all three rendered HTML/CMS tests pass."},
+        {"id": "V016", "required": true, "executionState": "complete", "verdict": "pass", "command": "node -e <validate backticked source/test paths and line ranges> && git diff --check", "cwd": ".", "timeoutSeconds": 120, "environment": {"class": "local", "runtime": "Node.js and Git", "services": [], "credentialClasses": []}, "mutation": "none", "rollback": null, "provesAcceptance": ["AC-009"], "exercisesSurfaces": ["S009"], "replay": "Re-run the documented path/range checker and git diff --check", "rationale": "All referenced paths/ranges exist and the working-tree diff has no whitespace errors."}
+      ],
+      "proofRequirements": [{"id": "PR-005", "type": "release_matrix_and_documentation_audit", "strength": "authoritative", "supportsAcceptance": ["AC-009", "AC-010"]}],
+      "externalTracking": [],
+      "autonomy": {"allowedFiles": ["security_best_practices_report.md", "docs/SECURE_ROOM_PROTOCOL_V4.md", "security-remediation/tasks.json", "security-remediation/STATUS.json", "security-remediation/reports"], "allowedExternalMutations": [], "requiresApproval": ["commit, push, and production deployment are performed by the release owner outside this evidence task"], "maxRepairAttempts": 3, "stopConditions": ["a required authoritative release gate remains failing"]},
+      "latestAttempt": 1,
+      "latestReport": "security-remediation/reports/T005/attempt-1.json",
+      "reportDirectory": "security-remediation/reports/T005"
+    }
+  ]
+}

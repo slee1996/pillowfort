@@ -1,0 +1,35 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/attempt-report.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "taskId": "T004",
+  "attempt": 1,
+  "worker": "Pillowfort release coordinator",
+  "startedAt": "2026-07-22T06:16:54Z",
+  "finishedAt": "2026-07-22T14:12:09Z",
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d",
+  "branch": "main",
+  "worktree": ".",
+  "supersedes": null,
+  "state": "success",
+  "failureType": null,
+  "summary": "All protected room/game actions now use strict device-signed MLS application events and deterministic reducers; full product, UI, design, and real multiplayer browser suites pass.",
+  "changedFiles": ["src/applicationEventsV4.ts", "src/secureGameReducer.ts", "client/src/services/secureUiV4.ts", "client/src/stores/gameStore.ts", "client/src/components", "client/src/screens", "test/application-events-v4.test.ts", "test/secure-game-reducer.test.ts", "test/games.test.ts", "test/integration.test.ts", "test/mobile.test.ts", "test/quad-view.test.ts", "test/demo-reel.test.ts", "test/full-tour.test.ts", "test/game-night.test.ts", "test/design-snapshots.test.ts"],
+  "artifacts": ["test/__snapshots__/design", "test/__snapshots__/demo-reel", "test/__snapshots__/full-tour", "test/__snapshots__/game-night"],
+  "verification": [
+    {"id": "V008", "command": "npm test", "exitCode": 0, "result": "PASS: base suite 239/239 with 1004 assertions and all 18 isolated security files, including signed events, deterministic reducers, 42 game tests, and 34 integration tests.", "environment": "local Bun, Node.js, Chromium, and test relay", "verdict": "pass", "required": true, "exercisedSurfaces": ["S007", "S008"], "supportsAcceptance": ["AC-007", "AC-008"], "replay": "npm test"},
+    {"id": "V009", "command": "npm run test:ui", "exitCode": 0, "result": "PASS: 36/36 tests and 154 assertions across mobile, quad-view, demo, full-tour, and game-night; 31 deterministic visual baselines compared after fort-flag masking.", "environment": "local Chromium and test relay", "verdict": "pass", "required": true, "exercisedSurfaces": ["S008"], "supportsAcceptance": ["AC-008"], "replay": "npm run test:ui"},
+    {"id": "V010", "command": "npm run test:design-snapshots", "exitCode": 0, "result": "PASS: 5/5 design snapshot tests with 10 assertions.", "environment": "local Chromium", "verdict": "pass", "required": true, "exercisedSurfaces": ["S008"], "supportsAcceptance": ["AC-008"], "replay": "npm run test:design-snapshots"}
+  ],
+  "proofObjects": [
+    {"id": "P004", "type": "signed_event_reducer_and_browser_output", "uri": "security-remediation/reports/T004/attempt-1.json#verification", "digest": null, "producedBy": "V008,V009,V010", "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d", "artifactVersion": "protocol-v4-application-v1", "environment": "local Bun/Node.js and desktop/mobile Chromium", "strength": "authoritative", "supportsAcceptance": ["AC-007", "AC-008"], "supportsSurfaces": ["S007", "S008"], "replay": "Run V008, V009, and V010 from this report.", "inspected": true}
+  ],
+  "blockers": [],
+  "remainingWork": [],
+  "needsHuman": false,
+  "humanDecision": null,
+  "externalLinks": [],
+  "externalSynchronization": []
+}

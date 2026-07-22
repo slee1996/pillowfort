@@ -1,6 +1,6 @@
 name = "pillowfort"
 main = "src/index.ts"
-compatibility_date = "2024-12-01"
+compatibility_date = "2026-07-20"
 
 [assets]
 directory = "./client/dist"

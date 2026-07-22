@@ -5,19 +5,28 @@
   "scripts": {
     "dev": "bun --watch server.ts",
     "dev:client": "cd client && npx vite",
-    "build": "npm --prefix client run build",
+    "build": "npm run verify:openmls && npm --prefix client run build",
     "typecheck": "npm --prefix client run typecheck",
-    "deploy": "npm --prefix client run build && npx wrangler deploy",
+    "deploy": "npm run build && npx wrangler deploy",
     "start": "bun server.ts",
-    "test": "bun test test/unit.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts",
+    "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts && npm run test:security",
+    "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
     "test:ui": "bun test --timeout 15000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 15000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 15000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 15000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 15000 --max-concurrency 1 test/game-night.test.ts",
-    "metrics:report": "node scripts/analytics_report.mjs"
+    "metrics:report": "node scripts/analytics_report.mjs",
+    "verify:openmls": "node scripts/verify-openmls-artifacts.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241230.0",
-    "@playwright/test": "^1.58.2",
-    "playwright": "^1.58.2",
-    "wrangler": "^3.99.0"
+    "@cloudflare/workers-types": "5.20260722.1",
+    "@playwright/test": "1.59.1",
+    "playwright": "1.59.1",
+    "sharp": "0.35.3",
+    "wrangler": "4.113.0"
+  },
+  "dependencies": {
+    "@noble/ed25519": "3.1.0"
+  },
+  "overrides": {
+    "sharp": "0.35.3"
   }
 }

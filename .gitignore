@@ -13,6 +13,7 @@ bun.lock
 .playwright-mcp/
 .wrangler/
 .claude/
+.court-jester/
 
 # Environment files
 .env

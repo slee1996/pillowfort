@@ -1,0 +1,35 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/attempt-report.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "taskId": "T003",
+  "attempt": 1,
+  "worker": "Pillowfort release coordinator",
+  "startedAt": "2026-07-22T06:16:54Z",
+  "finishedAt": "2026-07-22T14:12:09Z",
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d",
+  "branch": "main",
+  "worktree": ".",
+  "supersedes": null,
+  "state": "success",
+  "failureType": null,
+  "summary": "Invitation-bound explicit admission, credential-only resume, durable causal results, membership barriers, exact cancellation, serialized close handling, split rate budgets, and persisted terminal notification pass pure, local, Durable Object, and real-browser oracles.",
+  "changedFiles": ["src/secureRelayV4.ts", "src/secureRelayPersistenceV4.ts", "src/room.ts", "server.ts", "client/src/services/secureRoomController.ts", "client/src/services/secureRoomEngine.ts", "test/secure-relay-v4.test.ts", "test/secure-room-engine.test.ts", "test/secure-server-runtime-v4.test.ts", "test/secure-room-do-runtime-v4.test.ts", "test/game-night.test.ts"],
+  "artifacts": ["security_best_practices_report.md#pf-v4-004", "security_best_practices_report.md#pf-v4-005", "security_best_practices_report.md#pf-v4-006", "security_best_practices_report.md#pf-v4-007"],
+  "verification": [
+    {"id": "V005", "command": "bun test --timeout 60000 --max-concurrency 1 test/secure-room-engine.test.ts test/secure-relay-v4.test.ts", "exitCode": 0, "result": "PASS: engine 11/11 with 200 assertions and relay 37/37 with 258 assertions, including explicit admission preservation, exact durable order cancellation, resume, barriers, terminal UX, close queuing, and ACK ordering.", "environment": "local Bun and Chromium", "verdict": "pass", "required": true, "exercisedSurfaces": ["S005", "S011"], "supportsAcceptance": ["AC-005", "AC-006", "AC-011"], "replay": "bun test --timeout 60000 --max-concurrency 1 test/secure-room-engine.test.ts test/secure-relay-v4.test.ts"},
+    {"id": "V006", "command": "bun test --timeout 60000 --max-concurrency 1 test/secure-server-runtime-v4.test.ts test/secure-room-do-runtime-v4.test.ts", "exitCode": 0, "result": "PASS: 31/31 runtime tests with 630 assertions, including raw/operation/room budget separation and post-persistence exact-member terminal delivery in both runtimes.", "environment": "local Bun runtime harnesses", "verdict": "pass", "required": true, "exercisedSurfaces": ["S006"], "supportsAcceptance": ["AC-005", "AC-006", "AC-011"], "replay": "bun test --timeout 60000 --max-concurrency 1 test/secure-server-runtime-v4.test.ts test/secure-room-do-runtime-v4.test.ts"},
+    {"id": "V007", "command": "env PILLOWFORT_COMPARE_SNAPSHOTS=0 bun test --timeout 120000 --max-concurrency 1 -t 'banter flows' test/game-night.test.ts", "exitCode": 0, "result": "PASS: a four-member browser room completed three admissions and nine rapid application events with no rate-limit error or socket close.", "environment": "local Chromium and test relay", "verdict": "pass", "required": true, "exercisedSurfaces": ["S006", "S011"], "supportsAcceptance": ["AC-011"], "replay": "env PILLOWFORT_COMPARE_SNAPSHOTS=0 bun test --timeout 120000 --max-concurrency 1 -t 'banter flows' test/game-night.test.ts"}
+  ],
+  "proofObjects": [
+    {"id": "P003", "type": "adversarial_relay_runtime_and_browser_output", "uri": "security-remediation/reports/T003/attempt-1.json#verification", "digest": null, "producedBy": "V005,V006,V007", "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d", "artifactVersion": "protocol-v4-relay-v1", "environment": "pure reducer, local relay, Durable Object harness, and Chromium", "strength": "authoritative", "supportsAcceptance": ["AC-005", "AC-006", "AC-011"], "supportsSurfaces": ["S005", "S006", "S011"], "replay": "Run V005, V006, and V007 from this report.", "inspected": true}
+  ],
+  "blockers": [],
+  "remainingWork": [],
+  "needsHuman": false,
+  "humanDecision": null,
+  "externalLinks": [],
+  "externalSynchronization": []
+}

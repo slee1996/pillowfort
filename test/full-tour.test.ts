@@ -13,21 +13,16 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { mkdir } from "fs/promises";
 import sharp from "sharp";
 import { startServer, stopServer, getPort } from "./helpers";
-import {
-  connect, joinRoom as wsJoin, chat, draw, sleep,
-  rpsAccept, rpsPick, kothChallenge,
-  tttAccept, tttMove,
-  castVote, knockDown,
-  type Client,
-} from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/full-tour";
+const UPDATE_SNAPSHOTS = process.env.PILLOWFORT_UPDATE_SNAPSHOTS === "1";
+const COMPARE_SNAPSHOTS = process.env.PILLOWFORT_COMPARE_SNAPSHOTS !== "0";
 const PIXEL_THRESHOLD = 0.005;
 const COLOR_THRESHOLD = 25;
+const roomPasswords = new Map<string, string>();
 
 let browser: Browser;
 const contexts: BrowserContext[] = [];
-const clients: Client[] = [];
 
 beforeAll(async () => {
   await startServer();
@@ -36,10 +31,6 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  for (const c of clients) {
-    try { await c.close(); } catch {}
-  }
-  clients.length = 0;
   for (const ctx of contexts) {
     try { await ctx.close(); } catch {}
   }
@@ -59,21 +50,113 @@ async function newPage(): Promise<Page> {
   return page;
 }
 
-async function wsJoinTracked(roomCode: string, name: string): Promise<Client> {
-  const client = await wsJoin(getPort(), roomCode, name, "demo");
-  clients.push(client);
-  return client;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function joinBrowser(host: Page, roomCode: string, name: string): Promise<Page> {
+  const password = roomPasswords.get(roomCode);
+  if (!password) throw new Error(`missing test room secret for ${roomCode}`);
+  const page = await newPage();
+  await page.fill("#name-input", name);
+  await page.click("#btn-join");
+  await page.fill("#join-room", roomCode);
+  await page.fill("#join-password", password);
+  await page.click("#btn-enter");
+
+  // Protocol v4 membership is explicitly approved by the current host. Using
+  // real pages here keeps the tour on the same authenticated admission path as
+  // production and preserves the server's hard rejection of legacy joins.
+  await page.waitForFunction(
+    () => document.body.textContent?.includes("Waiting for the host to approve this device."),
+    undefined,
+    { timeout: 30_000 },
+  );
+  await host.waitForSelector("#admission-approval-overlay", { timeout: 30_000 });
+  await host.click("#btn-approve-admission");
+  await page.waitForSelector("#messages", { timeout: 30_000 });
+  await host.waitForSelector("#admission-approval-overlay", { state: "detached", timeout: 30_000 });
+  return page;
+}
+
+async function sendChat(
+  page: Page,
+  text: string,
+  style: { bold?: boolean; italic?: boolean; color?: "red" } = {},
+): Promise<void> {
+  if (style.bold) await page.click("#fmt-bold");
+  if (style.italic) await page.click("#fmt-italic");
+  if (style.color === "red") {
+    await page.click('[title="Font Color"]');
+    await page.locator(".color-palette-swatch").first().click();
+  }
+  await page.fill("#msg-input", text);
+  await page.click("#btn-send");
+}
+
+async function waitForMessage(page: Page, text: string): Promise<void> {
+  await page.waitForFunction(
+    (expected) => document.getElementById("messages")?.textContent?.includes(expected),
+    text,
+    { timeout: 15_000 },
+  );
+}
+
+async function drawStroke(page: Page, points: [number, number][]): Promise<void> {
+  await page.locator("#game-canvas").evaluate((canvas, normalizedPoints) => {
+    const element = canvas as HTMLCanvasElement;
+    const rect = element.getBoundingClientRect();
+    const dispatch = (type: string, point: [number, number], buttons: number) => {
+      element.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+        buttons,
+        clientX: rect.left + point[0] * rect.width,
+        clientY: rect.top + point[1] * rect.height,
+      }));
+    };
+    dispatch("pointerdown", normalizedPoints[0], 1);
+    for (const point of normalizedPoints.slice(1)) dispatch("pointermove", point, 1);
+    dispatch("pointerup", normalizedPoints[normalizedPoints.length - 1], 0);
+  }, points);
+}
+
+async function observeRemoteDraws(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as Window & { __pillowfortQaDraws?: number }).__pillowfortQaDraws = 0;
+    window.addEventListener("pf-draw", () => {
+      const target = window as Window & { __pillowfortQaDraws?: number };
+      target.__pillowfortQaDraws = (target.__pillowfortQaDraws || 0) + 1;
+    });
+  });
+}
+
+async function waitForRemoteDraw(page: Page, count: number): Promise<void> {
+  await page.waitForFunction(
+    (expected) => ((window as Window & { __pillowfortQaDraws?: number }).__pillowfortQaDraws || 0) >= expected,
+    count,
+    { timeout: 15_000 },
+  );
 }
 
 async function maskDynamic(page: Page) {
   await page.evaluate(() => {
     const rc = document.getElementById("room-code");
     if (rc) rc.textContent = "abc12345";
-    document.querySelectorAll(".msg-time").forEach((el) => {
+    // The room flag is also rendered in system chat and the buddy panel.
+    // Normalize text nodes in place so their surrounding markup/styles remain intact.
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let textNode: Node | null;
+    while ((textNode = walker.nextNode())) {
+      textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
+    }
+    document.querySelectorAll(".msg-time, .chat-timestamp").forEach((el) => {
       (el as HTMLElement).textContent = "12:00";
     });
     // Saboteur role system messages (role text differs each run)
-    document.querySelectorAll(".msg-system").forEach((el) => {
+    document.querySelectorAll(".msg-system, .chat-message-system").forEach((el) => {
       const text = (el as HTMLElement).textContent || "";
       if (text.includes("saboteur") || text.includes("Saboteur") || text.includes("defender") || text.includes("strike")) {
         (el as HTMLElement).textContent = "Role assigned. The game begins!";
@@ -90,6 +173,12 @@ async function assertScreenshot(page: Page, name: string) {
   const path = `${SNAPSHOT_DIR}/${name}.png`;
   const file = Bun.file(path);
 
+  if (UPDATE_SNAPSHOTS) {
+    await Bun.write(path, screenshotBuf);
+    console.log(`  [snapshot] updated baseline: ${name}.png`);
+    return;
+  }
+  if (!COMPARE_SNAPSHOTS) return;
   if (!(await file.exists())) {
     await Bun.write(path, screenshotBuf);
     console.log(`  [snapshot] saved baseline: ${name}.png`);
@@ -128,13 +217,15 @@ async function assertScreenshot(page: Page, name: string) {
 async function setupRoom(page: Page): Promise<string> {
   await page.fill("#name-input", "luna");
   await page.click("#btn-setup");
-  await page.fill("#setup-password", "demo");
+  const password = await page.inputValue("#setup-password");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
     return el && el.textContent && el.textContent.length >= 8;
   });
-  return page.locator("#room-code").innerText();
+  const roomCode = await page.locator("#room-code").innerText();
+  roomPasswords.set(roomCode, password);
+  return roomCode;
 }
 
 async function waitForMembers(page: Page, count: number) {
@@ -144,6 +235,11 @@ async function waitForMembers(page: Page, count: number) {
   }, count);
 }
 
+async function waitForAllMembers(count: number): Promise<void> {
+  const pages = contexts.flatMap((context) => context.pages());
+  await Promise.all(pages.map((page) => waitForMembers(page, count)));
+}
+
 // --- Phase 1: Sign On ---
 
 describe("Full tour: Sign On", () => {
@@ -151,22 +247,16 @@ describe("Full tour: Sign On", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
-    await chat(javi, "we're in! 🏰");
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("we're in");
-    });
+    await sendChat(javi, "we're in! 🏰");
+    await waitForMessage(page, "we're in");
 
-    await chat(priya, "cozy fort ✨");
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("cozy fort");
-    });
+    await sendChat(priya, "cozy fort ✨");
+    await waitForMessage(page, "cozy fort");
 
     await assertScreenshot(page, "01-sign-on");
   });
@@ -179,44 +269,36 @@ describe("Full tour: Chat Showcase", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     // Luna sends bold
-    await page.click("#fmt-bold");
-    await page.fill("#msg-input", "welcome to the tour");
-    await page.click("#btn-send");
-    await page.click("#fmt-bold");
-
-    let boldMsg: any = null;
-    for (let i = 0; i < 10; i++) {
-      const msg = await kai.waitFor("message");
-      if (msg.text === "welcome to the tour") { boldMsg = msg; break; }
-    }
-    expect(boldMsg).not.toBeNull();
-    expect(boldMsg.style?.bold).toBe(true);
+    await sendChat(page, "welcome to the tour", { bold: true });
+    await waitForMessage(kai, "welcome to the tour");
+    expect(
+      await kai.locator("#messages .chat-message", { hasText: "welcome to the tour" }).locator("b").count(),
+    ).toBe(1);
 
     // kai sends colored text
-    await chat(kai, "wait check this out", { color: "#FF0000" });
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("check this out");
-    });
+    await sendChat(kai, "wait check this out", { color: "red" });
+    await waitForMessage(page, "check this out");
+    expect(
+      await page.locator("#messages .chat-message", { hasText: "check this out" }).locator('.chat-content span[style*="color"]').count(),
+    ).toBeGreaterThan(0);
 
     // priya sends italic
-    await chat(priya, "fancy", { italic: true });
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("fancy");
-    });
+    await sendChat(priya, "fancy", { italic: true });
+    await waitForMessage(page, "fancy");
+    expect(await page.locator("#messages .chat-message", { hasText: "fancy" }).locator("i").count()).toBe(1);
 
     // javi sends emojis
-    await chat(javi, "😊🔥🎉");
-    await sleep(300);
+    await sendChat(javi, "😊🔥🎉");
+    await waitForMessage(page, "😊🔥🎉");
 
     // luna sends plain
+    await page.click("#fmt-bold");
     await page.fill("#msg-input", "you can style everything");
     await page.click("#btn-send");
     await sleep(300);
@@ -228,33 +310,37 @@ describe("Full tour: Chat Showcase", () => {
 // --- Phase 3: Drawing ---
 
 describe("Full tour: Drawing", () => {
-  it("draw strokes from WS clients appear on canvas", async () => {
+  it("signed v4 browser strokes appear on the shared canvas", async () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
+    const javi = await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     const canvas = page.locator("#game-canvas");
     expect(await canvas.count()).toBe(1);
+    await observeRemoteDraws(page);
 
-    draw(javi, "#FF0000", [
-      [400, 350], [420, 300], [460, 280], [500, 300], [500, 350],
+    await drawStroke(javi, [
+      [400 / 1920, 350 / 1080], [420 / 1920, 300 / 1080], [460 / 1920, 280 / 1080],
+      [500 / 1920, 300 / 1080], [500 / 1920, 350 / 1080],
     ]);
-    const drawMsg = await priya.waitFor("draw");
-    expect(drawMsg.color).toBe("#FF0000");
+    await waitForRemoteDraw(page, 1);
 
-    draw(priya, "#0000FF", [
-      [700, 400], [750, 300], [800, 400], [850, 300], [900, 400],
+    await drawStroke(priya, [
+      [700 / 1920, 400 / 1080], [750 / 1920, 300 / 1080], [800 / 1920, 400 / 1080],
+      [850 / 1920, 300 / 1080], [900 / 1920, 400 / 1080],
     ]);
-    await sleep(200);
+    await waitForRemoteDraw(page, 2);
 
-    draw(kai, "#FFD700", [
-      [1100, 300], [1130, 380], [1200, 380], [1145, 420],
-      [1165, 500], [1100, 450], [1035, 500],
+    await drawStroke(kai, [
+      [1100 / 1920, 300 / 1080], [1130 / 1920, 380 / 1080], [1200 / 1920, 380 / 1080],
+      [1145 / 1920, 420 / 1080], [1165 / 1920, 500 / 1080], [1100 / 1920, 450 / 1080],
+      [1035 / 1920, 500 / 1080],
     ]);
-    await sleep(200);
+    await waitForRemoteDraw(page, 3);
 
     await assertScreenshot(page, "03-drawing");
   });
@@ -267,7 +353,8 @@ describe("Full tour: Breakout", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    await wsJoinTracked(roomCode, "javi");
+    await joinBrowser(page, roomCode, "javi");
+    await waitForAllMembers(2);
 
     // Minimize chat → auto-starts breakout
     await page.click("#chat-btn-min");
@@ -293,36 +380,38 @@ describe("Full tour: Rock Paper Scissors", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    await joinBrowser(page, roomCode, "priya");
+    await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     await page.click("#aim-btn-rps");
     await page.waitForSelector("#member-picker-overlay.open");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "javi" }).click();
 
-    await javi.waitFor("rps-challenged");
-    rpsAccept(javi);
+    await javi.waitForSelector("#rps-overlay.open");
+    await javi.click("#rps-actions .xp-btn-primary", { force: true });
 
     await page.waitForSelector("#rps-overlay.open");
     await page.waitForSelector(".rps-pick");
+    await javi.waitForSelector(".rps-pick");
 
     // luna picks rock
     await page.locator(".rps-pick[title='rock']").click();
     // javi picks scissors → luna wins
-    rpsPick(javi, "scissors");
+    await javi.locator(".rps-pick[title='scissors']").click();
 
     await page.waitForFunction(() => {
       const el = document.getElementById("rps-result-text");
       return el && el.style.display !== "none" && el.textContent && el.textContent.includes("wins");
-    }, { timeout: 5000 });
+    }, undefined, { timeout: 5000 });
 
     await assertScreenshot(page, "05-rps-luna-wins");
 
     // Dismiss
     await page.waitForSelector("#rps-actions .xp-btn");
     await page.click("#rps-actions .xp-btn");
+    await javi.click("#rps-actions .xp-btn");
   });
 });
 
@@ -333,48 +422,50 @@ describe("Full tour: Tic-Tac-Toe", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     await page.click("#aim-btn-ttt");
     await page.waitForSelector("#member-picker-overlay.open");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "priya" }).click();
 
-    tttAccept(priya);
+    await priya.waitForSelector("#ttt-overlay.open");
+    await priya.click("#ttt-actions .xp-btn-primary", { force: true });
 
     // Wait for the board to render with 9 cells
     await page.waitForFunction(() => {
       const board = document.getElementById("ttt-board");
       return board && board.children.length === 9;
-    }, { timeout: 5000 });
+    }, undefined, { timeout: 5000 });
     await sleep(500);
 
-    // luna(4), priya(0), luna(2), priya(6), luna(5), priya(3), luna(8)
+    // luna(4), priya(0), luna(2), priya(6), luna(5), priya(1), luna(8)
     await page.locator("#ttt-board > *").nth(4).click();
-    await sleep(800);
-    tttMove(priya, 0);
-    await sleep(800);
+    await priya.locator("#ttt-board > *").nth(4).waitFor({ state: "visible" });
+    await priya.locator("#ttt-board > *").nth(0).click();
+    await page.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 2);
     await page.locator("#ttt-board > *").nth(2).click();
-    await sleep(800);
-    tttMove(priya, 6);
-    await sleep(800);
+    await priya.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 3);
+    await priya.locator("#ttt-board > *").nth(6).click();
+    await page.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 4);
     await page.locator("#ttt-board > *").nth(5).click();
-    await sleep(800);
-    tttMove(priya, 3);
-    await sleep(800);
+    await priya.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 5);
+    await priya.locator("#ttt-board > *").nth(1).click();
+    await page.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 6);
     await page.locator("#ttt-board > *").nth(8).click(); // luna wins!
 
     await page.waitForFunction(() => {
       const el = document.getElementById("ttt-status");
       return el && el.textContent && (el.textContent.includes("win") || el.textContent.includes("wins"));
-    }, { timeout: 5000 });
+    }, undefined, { timeout: 5000 });
 
     await assertScreenshot(page, "06-ttt-luna-wins");
 
     // Dismiss
     await page.click("#ttt-actions .xp-btn");
+    await priya.click("#ttt-actions .xp-btn");
   }, 30000);
 });
 
@@ -385,33 +476,24 @@ describe("Full tour: Saboteur", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     await page.click("#aim-btn-sab");
 
-    // Wait for saboteur role assignment (system message appears)
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && (
-        msgs.textContent.includes("saboteur") || msgs.textContent.includes("defender")
-      );
-    }, { timeout: 5000 });
+    // V4 distributes the encrypted role state to every admitted member.
+    await Promise.all([page, javi, kai].map((participant) =>
+      participant.waitForSelector(".sab-role-badge", { timeout: 10_000 })
+    ));
     await sleep(500);
 
-    await chat(kai, "who's the saboteur 👀");
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("who's the saboteur");
-    });
+    await sendChat(kai, "who's the saboteur 👀");
+    await waitForMessage(page, "who's the saboteur");
 
-    await chat(javi, "definitely not me");
-    await page.waitForFunction(() => {
-      const msgs = document.getElementById("messages");
-      return msgs && msgs.textContent && msgs.textContent.includes("definitely not me");
-    });
+    await sendChat(javi, "definitely not me");
+    await waitForMessage(page, "definitely not me");
 
     await assertScreenshot(page, "07-saboteur");
   });
@@ -424,12 +506,12 @@ describe("Full tour: King of the Hill", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
-    kothChallenge(kai);
+    await kai.click("#aim-btn-koth");
 
     await page.waitForSelector("#rps-overlay.open", { timeout: 5000 });
     await page.waitForSelector(".rps-pick");
@@ -439,22 +521,25 @@ describe("Full tour: King of the Hill", () => {
     // luna picks rock
     await page.locator(".rps-pick[title='rock']").click();
     // kai picks scissors → luna wins
-    rpsPick(kai, "scissors");
+    await kai.locator(".rps-pick[title='scissors']").click();
 
     await page.waitForFunction(() => {
       const el = document.getElementById("rps-result-text");
       return el && el.style.display !== "none" && el.textContent && el.textContent.includes("wins");
-    }, { timeout: 5000 });
+    }, undefined, { timeout: 5000 });
 
     await assertScreenshot(page, "09-koth-luna-wins");
 
     // Dismiss overlay
     await page.waitForSelector("#rps-actions .xp-btn");
-    await page.click("#rps-actions .xp-btn");
+    await page.click("#rps-actions .xp-btn", { force: true });
+    await kai.click("#rps-actions .xp-btn", { force: true });
     await sleep(300);
 
-    // Verify luna is still host (no koth-result with kai as winner)
-    // luna winning means no host transfer
+    // Luna won, so relay authority must not move to the challenger.
+    await page.waitForSelector("#btn-knock-down", { state: "visible" });
+    expect(await kai.locator("#btn-leave-room").isVisible()).toBe(true);
+    expect(await javi.locator("#btn-leave-room").isVisible()).toBe(true);
   });
 });
 
@@ -465,10 +550,10 @@ describe("Full tour: Pillow Fight", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     await page.click("#aim-btn-vote");
     await page.waitForSelector("#member-picker-overlay.open");
@@ -476,12 +561,14 @@ describe("Full tour: Pillow Fight", () => {
     await sleep(500);
 
     // priya and kai vote yes
-    castVote(priya, "yes");
-    await sleep(300);
-    castVote(kai, "yes");
+    await priya.waitForSelector("#vote-yes", { timeout: 10_000 });
+    await kai.waitForSelector("#vote-yes", { timeout: 10_000 });
+    await priya.click("#vote-yes");
+    await kai.click("#vote-yes");
 
     // Wait for javi to be kicked (member count drops to 3)
     await waitForMembers(page, 3);
+    await javi.waitForSelector("#btn-home", { state: "visible", timeout: 10_000 });
 
     await assertScreenshot(page, "10-pillow-fight");
   });
@@ -494,26 +581,25 @@ describe("Full tour: Pillow Toss + Knock Down", () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
-    const javi = await wsJoinTracked(roomCode, "javi");
-    const priya = await wsJoinTracked(roomCode, "priya");
-    const kai = await wsJoinTracked(roomCode, "kai");
-    await waitForMembers(page, 4);
+    const javi = await joinBrowser(page, roomCode, "javi");
+    const priya = await joinBrowser(page, roomCode, "priya");
+    const kai = await joinBrowser(page, roomCode, "kai");
+    await waitForAllMembers(4);
 
     // Luna tosses host to kai
     await page.click("#aim-btn-toss");
     await page.waitForSelector("#member-picker-overlay.open");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "kai" }).click();
-    await sleep(500);
+    await kai.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
+    await kai.click("#btn-catch");
 
-    // kai accepts host
-    kai.send({ type: "accept-host" });
-
-    // Verify host transfer
-    const newHost = await javi.waitFor("new-host", 5000);
-    expect(newHost.name).toBe("kai");
+    // Verify the capability-bound host transfer reached every participant.
+    await kai.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
+    expect(await javi.locator("#btn-leave-room").isVisible()).toBe(true);
+    expect(await priya.locator("#btn-leave-room").isVisible()).toBe(true);
 
     // kai knocks down
-    knockDown(kai);
+    await kai.click("#btn-knock-down");
 
     await page.waitForSelector("#btn-home", { state: "visible", timeout: 5000 });
     await assertScreenshot(page, "11-knocked-down");

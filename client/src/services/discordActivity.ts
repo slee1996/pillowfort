@@ -1,48 +1,40 @@
 export type DiscordActivityContext = {
   active: true;
-  roomId: string;
-  source: "activity_route" | "discord_proxy" | "query";
+  source: "activity_route" | "discord_proxy";
   platform: string;
 };
 
-const ROOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const PLATFORM_RE = /^[A-Za-z0-9_-]{1,32}$/u;
 
-function hashBase36(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
-  }
-  return Math.abs(hash >>> 0).toString(36).padStart(6, "0").slice(0, 6);
+function singleParameter(params: URLSearchParams, name: string): string | null | false {
+  const values = params.getAll(name);
+  if (values.length > 1) return false;
+  return values.length === 1 ? values[0] : null;
 }
 
-function fallbackSeed(input: string): string {
-  let out = "";
-  for (let i = 0; i < 6; i++) {
-    out += ROOM_ALPHABET[(input.charCodeAt(i % input.length) + i * 11) % ROOM_ALPHABET.length];
-  }
-  return out;
-}
-
-export function getDiscordActivityContext(url: URL = new URL(window.location.href)): DiscordActivityContext | null {
+export async function getDiscordActivityContext(
+  url: URL = new URL(window.location.href),
+): Promise<DiscordActivityContext | null> {
   const params = url.searchParams;
   const activityRoute = url.pathname === "/activity";
   const discordProxy = url.hostname.endsWith(".discordsays.com");
-  const queryLaunch = params.get("discord_activity") === "1" || params.has("frame_id");
+  const activityFlag = singleParameter(params, "discord_activity");
+  const frameId = singleParameter(params, "frame_id");
+  const platformValue = singleParameter(params, "platform");
+  if ([activityFlag, frameId, platformValue].includes(false)) return null;
+  // Query parameters are not launch authentication. They may decorate the
+  // dedicated Activity surface, but an ordinary Pillowfort page never enters
+  // Activity mode merely because a caller supplied launch-looking values.
+  if (!activityRoute && !discordProxy) return null;
 
-  if (!activityRoute && !discordProxy && !queryLaunch) return null;
+  if (activityFlag !== null && activityFlag !== "1") return null;
+  if (platformValue !== null && (typeof platformValue !== "string" || !PLATFORM_RE.test(platformValue))) return null;
 
-  const platform = params.get("platform") || (discordProxy ? "discord_proxy" : "web");
-  const source = activityRoute ? "activity_route" : discordProxy ? "discord_proxy" : "query";
-  const instanceSeed =
-    params.get("instance_id") ||
-    params.get("channel_id") ||
-    params.get("frame_id") ||
-    `${url.hostname}:${url.pathname}`;
-  const suffix = instanceSeed ? hashBase36(instanceSeed) : fallbackSeed(url.href);
+  const platform = platformValue || (discordProxy ? "discord_proxy" : "web");
+  const source = activityRoute ? "activity_route" : "discord_proxy";
 
   return {
     active: true,
-    roomId: `dc-${suffix}`,
     source,
     platform,
   };

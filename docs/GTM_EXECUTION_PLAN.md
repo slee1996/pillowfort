@@ -425,9 +425,9 @@ Prepare the product for its most natural distribution channel.
 There is a Discord Activity pre-SDK slice:
 
 - `/activity` surface
-- frame header handling
-- Activity context detection
-- deterministic `dc-......` room flag
+- exact-origin frame header handling
+- presentation-only Activity context detection
+- no room mapping or paid controls before server-backed Discord authentication
 
 ### What to plan next
 

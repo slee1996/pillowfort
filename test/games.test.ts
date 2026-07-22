@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients,
-  createRoom, joinRoom, connectClientToRoom, roomAuth, TEST_GRACE_MS,
+  createRoom, joinRoom, connectClientToRoom, roomAuth, sendEncryptedChat, TEST_GRACE_MS,
 } from "./helpers";
 
 beforeAll(startServer);
@@ -303,7 +303,7 @@ describe("Tic-Tac-Toe", () => {
     await bob.waitFor("ttt-update");
     await bob.close();
     const restored = await connectClientToRoom(roomId);
-    restored.send({ type: "rejoin", name: "bob", room: roomId, auth: await roomAuth(roomId, "secret") });
+    restored.send({ type: "rejoin", name: "bob", room: roomId, auth: await roomAuth(restored, roomId, "secret", "rejoin", "bob") });
     const rejoined = await restored.waitFor("rejoined");
     expect(rejoined.gameState.kind).toBe("ttt");
     expect(rejoined.gameState.board[0]).toBe("X");
@@ -590,9 +590,10 @@ describe("Secret Saboteur", () => {
     defender.client.send({ type: "sab-strike" });
 
     // Send a chat to prove the connection is alive, then verify no sab-strike came
-    defender.client.send({ type: "chat", text: "test" });
+    const defenderName = ["alice", "bob", "carol", "dave"][players.indexOf(defender.client)];
+    await sendEncryptedChat(defender.client, roomId, "secret", defenderName, "test");
     const msg = await defender.client.waitFor("message");
-    expect(msg.text).toBe("test");
+    expect(msg.enc?.v).toBe(3);
 
     // Verify no sab-strike was broadcast
     const strikes = host.messages.filter(m => m.type === "sab-strike");
@@ -898,11 +899,10 @@ describe("Breakout chat sharing", () => {
     const bob = await joinRoom(roomId, "bob");
 
     // Simulate what breakout does: sends a chat message with game result
-    host.send({ type: "chat", text: "\uD83C\uDFAE destroyed 25/40 bricks in Breakout before running out of lives" });
+    await sendEncryptedChat(host, roomId, "secret", "alice", "\uD83C\uDFAE destroyed 25/40 bricks in Breakout before running out of lives");
 
     const msg = await bob.waitFor("message");
     expect(msg.from).toBe("alice");
-    expect(msg.text).toContain("Breakout");
-    expect(msg.text).toContain("25/40");
+    expect(msg.enc?.v).toBe(3);
   });
 });

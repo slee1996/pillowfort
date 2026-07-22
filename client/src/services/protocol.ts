@@ -1,10 +1,40 @@
+export {
+  MAX_MLS_KEY_PACKAGE_BYTES,
+  MAX_MLS_RELAY_PAYLOAD_BYTES,
+  MAX_SECURE_WEBSOCKET_FRAME_BYTES,
+  SECURE_DEVICE_ID_BYTES,
+  SECURE_MESSAGE_ID_BYTES,
+  SECURE_ROOM_ID_BYTES,
+  SECURE_ROOM_MLS_CIPHERSUITE,
+  SECURE_ROOM_MLS_CIPHERSUITE_NAME,
+  SECURE_ROOM_MLS_IMPLEMENTATION,
+  SECURE_ROOM_PROTOCOL_VERSION,
+  canonicalBase64UrlByteLength,
+  isSecureMemberHelloV4,
+  isSecureRelayEnvelopeV4,
+  parseSecureMemberHelloV4,
+  parseSecureRelayEnvelopeV4,
+} from "../../../src/protocolV4";
+export type {
+  SecureMemberHelloV4,
+  SecureRelayEnvelopeV4,
+  SecureRelayRouteV4,
+  SecureRelayValidationOptions,
+} from "../../../src/protocolV4";
+
 // --- Outgoing messages (client → server) ---
 
 export type OutgoingMessage =
-  | { type: "set-up"; name: string; auth: RoomAuthPayload; fortPassSessionId?: string }
+  | {
+      type: "set-up";
+      name: string;
+      auth: RoomAuthPayload;
+      fortPassSessionId?: string;
+      fortPassClaimSecret?: string;
+    }
   | { type: "join"; name: string; auth: RoomAuthPayload; room: string }
   | { type: "rejoin"; name: string; auth: RoomAuthPayload; room: string }
-  | { type: "chat"; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
+  | { type: "chat"; enc: EncryptedChatPayload }
   | { type: "knock-down" }
   | { type: "typing" }
   | { type: "leave" }
@@ -33,14 +63,16 @@ export type OutgoingMessage =
 // --- Incoming messages (server → client) ---
 
 export type IncomingMessage =
+  | { type: "auth-challenge"; challenge: string; expiresAt: number }
   | { type: "room-created"; room: string; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; gameState?: ActiveGameState; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "leaderboards"; leaderboards: RoomLeaderboards }
   | { type: "game-queue"; gameQueue: RoomGameQueue }
   | { type: "room-theme"; theme: RoomTheme }
+  | { type: "fort-pass-updated"; fortPass: FortPassRoomPerks | null }
   | { type: "game-queued"; kind: QueueGameKind; by: string; target?: string; position: number }
-  | { type: "message"; from: string; text?: string; enc?: EncryptedChatPayload; style?: ChatStyle }
+  | { type: "message"; from: string; enc: EncryptedChatPayload }
   | { type: "member-joined"; name: string; presence?: MemberPresence }
   | { type: "member-left"; name: string }
   | { type: "member-away"; name: string }
@@ -94,18 +126,20 @@ export interface ChatStyle {
 }
 
 export interface EncryptedChatPayload {
-  v: 1 | 2 | 3;
-  kdf?: "pbkdf2-sha256-600k-v1";
-  sid?: string;
-  seq?: number;
+  v: 3;
+  kdf: "pbkdf2-sha256-600k-v1";
+  sid: string;
+  seq: number;
   iv: string;
   ct: string;
 }
 
 export interface RoomAuthPayload {
-  v: 1;
-  kdf: "pbkdf2-sha256-600k-v1";
-  verifier: string;
+  v: 2;
+  kdf: "pbkdf2-sha256-600k-ed25519-v2";
+  challenge: string;
+  proof: string;
+  publicKey?: string;
 }
 
 export type RpsPick = "rock" | "paper" | "scissors";

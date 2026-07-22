@@ -66,6 +66,12 @@ Completed against the deployed Worker:
 - Paid room switched to `campus-blue`.
 - Smoke room was knocked down and `smoke-2` became available again.
 
+These historical smoke results predate the tab-scoped Fort Pass claim-secret
+boundary and are not sufficient for a new release. Before re-enabling the paid
+path, repeat the browser purchase below and verify that a copied success URL,
+a missing/wrong claim secret, and a refund-before-fulfillment race all fail
+closed.
+
 ## Manual Test Purchase
 
 For a browser purchase smoke:
@@ -77,6 +83,8 @@ For a browser purchase smoke:
 5. Complete Stripe Checkout with a Stripe test card.
 6. Return to Pillowfort and create the room.
 7. Confirm the host can switch to `campus-blue` or `top-8`.
+8. Repeat the success URL in a fresh tab and confirm it cannot redeem or create
+   the paid room; only the originating tab may finish setup.
 
 Use Stripe test card data from Stripe's dashboard/docs. Do not use a real card
 against the sandbox setup.

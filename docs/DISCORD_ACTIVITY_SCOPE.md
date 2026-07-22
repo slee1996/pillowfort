@@ -98,12 +98,22 @@ Current prototype slice:
 
 - `/activity` serves the shared app shell and uses Discord-specific frame
   headers instead of the default `frame-ancestors 'none'` policy.
-- `client/src/services/discordActivity.ts` detects likely Activity launches via
-  `/activity`, Discord proxy hosts, `discord_activity=1`, or `frame_id`.
-- The detected Activity instance maps to a deterministic `dc-......` room flag.
-- The setup and join screens prefill/use that room flag while the existing
-  password model remains in place.
+- `client/src/services/discordActivity.ts` treats only `/activity` and Discord
+  proxy hosts as unverified presentation signals. Launch-looking query values
+  on an ordinary page are inert.
+- Public `instance_id`, `channel_id`, and `frame_id` values never select,
+  prefill, reserve, or authenticate a room. Setup generates a fresh random
+  `f-..........` room exactly as the standalone app does.
+- Fort Pass checkout and redemption UI is suppressed on the unverified
+  Activity surface. It must not be enabled until server-backed Discord launch
+  validation and an Activity-compatible billing policy exist.
+- Activity framing is limited to the exact Discord production, Canary, and PTB
+  origins; wildcard Discord and `discordsays.com` ancestors are not allowed.
 - Analytics emits `discord_activity_detected` without logging Discord IDs.
+
+Activity-route and proxy-host detection are prototype UX signals only, not
+authentication. A production Discord integration must verify a platform
+authorization/token server-side before using an instance as room identity.
 
 This is intentionally a pre-SDK slice. The next implementation step is adding
 `@discord/embedded-app-sdk`, calling `ready()`, and using `authorize()` /

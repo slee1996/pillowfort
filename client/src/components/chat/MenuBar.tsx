@@ -3,6 +3,7 @@ import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { showToast } from "../xp/Toast";
 import type { RoomTheme } from "../../services/protocol";
+import { isCredentialSystemMessage } from "../../services/roomSecret";
 
 type MenuClick = (e: React.MouseEvent<HTMLElement>) => void;
 
@@ -104,7 +105,9 @@ export function MenuBar() {
     setOpenMenu(null);
     let text = "";
     messages.forEach((m) => {
-      if (m.kind === "system") text += `pillowtalk: ${m.text}\n`;
+      if (m.kind === "system") {
+        if (!isCredentialSystemMessage(m.text)) text += `pillowtalk: ${m.text}\n`;
+      }
       else text += `${m.from} (${m.timestamp}): ${m.text}\n`;
     });
     const blob = new Blob([text], { type: "text/plain" });
@@ -124,8 +127,6 @@ export function MenuBar() {
     } else {
       useGameStore.getState().setIntentionalLeave(true);
       send("leave");
-      useGameStore.getState().cleanup();
-      useGameStore.getState().setScreen("home");
     }
   };
 

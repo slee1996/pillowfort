@@ -30,6 +30,22 @@ export function TttOverlay() {
     );
   }
 
+  if (ttt.phase === "waiting") {
+    return (
+      <div id="ttt-overlay" className="game-overlay open">
+        <div className="game-dialog game-dialog-wide">
+          <div className="xp-title-bar"><div className="xp-title-text">⬜ Tic-Tac-Toe</div></div>
+          <div className="game-dialog-body">
+            <div>Waiting for {ttt.p2} to answer…</div>
+            <div className="auth-actions game-actions">
+              <Button onClick={() => send("ttt-cancel")}>Cancel Challenge</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Playing or result
   const currentMark = ttt.turn % 2 === 0 ? "X" : "O";
   const myTurn = currentMark === ttt.myMark;
@@ -84,6 +100,11 @@ export function TttOverlay() {
             ))}
           </div>
           <div id="ttt-status" className="ttt-status" style={{ color: statusColor }}>{statusText}</div>
+          {!isResult && (
+            <div id="ttt-actions" className="auth-actions game-actions">
+              <Button onClick={() => send("ttt-forfeit")}>Forfeit</Button>
+            </div>
+          )}
           {isResult && (
             <div id="ttt-actions" className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>

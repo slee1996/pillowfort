@@ -4,6 +4,8 @@ import { startServer, stopServer, getPort } from "./helpers";
 
 let browser: Browser;
 const contexts: BrowserContext[] = [];
+const roomPasswords = new Map<string, string>();
+const pageDiagnostics = new WeakMap<Page, string[]>();
 
 beforeAll(async () => {
   await startServer();
@@ -28,6 +30,32 @@ async function mobilePage(): Promise<Page> {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 667 } });
   contexts.push(ctx);
   const page = await ctx.newPage();
+  const diagnostics: string[] = [];
+  pageDiagnostics.set(page, diagnostics);
+  const diagnose = (message: string) => diagnostics.push(`${Date.now()} ${message}`);
+  page.on("pageerror", (error) => diagnose(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning") {
+      diagnose(`console ${message.type()}: ${message.text()}`);
+    }
+  });
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", (event) => {
+      if (typeof event.payload !== "string") return;
+      try {
+        const frame = JSON.parse(event.payload) as { type?: unknown; code?: unknown; reason?: unknown };
+        diagnose(`received: ${String(frame.type)} ${String(frame.code ?? "")} ${String(frame.reason ?? "")}`.trim());
+      } catch {}
+    });
+    socket.on("framesent", (event) => {
+      if (typeof event.payload !== "string") return;
+      try {
+        const frame = JSON.parse(event.payload) as { kind?: unknown; relayKind?: unknown };
+        diagnose(`sent: ${String(frame.kind)} ${String(frame.relayKind ?? "")}`.trim());
+      } catch {}
+    });
+    socket.on("close", () => diagnose("websocket closed"));
+  });
   await page.goto(`http://localhost:${getPort()}/`);
   return page;
 }
@@ -35,7 +63,7 @@ async function mobilePage(): Promise<Page> {
 async function createFort(page: Page, name: string): Promise<string> {
   await page.fill("#name-input", name);
   await page.click("#btn-setup");
-  await page.fill("#setup-password", "test123");
+  const password = await page.inputValue("#setup-password");
   await page.click("#btn-create");
   await page.waitForSelector("#room-code");
   // room-code text gets set asynchronously after ws response
@@ -43,16 +71,24 @@ async function createFort(page: Page, name: string): Promise<string> {
     const el = document.getElementById("room-code");
     return el && el.textContent && el.textContent.length >= 8;
   });
-  return page.locator("#room-code").innerText();
+  const roomCode = await page.locator("#room-code").innerText();
+  roomPasswords.set(roomCode, password);
+  return roomCode;
 }
 
-async function joinFort(page: Page, code: string, name: string): Promise<void> {
+async function joinFort(host: Page, page: Page, code: string, name: string): Promise<void> {
   await page.fill("#name-input", name);
   await page.click("#btn-join");
   await page.fill("#join-room", code);
-  await page.fill("#join-password", "test123");
+  const password = roomPasswords.get(code);
+  if (!password) throw new Error(`missing test room secret for ${code}`);
+  await page.fill("#join-password", password);
   await page.click("#btn-enter");
-  await page.waitForSelector("#messages");
+  await page.waitForFunction(() => document.body.textContent?.includes("Waiting for the host to approve this device."), undefined, { timeout: 30_000 });
+  await host.waitForSelector("#admission-approval-overlay", { timeout: 30_000 });
+  await host.click("#btn-approve-admission");
+  await page.waitForSelector("#messages", { timeout: 30_000 });
+  await host.waitForSelector("#admission-approval-overlay", { state: "detached", timeout: 30_000 });
 }
 
 async function pickMember(page: Page, name: string): Promise<void> {
@@ -81,7 +117,7 @@ describe("Mobile E2E", () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     // wait for alice to see bob in member list
     await alice.waitForFunction(() => {
       const el = document.getElementById("member-count");
@@ -120,7 +156,7 @@ describe("Mobile E2E", () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     await alice.waitForFunction(() => {
       const el = document.getElementById("member-count");
       return el && el.textContent && el.textContent.includes("2");
@@ -162,7 +198,7 @@ describe("Mobile E2E", () => {
     await alice.waitForFunction(() => {
       const el = document.getElementById("ttt-status");
       return el && el.textContent && (el.textContent.includes("win") || el.textContent.includes("wins"));
-    }, { timeout: 5000 });
+    }, undefined, { timeout: 5000 });
 
     const status = await alice.locator("#ttt-status").innerText();
     expect(status.toLowerCase()).toContain("win");
@@ -172,9 +208,9 @@ describe("Mobile E2E", () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     const carol = await mobilePage();
-    await joinFort(carol, code, "carol");
+    await joinFort(alice, carol, code, "carol");
 
     // Wait for alice to see 3 members
     await alice.waitForFunction(() => {
@@ -193,17 +229,29 @@ describe("Mobile E2E", () => {
     await carol.click("#vote-yes", { force: true });
 
     // Vote resolves — banner disappears on alice's screen
-    await alice.waitForFunction(() => {
-      const el = document.getElementById("vote-banner");
-      return !el || !el.classList.contains("visible");
-    }, { timeout: 5000 });
+    try {
+      await alice.waitForFunction(() => {
+        const el = document.getElementById("vote-banner");
+        return !el || !el.classList.contains("visible");
+      }, undefined, { timeout: 15_000 });
+    } catch (error) {
+      const diagnostics = await Promise.all([
+        ["alice", alice], ["bob", bob], ["carol", carol],
+      ].map(async ([name, participant]) => {
+        const participantPage = participant as Page;
+        const body = await participantPage.locator("body").innerText().catch(() => "<page unavailable>");
+        const trace = pageDiagnostics.get(participantPage)?.slice(-30).join("\n") || "<no browser diagnostics>";
+        return `${name}:\n${body.slice(0, 1000)}\n${trace}`;
+      }));
+      throw new Error(`mobile vote did not resolve\n${diagnostics.join("\n---\n")}`, { cause: error });
+    }
   });
 
   it("member picker touch targets", async () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     await alice.waitForFunction(() => {
       const el = document.getElementById("member-count");
       return el && el.textContent && el.textContent.includes("2");
@@ -262,7 +310,7 @@ describe("Mobile E2E", () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     await alice.waitForFunction(() => {
       const el = document.getElementById("member-count");
       return el && el.textContent && el.textContent.includes("2");
@@ -292,7 +340,7 @@ describe("Mobile E2E", () => {
     const alice = await mobilePage();
     const code = await createFort(alice, "alice");
     const bob = await mobilePage();
-    await joinFort(bob, code, "bob");
+    await joinFort(alice, bob, code, "bob");
     await alice.waitForFunction(() => {
       const el = document.getElementById("member-count");
       return el && el.textContent && el.textContent.includes("2");

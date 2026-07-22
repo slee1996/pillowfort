@@ -106,22 +106,37 @@ Current shared implementation primitives:
   validation, active versus refunded/expired checks, bounded extended-timeout
   behavior, and availability result shape.
 - `src/stripe.ts` creates Stripe Checkout Sessions, verifies signed Stripe
-  webhook payloads, and converts paid Checkout Session events into Fort Pass
-  entitlements.
+  webhook payloads, resolves paid entitlements, and authoritatively binds
+  refund/dispute revocations through Charge, PaymentIntent, and Checkout
+  Session records.
 - `GET /api/fort-pass/code?code=...` checks whether a custom code is valid and
   not already occupied by a live room.
 - `GET /api/fort-pass/status` returns non-secret beta readiness data so the
   setup UI can keep checkout disabled unless Checkout and signed webhook
   fulfillment are both configured.
 - `POST /api/fort-pass/checkout` validates and atomically reserves the requested
-  custom code for a short checkout window. If Stripe config is present, it
-  creates a hosted one-time Checkout Session; failed provider creation releases
-  the reservation. If Stripe is not configured, it returns
-  `checkout_not_configured`.
+  custom code plus a client-generated SHA-256 claim hash for a bounded
+  40-minute checkout window. The originating tab keeps the 256-bit raw claim
+  secret in `sessionStorage`; raw claim material is never sent to Stripe or
+  persisted by the server. If Stripe config is
+  present, it creates a hosted one-time Checkout Session that expires after 31
+  minutes. Ambiguous provider failures retain the reservation until expiry so a
+  session created just before a timeout cannot later charge for a reallocated
+  code. If Stripe is not configured, it returns `checkout_not_configured`.
 - `POST /api/stripe/webhook` verifies Stripe's raw-body signature before
-  granting any entitlement. Only paid `checkout.session.completed` events with
-  Fort Pass metadata are fulfilled, and replaying the same fulfilled Checkout
-  Session is treated as a successful idempotent delivery.
+  granting any entitlement. It independently retrieves the exact Checkout
+  Session and verifies payment status, mode, environment, room binding,
+  quantity, amount, currency, and configured Price ID. Fulfillment uses a
+  durable per-Session claim ledger plus a room redemption tombstone, so retries
+  and post-teardown replays cannot grant the same purchase twice.
+- Signed `charge.refunded` (partial or full) and
+  `charge.dispute.created` events are independently retrieved from Stripe and
+  bound to the exact Charge, PaymentIntent, one Checkout Session, configured
+  Price, room, amount, currency, and test/live mode. A separate durable event
+  ledger makes retries idempotent. Revocation persists a refunded entitlement
+  tombstone, removes premium themes/idle time immediately, and never destroys
+  the encrypted room. A delayed event for an older Checkout Session cannot
+  revoke a newer owner.
 - The local Bun runtime checks the in-memory room map.
 - The production Worker asks the target Durable Object for a minimal
   `{ exists: boolean }` status and returns only `available` / `reason`.
@@ -130,8 +145,11 @@ Current shared implementation primitives:
 - The production Durable Object stores webhook-confirmed entitlements in
   Durable Object storage before the room is set up.
 - The Checkout success redirect carries `code` and `session_id` back to the
-  client so the buyer can redeem the paid code during room setup without an
-  account.
+  client, but neither value is redemption authority. The client unlocks setup
+  only after the bounded redemption endpoint retrieves the exact paid Session
+  and constant-time verifies the originating tab's raw claim secret against
+  the provider-bound hash. Copying the return URL into another tab therefore
+  cannot redeem or set up the paid room.
 - The setup screen includes the first host-facing Fort Pass entry point: enter a
   custom code, start Checkout, and return through the accountless redemption
   flow.
@@ -141,9 +159,9 @@ Current shared implementation primitives:
   to `campus-blue` or `top-8`, and the room broadcasts the selected theme to
   connected members.
 
-This does not add guest accounts. The current fulfillment path deliberately
-trusts Stripe webhooks, not client checkout success redirects, as the source of
-truth for paid perks.
+This does not add guest accounts. A redirect alone is never proof of payment;
+both webhook and checkout-return paths independently retrieve Stripe's current
+provider objects before changing entitlement state.
 
 Entitlement state should include:
 
@@ -157,7 +175,8 @@ Entitlement state should include:
 Do not store:
 
 - Chat message content.
-- Room password.
+- Room secret.
+- Authentication signing seed or challenge proof.
 - Derived encryption keys.
 
 ## Product Copy
@@ -211,7 +230,8 @@ Privacy confusion:
 
 Support burden:
 
-- Keep beta purchases manually refundable.
+- Keep beta purchases manually refundable in Stripe; signed refund/dispute
+  events revoke the app entitlement automatically.
 - Keep the first SKU simple enough to explain in one sentence.
 
 ## Build Order
@@ -223,8 +243,9 @@ Support burden:
    Checkout Session creation and signed webhook fulfillment.
 4. Add the extended timeout entitlement. Done for active Fort Pass rooms.
 5. Add a checkout success redemption path that proves the paying host is the
-   party setting up the paid room. Done for beta with the Stripe Checkout
-   Session ID from the success redirect.
+   party setting up the paid room. Done with a client-generated 256-bit
+   tab-scoped claim secret; only its SHA-256 hash is bound into Stripe metadata
+   and server-side entitlement state.
 6. Add a host-only upgrade entry point in the frontend. Done as a compact Fort
    Pass custom-code checkout flow on setup.
 7. Add premium skin selection. Done for Fort Pass rooms with `campus-blue` and
@@ -234,13 +255,13 @@ Support burden:
 
 Do not publicly promote Fort Pass until one production-mode Stripe smoke test
 passes and the refund/support process has an owner. Today, the app can start
-checkout, reserve, redeem, and activate a paid custom code after Stripe
-confirmation.
+checkout, reserve, redeem, activate, and automatically revoke a paid custom code
+after authoritative Stripe confirmation.
 
-Before a larger paid launch, decide whether the beta redemption proof is enough.
-Matching the Checkout Session ID is appropriate for a low-risk beta; a larger
-launch may want a one-time redemption token, a server-side Stripe session
-lookup, or lightweight host identity.
+The beta redemption proof is a one-time, accountless browser capability rather
+than the public Checkout Session ID. Losing the originating tab before setup
+cannot be recovered by support; refund the purchase instead of asking the buyer
+to disclose the raw claim secret.
 
 ## API Contract
 
@@ -270,8 +291,8 @@ Taken response:
 
 Responses are `cache-control: no-store`.
 
-This endpoint must not return room owner, room password, member names, payment
-state, or any room metadata beyond availability.
+This endpoint must not return room owner, room secret, authentication material,
+member names, payment state, or any room metadata beyond availability.
 
 ### Start Checkout
 
@@ -317,8 +338,9 @@ Full paid-flow environment:
 - `PUBLIC_BASE_URL`
 - `STRIPE_WEBHOOK_SECRET`
 
-This endpoint intentionally does not create an entitlement. Entitlements are
-created only by the signed Stripe webhook path.
+The checkout endpoint intentionally does not create an entitlement. A signed
+webhook or the server-side Checkout-return redemption path must independently
+retrieve and verify the paid Session first.
 
 ### Fulfill Checkout
 
@@ -354,6 +376,12 @@ Fulfilled event:
 { "received": true, "fulfilled": true, "code": "party-1" }
 ```
 
+Verified refund/dispute event:
+
+```json
+{ "received": true, "processed": true, "revoked": true }
+```
+
 The webhook handler reads the raw request body, verifies the
 `Stripe-Signature` HMAC within a five-minute tolerance, parses only verified
 payloads, and grants Fort Pass only when all of these are true:
@@ -364,10 +392,15 @@ payloads, and grants Fort Pass only when all of these are true:
 - Session payment status is `paid`.
 - Session metadata marks the entitlement as `fort-pass`.
 - Session metadata contains a valid `custom_room_code`.
+- Session metadata contains the canonical SHA-256 claim hash supplied before
+  Checkout; it never contains the raw claim secret.
+- The independently retrieved line item has exactly one unit of the configured
+  one-time Price with matching positive amount and currency.
 
 Fulfillment records include provider/session references, active status, room
 code, bounded expiration, extended idle timeout, and theme-pack entitlement.
-They do not include chat content, room passwords, or encryption material.
+They do not include chat content, room secrets, authentication material, or
+encryption material.
 
 ### Redeem Paid Room
 
@@ -377,21 +410,44 @@ After checkout, Stripe redirects to:
 /?fort_pass=success&code=party-1&session_id=cs_test_...
 ```
 
-The client starts setup for `code` and sends the Checkout Session ID in the
-initial websocket setup message:
+The client first receives a one-use protocol-v4 `secure-auth-challenge`. It
+creates the founder's device credential and one-use MLS KeyPackage, signs their
+exact binding with the invitation key derived from the generated 256-bit `pf2_`
+room secret, and signs the setup challenge transcript. It sends the Checkout
+Session ID alongside those proofs and the originating tab's raw claim secret.
+The relay hashes the presented claim secret and compares the digest in constant
+time with the bounded fulfillment record. The security-relevant shape is:
 
 ```json
 {
-  "type": "set-up",
-  "name": "alice",
-  "auth": { "v": 1, "kdf": "pbkdf2-sha256-600k-v1", "verifier": "..." },
-  "fortPassSessionId": "cs_test_..."
+  "kind": "secure-authenticate",
+  "v": 4,
+  "suite": 1,
+  "mode": "setup",
+  "frame": {
+    "kind": "setup",
+    "requestId": "<one-use admission id>",
+    "signaturePublicKey": "<device credential public key>",
+    "hello": "<room/device-bound one-use MLS KeyPackage>",
+    "memberBinding": "<invitation-signed founder binding>"
+  },
+  "auth": "<challenge-bound invitation proof>",
+  "fortPassSessionId": "cs_test_...",
+  "fortPassClaimSecret": "<64 lowercase hex characters>"
 }
 ```
 
-If an active Fort Pass entitlement exists for the room code, setup is rejected
-unless `fortPassSessionId` matches the provider session reference stored from
-the signed webhook:
+The room secret and signing seed are never sent to Stripe or the Pillowfort
+relay. The Fort Pass claim secret is sent only to the redemption/setup boundary
+over HTTPS/WSS, is never logged or persisted there, and is erased from the tab
+after setup. The Durable Object persists the invitation public key, public
+member binding, and claim hash, never the raw claim secret or MLS private state.
+
+Every human custom room code is paid-only. Setup is rejected unless an active
+entitlement is bound to that exact code and `fortPassSessionId` matches the
+provider session reference stored from the signed webhook, and the presented
+claim secret matches the stored hash. Free rooms instead
+use the disjoint `f-` plus ten-base32-symbol generated namespace:
 
 ```json
 { "type": "error", "message": "paid room redemption required" }

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/attempt-report.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "taskId": "T005",
+  "attempt": 1,
+  "worker": "Pillowfort release coordinator",
+  "startedAt": "2026-07-22T06:16:54Z",
+  "finishedAt": "2026-07-22T14:12:09Z",
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d",
+  "branch": "main",
+  "worktree": ".",
+  "supersedes": null,
+  "state": "success",
+  "failureType": null,
+  "summary": "Security claims and source/test references are reconciled to the final tree; typecheck, production build, offline dependency review, marketing gates, and Cloudflare packaging dry-run pass. No commit, push, deployment, or external synchronization is claimed by this report.",
+  "changedFiles": ["security_best_practices_report.md", "docs/SECURE_ROOM_PROTOCOL_V4.md", "security-remediation/tasks.json", "security-remediation/STATUS.json", "security-remediation/reports/T001/attempt-1.json", "security-remediation/reports/T002/attempt-1.json", "security-remediation/reports/T003/attempt-1.json", "security-remediation/reports/T004/attempt-1.json", "security-remediation/reports/T005/attempt-1.json"],
+  "artifacts": ["security_best_practices_report.md", "docs/SECURE_ROOM_PROTOCOL_V4.md", "security-remediation/tasks.json", "security-remediation/STATUS.json"],
+  "verification": [
+    {"id": "V011", "command": "npm run typecheck && npm run build", "exitCode": 0, "result": "PASS: typecheck succeeded; build verified 4 OpenMLS artifacts/27 inputs and emitted 100 Vite modules (WASM 1233.69 kB, CSS 52.87 kB, JS 589.21 kB) with only the standard bundle-size warning.", "environment": "local TypeScript, Node.js, and Vite", "verdict": "pass", "required": true, "exercisedSurfaces": ["S010"], "supportsAcceptance": ["AC-010"], "replay": "npm run typecheck && npm run build"},
+    {"id": "V012", "command": "npx wrangler deploy --dry-run --outdir /private/tmp/pillowfort-wrangler-dryrun.QlYULH", "exitCode": 0, "result": "PASS: Wrangler 4.113.0 read 8 assets and packaged 418.81 KiB/gzip 75.20 KiB with ROOM Durable Object and ASSETS bindings; dry-run performed no deployment.", "environment": "local Wrangler 4.113.0", "verdict": "pass", "required": true, "exercisedSurfaces": ["S010"], "supportsAcceptance": ["AC-010"], "replay": "npx wrangler deploy --dry-run --outdir <temporary-directory>"},
+    {"id": "V013", "command": "npm audit --offline --omit=dev", "exitCode": 0, "result": "PASS: root, client, and marketing production dependency trees each reported zero vulnerabilities from the available offline npm advisory cache.", "environment": "local npm offline advisory cache", "verdict": "pass", "required": true, "exercisedSurfaces": ["S010"], "supportsAcceptance": ["AC-010"], "replay": "Run npm audit --offline --omit=dev separately in ., client, and marketing."},
+    {"id": "V014", "command": "cargo audit --no-fetch", "exitCode": 0, "result": "PASS with documented warning: 136 locked dependencies scanned, zero vulnerability advisories, one allowed unmaintained instant 0.1.13 warning (RUSTSEC-2024-0384); local advisory database contained 1166 entries and no-fetch could not refresh the crates.io index.", "environment": "local cargo-audit cache without network fetch", "verdict": "pass", "required": true, "exercisedSurfaces": ["S009", "S010"], "supportsAcceptance": ["AC-009", "AC-010"], "replay": "cd crypto/openmls-wasm && cargo audit --no-fetch"},
+    {"id": "V015", "command": "npm run lint && npm test", "exitCode": 0, "result": "PASS: marketing build/lint and 3/3 rendered HTML/CMS tests passed.", "environment": "local Node.js in marketing", "verdict": "pass", "required": true, "exercisedSurfaces": ["S010"], "supportsAcceptance": ["AC-010"], "replay": "cd marketing && npm run lint && npm test"},
+    {"id": "V016", "command": "node -e <validate backticked source/test paths and line ranges> && git diff --check", "exitCode": 0, "result": "PASS: every referenced source/test path and line range exists; git diff has no whitespace errors.", "environment": "local Node.js and Git", "verdict": "pass", "required": true, "exercisedSurfaces": ["S009"], "supportsAcceptance": ["AC-009"], "replay": "Re-run the report path/range checker and git diff --check."}
+  ],
+  "proofObjects": [
+    {"id": "P005", "type": "release_matrix_and_documentation_audit", "uri": "security-remediation/reports/T005/attempt-1.json#verification", "digest": null, "producedBy": "V011,V012,V013,V014,V015,V016", "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d", "artifactVersion": "security-remediation-v2", "environment": "local release verification matrix", "strength": "authoritative", "supportsAcceptance": ["AC-009", "AC-010"], "supportsSurfaces": ["S009", "S010"], "replay": "Run V011 through V016 from this report.", "inspected": true}
+  ],
+  "blockers": [],
+  "remainingWork": [],
+  "needsHuman": false,
+  "humanDecision": null,
+  "externalLinks": ["https://rustsec.org/advisories/RUSTSEC-2024-0384/"],
+  "externalSynchronization": []
+}

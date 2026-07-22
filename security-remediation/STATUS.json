@@ -1,0 +1,30 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/STATUS.schema.json",
+  "schemaVersion": 2,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "generatedAt": "2026-07-22T14:12:09Z",
+  "state": "success",
+  "summary": "All five protocol-v4 remediation tasks and eleven required acceptance criteria pass with immutable local evidence. The authoritative product/security suites, focused relay/browser/runtime oracles, pinned OpenMLS and Rust checks, dependency reviews, UI/design suites, typecheck, build, marketing checks, documentation audit, and Wrangler dry-run are green. This status records no commit, push, deployment, or external synchronization.",
+  "tasks": {
+    "pending": [],
+    "inProgress": [],
+    "success": ["T001", "T002", "T003", "T004", "T005"],
+    "blocked": [],
+    "failed": []
+  },
+  "latestReports": {
+    "T001": "security-remediation/reports/T001/attempt-1.json",
+    "T002": "security-remediation/reports/T002/attempt-1.json",
+    "T003": "security-remediation/reports/T003/attempt-1.json",
+    "T004": "security-remediation/reports/T004/attempt-1.json",
+    "T005": "security-remediation/reports/T005/attempt-1.json"
+  },
+  "unresolvedRequiredWork": [],
+  "proofObjects": [],
+  "externalSynchronization": [],
+  "needsHuman": false,
+  "humanDecisions": [],
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d"
+}

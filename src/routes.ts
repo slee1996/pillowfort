@@ -1,9 +1,14 @@
 export const FORT_PASS_CODE_PATH = "/api/fort-pass/code";
 export const FORT_PASS_STATUS_PATH = "/api/fort-pass/status";
 export const FORT_PASS_CHECKOUT_PATH = "/api/fort-pass/checkout";
+export const FORT_PASS_REDEEM_PATH = "/api/fort-pass/redeem";
 export const STRIPE_WEBHOOK_PATH = "/api/stripe/webhook";
 export const ROOM_STATUS_PATH = "/__pillowfort/room-status";
 export const ROOM_FORT_PASS_FULFILL_PATH = "/__pillowfort/fort-pass/fulfill";
+export const ROOM_FORT_PASS_RESERVATION_PATH = "/__pillowfort/fort-pass/reservation";
+export const ROOM_FORT_PASS_REVOKE_PATH = "/__pillowfort/fort-pass/revoke";
 export const ROOM_FORT_PASS_RESERVE_PATH = "/__pillowfort/fort-pass/reserve";
 export const ROOM_FORT_PASS_RELEASE_PATH = "/__pillowfort/fort-pass/release";
 export const ROOM_CREATE_LIMIT_PATH = "/__pillowfort/create-limit";
+export const ROOM_WS_OPEN_LIMIT_PATH = "/__pillowfort/ws-open-limit";
+export const ROOM_STRIPE_SESSION_LEDGER_PATH = "/__pillowfort/stripe-session-ledger";

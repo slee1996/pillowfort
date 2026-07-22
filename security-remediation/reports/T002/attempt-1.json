@@ -1,0 +1,33 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/attempt-report.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "taskId": "T002",
+  "attempt": 1,
+  "worker": "Pillowfort release coordinator",
+  "startedAt": "2026-07-22T06:16:54Z",
+  "finishedAt": "2026-07-22T14:12:09Z",
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d",
+  "branch": "main",
+  "worktree": ".",
+  "supersedes": null,
+  "state": "success",
+  "failureType": null,
+  "summary": "Cryptographic and application state is now wrapped, revisioned, persisted in IndexedDB under one live Web Lock, and restored or rejected atomically across replay, crash, CAS, and takeover boundaries.",
+  "changedFiles": ["client/src/services/cryptoStateStore.ts", "client/src/services/roomCryptoLock.ts", "client/src/services/secureRoomState.ts", "client/src/services/secureRoomEngine.ts", "client/src/services/secureRoomController.ts", "test/replay-persistence.test.ts", "test/secure-room-engine.test.ts"],
+  "artifacts": ["security_best_practices_report.md#pf-v4-003"],
+  "verification": [
+    {"id": "V004", "command": "npm test", "exitCode": 0, "result": "PASS: authoritative test gate includes 7 persistent replay tests/30 assertions and browser crash, revision, lease-loss, lock-takeover, rollback, and persist-before-wire cases.", "environment": "local Bun and Chromium with isolated IndexedDB", "verdict": "pass", "required": true, "exercisedSurfaces": ["S003", "S004"], "supportsAcceptance": ["AC-003", "AC-004"], "replay": "npm test"}
+  ],
+  "proofObjects": [
+    {"id": "P002", "type": "persistent_browser_and_fault_injection_output", "uri": "security-remediation/reports/T002/attempt-1.json#verification", "digest": null, "producedBy": "V004", "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d", "artifactVersion": "protocol-v4-state-v1", "environment": "local Bun and Chromium IndexedDB/Web Locks", "strength": "authoritative", "supportsAcceptance": ["AC-003", "AC-004"], "supportsSurfaces": ["S003", "S004"], "replay": "npm test", "inspected": true}
+  ],
+  "blockers": [],
+  "remainingWork": [],
+  "needsHuman": false,
+  "humanDecision": null,
+  "externalLinks": [],
+  "externalSynchronization": []
+}

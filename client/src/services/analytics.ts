@@ -29,6 +29,20 @@ type AnalyticsProps = {
 
 const sentOnce = new Set<string>();
 
+// Room activity is deliberately excluded from first-party analytics. The
+// secure-room relay must not receive a second, plaintext description of chat,
+// membership, invitations, or game activity through the telemetry endpoint.
+// These product/configuration events happen outside an active room and do not
+// describe protected application content.
+const PUBLIC_PRODUCT_EVENTS = new Set<AnalyticsEventName>([
+  "fort_pass_code_checked",
+  "fort_pass_status_checked",
+  "fort_pass_checkout_started",
+  "fort_pass_checkout_failed",
+  "fort_pass_checkout_returned",
+  "discord_activity_detected",
+]);
+
 function cleanString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -77,6 +91,7 @@ function isMobileViewport(): boolean {
 }
 
 export function track(event: AnalyticsEventName, props: AnalyticsProps = {}) {
+  if (!PUBLIC_PRODUCT_EVENTS.has(event)) return;
   const body = JSON.stringify({
     event,
     props: {

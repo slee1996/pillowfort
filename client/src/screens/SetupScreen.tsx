@@ -3,24 +3,14 @@ import { useGameStore } from "../stores/gameStore";
 import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
-import { connect, send } from "../services/ws";
+import { setupSecureRoom } from "../services/ws";
 import { track } from "../services/analytics";
-import { createRoomAuthPayload } from "../services/chatCrypto";
-import { checkFortPassCode, getFortPassStatus, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
+import { checkFortPassCode, clearFortPassClaimSecret, getFortPassStatus, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
+import { generateRoomId, generateRoomSecret, validateRoomSecret } from "../services/roomSecret";
+import { showToast } from "../components/xp/Toast";
 
 type FortPassPreviewTheme = "campus-blue" | "top-8";
-
-function generateRoomId(): string {
-  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
-  const c = "bcdfghjklmnprstvwz0123456789";
-  const v = "o0ua";
-  const all = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const soft = "rln";
-  const hard = "xksz";
-  const [a, b] = Math.random() < 0.5 ? [soft, hard] : [hard, soft];
-  return pick(c) + pick(v) + pick(a) + pick(c) + pick(v) + pick(b) + pick(all) + pick(all);
-}
 
 export function SetupScreen() {
   const name = useGameStore((s) => s.name);
@@ -28,16 +18,26 @@ export function SetupScreen() {
   const setPassword = useGameStore((s) => s.setPassword);
   const pendingFortPass = useGameStore((s) => s.pendingFortPass);
   const setPendingFortPass = useGameStore((s) => s.setPendingFortPass);
-  const activityRoomId = useGameStore((s) => s.activityRoomId);
+  const activitySource = useGameStore((s) => s.activitySource);
+  const activityMode = activitySource !== null;
   const [fortPassCode, setFortPassCode] = useState("");
   const [fortPassStatus, setFortPassStatus] = useState("");
   const [fortPassConfig, setFortPassConfig] = useState<FortPassStatus | null>(null);
   const [fortPassBusy, setFortPassBusy] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("campus-blue");
+  const [secret, setSecret] = useState(generateRoomSecret);
+  const [showSecret, setShowSecret] = useState(false);
+  const [secretError, setSecretError] = useState("");
   const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (activityMode) {
+      setFortPassConfig({ beta: true, checkoutConfigured: false, priceLabel: "$5", perks: [] });
+      setFortPassStatus("");
+      setFortPassBusy(false);
+      return () => { cancelled = true; };
+    }
     getFortPassStatus()
       .then((status) => {
         if (cancelled) return;
@@ -55,30 +55,54 @@ export function SetupScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activityMode]);
 
   const handleCreate = async () => {
-    const pw = passwordRef.current?.value.trim();
-    if (!pw) {
+    const validation = validateRoomSecret(secret);
+    if (!validation.valid) {
+      setSecretError(validation.message);
       passwordRef.current?.focus();
       return;
     }
+    const pw = validation.secret;
+    setSecretError("");
     setPassword(pw);
-    const roomId = pendingFortPass?.code || activityRoomId || generateRoomId();
-    const auth = await createRoomAuthPayload(roomId, pw);
-    connect(roomId, () => send("set-up", {
-      name,
-      auth,
-      ...(pendingFortPass ? { fortPassSessionId: pendingFortPass.sessionId } : {}),
-    }));
+    const roomId = activityMode ? generateRoomId() : pendingFortPass?.code || generateRoomId();
+    const options = {
+      roomId,
+      roomSecret: pw,
+      displayName: name,
+      ...(!activityMode && pendingFortPass ? {
+        fortPassSessionId: pendingFortPass.sessionId,
+        fortPassClaimSecret: pendingFortPass.claimSecret,
+      } : {}),
+    };
+    let result = await setupSecureRoom(options);
+    if (result.status === "busy" && window.confirm("This secure fort is open in another tab. Move it here?")) {
+      result = await setupSecureRoom({ ...options, lock: { takeover: true } });
+    }
+    if (result.status !== "connected") {
+      setSecretError(result.status === "busy"
+        ? "This secure fort is already open in another tab."
+        : "Secure browser storage and tab locking are required to create a fort.");
+    } else if (pendingFortPass) {
+      clearFortPassClaimSecret(pendingFortPass.sessionId);
+      setPendingFortPass(null);
+    }
   };
 
   const handleCancel = () => {
-    setPendingFortPass(null);
+    // Keep a successfully redeemed pass recoverable in this tab. The raw
+    // claim secret remains session-scoped and is erased only after setup
+    // succeeds; cancelling the screen must not strand a paid entitlement.
     setScreen("home");
   };
 
   const handleFortPassCheckout = async () => {
+    if (activityMode) {
+      setFortPassStatus("Fort Pass checkout is unavailable inside Discord Activities.");
+      return;
+    }
     if (!fortPassConfig?.checkoutConfigured) {
       setFortPassStatus("Fort Pass beta checkout is not open yet.");
       track("fort_pass_checkout_failed", { reason: "not_configured", source: "setup" });
@@ -138,9 +162,9 @@ export function SetupScreen() {
       >
         <div className="xp-window-body">
           <p className="auth-note">
-            Pick a secret password. Guests need the flag and password; Pillowfort does not store the password.
+            Pillowfort generated a strong room secret. Copy it now; Pillowfort does not store it.
           </p>
-          {pendingFortPass && (
+          {pendingFortPass && !activityMode && (
             <div className="fort-pass-redeemed-panel" role="status">
               <div className="fort-pass-title">Fort Pass unlocked</div>
               <div className="fort-pass-redeemed-code">flag: {pendingFortPass.code}</div>
@@ -151,25 +175,61 @@ export function SetupScreen() {
               </div>
             </div>
           )}
-          {!pendingFortPass && activityRoomId && (
+          {activityMode && (
             <div className="activity-room-panel" role="status">
-              <div className="activity-room-title">Discord Activity room</div>
-              <div className="activity-room-code">flag: {activityRoomId}</div>
+              <div className="activity-room-title">Discord Activity preview</div>
+              <div className="activity-room-code">A fresh private fort will be generated. Shared launch linking is not enabled yet.</div>
             </div>
           )}
           <Input
             id="setup-password"
             label="Secret Password"
-            placeholder="Something only your friends know"
+            type={showSecret ? "text" : "password"}
+            value={secret}
+            readOnly
+            aria-describedby="setup-secret-help setup-secret-error"
             maxLength={64}
-            autoComplete="off"
+            autoComplete="new-password"
             autoCorrect="off"
             ref={passwordRef}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             autoFocus
           />
+          <div className="secret-controls">
+            <Button
+              id="btn-toggle-setup-secret"
+              onClick={() => setShowSecret((shown) => !shown)}
+              aria-controls="setup-password"
+              aria-pressed={showSecret}
+            >
+              {showSecret ? "Hide" : "Show"}
+            </Button>
+            <Button
+              id="btn-regenerate-secret"
+              onClick={() => {
+                setSecret(generateRoomSecret());
+                setSecretError("");
+                passwordRef.current?.focus();
+              }}
+            >
+              Regenerate
+            </Button>
+            <Button
+              id="btn-copy-secret"
+              onClick={() => {
+                void navigator.clipboard.writeText(secret).then(
+                  () => showToast("Room secret copied"),
+                  () => showToast("Could not copy room secret")
+                );
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+          <div id="setup-secret-help" className="secret-help">Generated securely and locked. Copy it, then share it privately with your guests.</div>
+          {secretError && <div id="setup-secret-error" className="secret-error" role="alert">{secretError}</div>}
 
-          {!pendingFortPass && (
+          {!pendingFortPass && !activityMode && (
             <div className="fort-pass-panel">
               <div className="fort-pass-heading">
                 <div>

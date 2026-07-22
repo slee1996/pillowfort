@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients,
-  connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth,
+  connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth, sendEncryptedChat,
   TEST_GRACE_MS,
 } from "./helpers";
+import { generateRoomId } from "../client/src/services/roomSecret";
 
 beforeAll(startServer);
 afterEach(cleanupClients);
@@ -12,15 +13,15 @@ afterAll(stopServer);
 // ---- Room lifecycle ----
 
 describe("Room lifecycle", () => {
-  it("create room → room-created with 6-char ID", async () => {
+  it("create room → room-created with a high-entropy ID", async () => {
     const { roomId } = await createRoom();
-    expect(roomId).toMatch(/^[a-z0-9]{8}$/);
+    expect(roomId).toMatch(/^f-[a-z2-7]{10}$/);
   });
 
   it("join room → joined with members list", async () => {
     const { roomId } = await createRoom("alice");
     const guest = await connectClientToRoom(roomId);
-    guest.send({ type: "join", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
+    guest.send({ type: "join", name: "bob", auth: await roomAuth(guest, roomId, "secret", "join", "bob"), room: roomId });
     const joined = await guest.waitFor("joined");
     expect(joined.members).toContain("alice");
     expect(joined.members).toContain("bob");
@@ -29,14 +30,14 @@ describe("Room lifecycle", () => {
   it("join with wrong password → error", async () => {
     const { roomId } = await createRoom();
     const guest = await connectClientToRoom(roomId);
-    guest.send({ type: "join", name: "bob", auth: await roomAuth(roomId, "wrong"), room: roomId });
+    guest.send({ type: "join", name: "bob", auth: await roomAuth(guest, roomId, "wrong", "join", "bob"), room: roomId });
     const err = await guest.waitFor("error");
     expect(err.message).toContain("wrong password");
   });
 
   it("join nonexistent room → error", async () => {
     const guest = await connectClientToRoom("zzzzzz");
-    guest.send({ type: "join", name: "bob", auth: await roomAuth("zzzzzz", "secret"), room: "zzzzzz" });
+    guest.send({ type: "join", name: "bob", auth: await roomAuth(guest, "zzzzzz", "secret", "join", "bob"), room: "zzzzzz" });
     const err = await guest.waitFor("error");
     expect(err.message).toContain("fort not found");
   });
@@ -44,24 +45,139 @@ describe("Room lifecycle", () => {
   it("chat → all members receive message", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
-    host.send({ type: "chat", text: "hello fort" });
+    await sendEncryptedChat(host, roomId, "secret", "alice", "hello fort");
     const hostMsg = await host.waitFor("message");
     const guestMsg = await bob.waitFor("message");
     expect(hostMsg.from).toBe("alice");
-    expect(hostMsg.text).toBe("hello fort");
+    expect(hostMsg.enc?.v).toBe(3);
     expect(guestMsg.from).toBe("alice");
-    expect(guestMsg.text).toBe("hello fort");
+    expect(guestMsg.enc).toEqual(hostMsg.enc);
   });
 
   it("encrypted chat payload relays without plaintext", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
-    const enc = { v: 2, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" };
+    const enc = { v: 3, kdf: "pbkdf2-sha256-600k-v1", sid: "abcdefghijklmnop", seq: 1, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" };
     host.send({ type: "chat", enc });
     const msg = await bob.waitFor("message");
     expect(msg.from).toBe("alice");
     expect(msg.enc).toEqual(enc);
     expect(msg.text).toBeUndefined();
+  });
+});
+
+describe("Protocol v2 hardening", () => {
+  it("serializes concurrent setup attempts for the same room ID", async () => {
+    const roomId = generateRoomId();
+    const first = await connectClientToRoom(roomId);
+    const second = await connectClientToRoom(roomId);
+    const [firstAuth, secondAuth] = await Promise.all([
+      roomAuth(first, roomId, "first-secret", "set-up", "alice"),
+      roomAuth(second, roomId, "second-secret", "set-up", "mallory"),
+    ]);
+
+    first.send({ type: "set-up", name: "alice", auth: firstAuth });
+    second.send({ type: "set-up", name: "mallory", auth: secondAuth });
+
+    await Bun.sleep(250);
+    const terminal = [...first.messages, ...second.messages]
+      .filter((message) => message.type === "room-created" || message.type === "error");
+    expect(terminal.filter((message) => message.type === "room-created")).toHaveLength(1);
+    expect(terminal.filter((message) => message.type === "error")).toHaveLength(1);
+    expect(terminal.find((message) => message.type === "error")?.message).toContain("already exists");
+  });
+
+  it("rejects a captured proof on a different one-use challenge", async () => {
+    const { roomId } = await createRoom("alice");
+    const first = await connectClientToRoom(roomId);
+    const captured = await roomAuth(first, roomId, "secret", "join", "bob");
+    first.send({ type: "join", name: "bob", auth: captured, room: roomId });
+    await first.waitFor("joined");
+
+    const replay = await connectClientToRoom(roomId);
+    replay.send({ type: "join", name: "mallory", auth: captured, room: roomId });
+    const error = await replay.waitFor("error");
+    expect(error.message).toContain("wrong password");
+  });
+
+  it("consumes the challenge after a tampered proof", async () => {
+    const { roomId } = await createRoom("alice");
+    const client = await connectClientToRoom(roomId);
+    const valid = await roomAuth(client, roomId, "secret", "join", "bob");
+    const tampered = { ...valid, proof: `${valid.proof[0] === "A" ? "B" : "A"}${valid.proof.slice(1)}` };
+    client.send({ type: "join", name: "bob", auth: tampered, room: roomId });
+    expect((await client.waitFor("error")).message).toContain("wrong password");
+    client.send({ type: "join", name: "bob", auth: valid, room: roomId });
+    expect((await client.waitFor("error")).message).toContain("already attempted");
+  });
+
+  it("consumes the one authentication attempt for a malformed auth frame", async () => {
+    const { roomId } = await createRoom("alice");
+    const client = await connectClientToRoom(roomId);
+    client.send({ type: "join", name: "bob", room: roomId, auth: null });
+    expect((await client.waitFor("error")).message).toContain("wrong password");
+    client.send({
+      type: "join",
+      name: "bob",
+      room: roomId,
+      auth: await roomAuth(client, roomId, "secret", "join", "bob"),
+    });
+    expect((await client.waitFor("error")).message).toContain("already attempted");
+  });
+
+  it("throttles the sixth failed authentication for a room and client IP", async () => {
+    const { roomId } = await createRoom("alice");
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const client = await connectClientToRoom(roomId);
+      client.send({
+        type: "join",
+        name: `wrong-${attempt}`,
+        auth: await roomAuth(client, roomId, `wrong-${attempt}`, "join", `wrong-${attempt}`),
+        room: roomId,
+      });
+      expect((await client.waitFor("error")).message).toContain("wrong password");
+    }
+    const blocked = await connectClientToRoom(roomId);
+    blocked.send({
+      type: "join",
+      name: "bob",
+      auth: await roomAuth(blocked, roomId, "secret", "join", "bob"),
+      room: roomId,
+    });
+    expect((await blocked.waitFor("error")).message).toContain("too many failed attempts");
+  });
+
+  it("rejects legacy encrypted-chat envelopes", async () => {
+    const { host } = await createRoom("alice");
+    host.send({ type: "chat", enc: { v: 2, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" } });
+    expect((await host.waitFor("error")).message).toContain("encrypted chat v3 required");
+  });
+
+  it("closes with policy violation for commands before authentication", async () => {
+    const roomId = `p${Math.random().toString(36).slice(2, 9)}`;
+    const client = await connectClientToRoom(roomId);
+    const closed = new Promise<number>((resolve) => client.ws.addEventListener("close", (event) => resolve(event.code)));
+    client.send({ type: "typing" });
+    expect(await closed).toBe(1008);
+  });
+
+  it("closes oversized and binary WebSocket frames before parsing", async () => {
+    const oversized = await connectClient();
+    const oversizedClosed = new Promise<number>((resolve) => oversized.ws.addEventListener("close", (event) => resolve(event.code)));
+    oversized.ws.send("x".repeat(8 * 1024 + 1));
+    expect(await oversizedClosed).not.toBe(1000);
+
+    const binary = await connectClient();
+    const binaryClosed = new Promise<number>((resolve) => binary.ws.addEventListener("close", (event) => resolve(event.code)));
+    binary.ws.send(new Uint8Array([1, 2, 3]));
+    expect(await binaryClosed).toBe(1003);
+  });
+
+  it("bounds malformed pre-auth JSON frames", async () => {
+    const client = await connectClient();
+    const closed = new Promise<number>((resolve) => client.ws.addEventListener("close", (event) => resolve(event.code)));
+    for (let index = 0; index < 4; index++) client.ws.send("{");
+    expect(await closed).toBe(1008);
   });
 });
 
@@ -96,7 +212,7 @@ describe("Presence (room-scoped)", () => {
     expect(sameRoom.status).toBe("away");
 
     // Keep room B active, then assert no cross-room status messages appeared.
-    roomB.host.send({ type: "chat", text: "ping" });
+    await sendEncryptedChat(roomB.host, roomB.roomId, "secret", "zoe", "ping");
     await yan.waitFor("message");
     const leaks = yan.messages.filter((m) => m.type === "member-status");
     expect(leaks.length).toBe(0);
@@ -105,21 +221,21 @@ describe("Presence (room-scoped)", () => {
 
 // ---- Style passthrough ----
 
-describe("Style passthrough", () => {
-  it("valid style → broadcast includes validated style", async () => {
+describe("Encrypted style", () => {
+  it("style is carried only inside authenticated ciphertext", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
-    host.send({ type: "chat", text: "styled", style: { bold: true, color: "#FF0000" } });
+    await sendEncryptedChat(host, roomId, "secret", "alice", "styled", { bold: true, color: "#FF0000" });
     const msg = await bob.waitFor("message");
-    expect(msg.style).toEqual({ bold: true, color: "#FF0000" });
+    expect(msg.enc.v).toBe(3);
+    expect(msg.style).toBeUndefined();
   });
 
-  it("invalid style → broadcast has no style", async () => {
-    const { roomId, host } = await createRoom("alice");
-    const bob = await joinRoom(roomId, "bob");
+  it("legacy plaintext and outer style are rejected", async () => {
+    const { host } = await createRoom("alice");
     host.send({ type: "chat", text: "bad", style: { color: "#BADCOLOR" } });
-    const msg = await bob.waitFor("message");
-    expect(msg.style).toBeUndefined();
+    const error = await host.waitFor("error");
+    expect(error.message).toContain("encrypted chat v3 required");
   });
 });
 
@@ -226,7 +342,7 @@ describe("Grace period / reconnect", () => {
     await host.waitFor("member-away");
 
     const bob2 = await connectClientToRoom(roomId);
-    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
+    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(bob2, roomId, "secret", "rejoin", "bob"), room: roomId });
     const rejoined = await bob2.waitFor("rejoined");
     expect(rejoined.name).toBe("bob");
     const back = await host.waitFor("member-back");
@@ -242,7 +358,7 @@ describe("Grace period / reconnect", () => {
     await Bun.sleep(TEST_GRACE_MS + 100);
 
     const bob2 = await connectClientToRoom(roomId);
-    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(roomId, "secret"), room: roomId });
+    bob2.send({ type: "rejoin", name: "bob", auth: await roomAuth(bob2, roomId, "secret", "rejoin", "bob"), room: roomId });
     const result = await bob2.waitFor("joined");
     expect(result.name).toBe("bob");
   });
@@ -254,7 +370,7 @@ describe("Grace period / reconnect", () => {
     await bob.waitFor("member-away");
 
     const alice2 = await connectClientToRoom(roomId);
-    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(roomId, "secret"), room: roomId });
+    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(alice2, roomId, "secret", "rejoin", "alice"), room: roomId });
     const rejoined = await alice2.waitFor("rejoined");
     expect(rejoined.isHost).toBe(true);
   });
@@ -271,7 +387,7 @@ describe("Grace period / reconnect", () => {
 
     // Now alice tries to rejoin — grace expired, someone else is host
     const alice2 = await connectClientToRoom(roomId);
-    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(roomId, "secret"), room: roomId });
+    alice2.send({ type: "rejoin", name: "alice", auth: await roomAuth(alice2, roomId, "secret", "rejoin", "alice"), room: roomId });
     const result = await alice2.waitFor("joined");
     expect(result.name).toBe("alice");
   });
@@ -283,10 +399,10 @@ describe("Rate limiting", () => {
   it("11th message in <5s gets 'slow down' error", async () => {
     const { host } = await createRoom("alice");
     for (let i = 0; i < 10; i++) {
-      host.send({ type: "chat", text: `msg${i}` });
+      host.send({ type: "chat", enc: { v: 3, kdf: "pbkdf2-sha256-600k-v1", sid: "abcdefghijklmnop", seq: i + 1, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" } });
     }
     await Bun.sleep(100);
-    host.send({ type: "chat", text: "msg10" });
+    host.send({ type: "chat", enc: { v: 3, kdf: "pbkdf2-sha256-600k-v1", sid: "abcdefghijklmnop", seq: 11, iv: "QUJDREVGR0hJSktM", ct: "c2VjcmV0LWNpcGhlcnRleHQ=" } });
     const err = await host.waitFor("error");
     expect(err.message).toContain("slow down");
   });

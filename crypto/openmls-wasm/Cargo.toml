@@ -1,0 +1,39 @@
+[package]
+name = "pillowfort-openmls-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+getrandom_old = { package = "getrandom", version = "=0.2.17", features = ["js"] }
+js-sys = "=0.3.97"
+openmls = { version = "=0.8.1", features = ["js"] }
+openmls_basic_credential = "=0.5.0"
+openmls_rust_crypto = "=0.5.1"
+openmls_traits = "=0.5.0"
+serde_json = "=1.0.151"
+tls_codec = "=0.4.2"
+wasm-bindgen = "=0.2.120"
+zeroize = "=1.9.0"
+
+[dev-dependencies]
+hpke-rs = { version = "=0.6.1", path = "vendor/hpke-rs" }
+hpke-rs-rust-crypto = "=0.6.1"
+
+# hpke-rs 0.6.1 unconditionally pulls vulnerable libcrux-sha3 solely for
+# experimental PQ key derivation. Pillowfort only enables MLS ciphersuite 1,
+# so this provenance-pinned fork removes that unreachable surface while
+# preserving the upstream RFC 9180 classical implementation.
+[patch.crates-io]
+hpke-rs = { path = "vendor/hpke-rs" }
+openmls_memory_storage = { path = "vendor/openmls-memory-storage" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+strip = true

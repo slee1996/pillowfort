@@ -3,7 +3,6 @@ import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
 import { track, trackOnce } from "../../services/analytics";
-import { encryptChatPayload, isChatCryptoAvailable } from "../../services/chatCrypto";
 import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
@@ -73,35 +72,18 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     }
   }, []);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     const text = inputRef.current?.value.trim();
     if (!text) return;
 
     const roomId = useGameStore.getState().roomId;
-    const password = useGameStore.getState().password;
-    if (!roomId || !password) {
+    if (!roomId) {
       showToast("Room key unavailable.");
       return;
     }
 
     const style = useFormatStore.getState().getStyle();
-    let sent = false;
-    try {
-      const enc = await encryptChatPayload(roomId, password, name, text, style);
-      if (enc) {
-        send("chat", { enc });
-        sent = true;
-      }
-    } catch {}
-
-    if (!sent) {
-      showToast(
-        isChatCryptoAvailable()
-          ? "Encryption failed. Message not sent."
-          : "Encryption unavailable here. Use HTTPS or localhost."
-      );
-      return;
-    }
+    if (!send("chat", { text, style })) return showToast("Secure delivery is unavailable.");
 
     playSendSound();
     trackOnce(`first-message:${roomId}`, "first_message_sent", {
@@ -130,8 +112,6 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     if (disableRoomAction) return;
     useGameStore.getState().setIntentionalLeave(true);
     send("leave");
-    useGameStore.getState().cleanup();
-    useGameStore.getState().setScreen("home");
   };
 
   const handleSabStrike = () => {

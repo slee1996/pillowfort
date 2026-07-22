@@ -1,0 +1,35 @@
+{
+  "$schema": "https://example.invalid/governed-code-production/attempt-report.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "program-20260722-pillowfort-security",
+  "manifestVersion": 2,
+  "manifestDigest": "sha256:d80ca82871373903357289829ab5ae1c7ecec2d34118d0d004f343e50fe0c432",
+  "taskId": "T001",
+  "attempt": 1,
+  "worker": "Pillowfort release coordinator",
+  "startedAt": "2026-07-22T06:16:54Z",
+  "finishedAt": "2026-07-22T14:12:09Z",
+  "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d",
+  "branch": "main",
+  "worktree": ".",
+  "supersedes": null,
+  "state": "success",
+  "failureType": null,
+  "summary": "Protocol v4 now uses strict per-device OpenMLS epochs and pinned, hash-verified browser artifacts; protocol, artifact, Rust test, formatting, and clippy gates pass.",
+  "changedFiles": ["docs/SECURE_ROOM_PROTOCOL_V4.md", "src/protocolV4.ts", "src/secureTransportV4.ts", "client/src/services/mlsCrypto.ts", "crypto/openmls-wasm/src/lib.rs", "scripts/verify-openmls-artifacts.mjs", "test/protocol-v4.test.ts", "test/mls-protocol-v4.test.ts", "test/openmls-wasm-zeroization.test.ts"],
+  "artifacts": ["client/src/vendor/openmls_wasm.js", "client/src/vendor/openmls_wasm_bg.wasm", "client/src/vendor/openmls_wasm.d.ts", "client/src/vendor/openmls_wasm_bg.wasm.d.ts"],
+  "verification": [
+    {"id": "V001", "command": "npm test", "exitCode": 0, "result": "PASS: base suite 239/239 with 1004 assertions; protocol-v4 security command passed across 18 isolated files.", "environment": "local Bun, Node.js, Chromium, and WebCrypto", "verdict": "pass", "required": true, "exercisedSurfaces": ["S001", "S002"], "supportsAcceptance": ["AC-001", "AC-002"], "replay": "npm test"},
+    {"id": "V002", "command": "npm run verify:openmls", "exitCode": 0, "result": "PASS: four pinned browser artifacts matched 27 reviewed source inputs.", "environment": "local Node.js", "verdict": "pass", "required": true, "exercisedSurfaces": ["S002"], "supportsAcceptance": ["AC-002"], "replay": "npm run verify:openmls"},
+    {"id": "V003", "command": "cargo +1.94.1 fmt --all -- --check && cargo +1.94.1 test --locked && cargo +1.94.1 clippy --locked --all-targets -- -D warnings", "exitCode": 0, "result": "PASS: formatting, locked Rust unit/HPKE test, documentation tests, and warning-denying clippy all passed with rustup Cargo 1.94.1.", "environment": "local rustup Cargo 1.94.1", "verdict": "pass", "required": true, "exercisedSurfaces": ["S002"], "supportsAcceptance": ["AC-001", "AC-002"], "replay": "cd crypto/openmls-wasm && cargo +1.94.1 fmt --all -- --check && cargo +1.94.1 test --locked && cargo +1.94.1 clippy --locked --all-targets -- -D warnings"}
+  ],
+  "proofObjects": [
+    {"id": "P001", "type": "cryptographic_test_and_build_output", "uri": "security-remediation/reports/T001/attempt-1.json#verification", "digest": null, "producedBy": "V001,V002,V003", "sourceRevision": "working tree based on 57f2559a167df4c460d15a4f99e736349715d33d", "artifactVersion": "protocol-v4/openmls-0.8.1", "environment": "local Bun/Chromium/Node.js and rustup Cargo 1.94.1", "strength": "authoritative", "supportsAcceptance": ["AC-001", "AC-002"], "supportsSurfaces": ["S001", "S002"], "replay": "Run V001, V002, and V003 from this report.", "inspected": true}
+  ],
+  "blockers": [],
+  "remainingWork": [],
+  "needsHuman": false,
+  "humanDecision": null,
+  "externalLinks": ["https://www.rfc-editor.org/rfc/rfc9420", "https://www.rfc-editor.org/rfc/rfc9750"],
+  "externalSynchronization": []
+}

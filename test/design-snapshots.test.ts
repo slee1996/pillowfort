@@ -3,23 +3,17 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import sharp from "sharp";
 import { startServer, stopServer, getPort } from "./helpers";
-import { chat, joinRoom, sleep, type Client } from "./ws-client";
 
 const SNAPSHOT_DIR = import.meta.dir + "/__snapshots__/design";
+const UPDATE_SNAPSHOTS = process.env.PILLOWFORT_UPDATE_SNAPSHOTS === "1";
+const COMPARE_SNAPSHOTS = process.env.PILLOWFORT_COMPARE_SNAPSHOTS !== "0";
 const PIXEL_THRESHOLD = 0.005;
 const COLOR_THRESHOLD = 25;
 const BASE_URL = process.env.PF_BASE_URL;
+const roomPasswords = new Map<string, string>();
 
 let browser: Browser;
 const contexts: BrowserContext[] = [];
-const clients: Client[] = [];
-
-function activePort() {
-  if (!BASE_URL) return getPort();
-  const parsed = new URL(BASE_URL);
-  if (parsed.port) return Number(parsed.port);
-  return parsed.protocol === "https:" ? 443 : 80;
-}
 
 beforeAll(async () => {
   if (!BASE_URL) await startServer();
@@ -28,11 +22,6 @@ beforeAll(async () => {
 }, 30_000);
 
 afterEach(async () => {
-  for (const c of clients) {
-    try { await c.close(); } catch {}
-  }
-  clients.length = 0;
-
   for (const ctx of contexts) {
     try { await ctx.close(); } catch {}
   }
@@ -52,12 +41,43 @@ async function newPage(viewport = { width: 1366, height: 900 }): Promise<Page> {
   return page;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function joinBrowser(host: Page, roomCode: string, name: string): Promise<Page> {
+  const password = roomPasswords.get(roomCode);
+  if (!password) throw new Error(`missing test room secret for ${roomCode}`);
+  const page = await newPage();
+  await page.fill("#name-input", name);
+  await page.click("#btn-join");
+  await page.fill("#join-room", roomCode);
+  await page.fill("#join-password", password);
+  await page.click("#btn-enter");
+
+  await page.waitForFunction(
+    () => document.body.textContent?.includes("Waiting for the host to approve this device."),
+    undefined,
+    { timeout: 30_000 },
+  );
+  await host.waitForSelector("#admission-approval-overlay", { timeout: 30_000 });
+  await host.click("#btn-approve-admission");
+  await page.waitForSelector("#messages", { timeout: 30_000 });
+  await host.waitForSelector("#admission-approval-overlay", { state: "detached", timeout: 30_000 });
+  return page;
+}
+
 async function maskDynamic(page: Page) {
   await page.evaluate(() => {
     const rc = document.getElementById("room-code");
     if (rc) rc.textContent = "abc12345";
-    document.querySelectorAll(".chat-timestamp").forEach((el) => {
-      (el as HTMLElement).textContent = " (12:00)";
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let textNode: Node | null;
+    while ((textNode = walker.nextNode())) {
+      textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
+    }
+    document.querySelectorAll(".msg-time, .chat-timestamp").forEach((el) => {
+      (el as HTMLElement).textContent = "12:00";
     });
   });
 }
@@ -70,6 +90,12 @@ async function assertScreenshot(page: Page, name: string) {
   const path = `${SNAPSHOT_DIR}/${name}.png`;
   const file = Bun.file(path);
 
+  if (UPDATE_SNAPSHOTS) {
+    await Bun.write(path, screenshotBuf);
+    console.log(`  [snapshot] updated baseline: ${name}.png`);
+    return;
+  }
+  if (!COMPARE_SNAPSHOTS) return;
   if (!(await file.exists())) {
     await Bun.write(path, screenshotBuf);
     console.log(`  [snapshot] saved baseline: ${name}.png`);
@@ -100,16 +126,18 @@ async function assertScreenshot(page: Page, name: string) {
   }
 }
 
-async function createFort(page: Page, name = "luna", password = "design"): Promise<string> {
+async function createFort(page: Page, name = "luna"): Promise<string> {
   await page.fill("#name-input", name);
   await page.click("#btn-setup");
-  await page.fill("#setup-password", password);
+  const password = await page.inputValue("#setup-password");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
     return !!el && !!el.textContent && el.textContent.length >= 8;
   });
-  return page.locator("#room-code").innerText();
+  const roomCode = await page.locator("#room-code").innerText();
+  roomPasswords.set(roomCode, password);
+  return roomCode;
 }
 
 describe("Design snapshots", () => {
@@ -139,9 +167,9 @@ describe("Design snapshots", () => {
     const page = await newPage();
     const roomCode = await createFort(page);
 
-    const javi = await joinRoom(activePort(), roomCode, "javi", "design");
-    clients.push(javi);
-    await chat(javi, "we made it in");
+    const javi = await joinBrowser(page, roomCode, "javi");
+    await javi.fill("#msg-input", "we made it in");
+    await javi.click("#btn-send");
 
     await page.waitForFunction(() => {
       const count = document.getElementById("member-count");
@@ -161,7 +189,7 @@ describe("Design snapshots", () => {
 
   it("chat screen mobile", async () => {
     const page = await newPage({ width: 390, height: 844 });
-    await createFort(page, "luna", "design");
+    await createFort(page, "luna");
     await page.fill("#msg-input", "mobile baseline");
     await page.click("#btn-send");
     await page.waitForFunction(() => {

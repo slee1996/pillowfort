@@ -31,6 +31,22 @@ export function RpsOverlay() {
     );
   }
 
+  if (rps.phase === "waiting") {
+    return (
+      <div id="rps-overlay" className="game-overlay open">
+        <div className="game-dialog">
+          <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
+          <div className="game-dialog-body">
+            <div id="rps-waiting" className="rps-status-waiting">Waiting for {rps.p2} to answer…</div>
+            <div className="auth-actions game-actions">
+              <Button onClick={() => send("rps-cancel")}>Cancel Challenge</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Phase: picking
   if (rps.phase === "picking") {
     const opponent = rps.p1 === name ? rps.p2 : rps.p1;
@@ -60,6 +76,9 @@ export function RpsOverlay() {
             ) : (
               <div id="rps-waiting" className="rps-status-waiting">Waiting for opponent...</div>
             )}
+            <div className="auth-actions game-actions">
+              <Button onClick={() => send("rps-forfeit")}>Forfeit</Button>
+            </div>
           </div>
         </div>
       </div>

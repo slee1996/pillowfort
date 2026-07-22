@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "rustToolchain": "1.94.1",
+  "wasmBindgen": "0.2.120",
+  "sourceSha256": "a32b618908a11cfa5e1f08724bd94f316fa7fe6d0fd60a6aa6d71722a6aa4514",
+  "artifacts": {
+    "pillowfort_openmls.d.ts": "40c5f3d716b4f0dec3cd119f02eb44d6fc778a5b81064b99aac8207367e77e97",
+    "pillowfort_openmls.js": "37d72c68b20c436113beb18c9cb8a1491726ed57e9fb292b7d544eecde0934ec",
+    "pillowfort_openmls_bg.wasm": "de6a6f5a7eddc905e75598c23fe63dd6e67f937e2cbbf2860c73d192763f41bc",
+    "pillowfort_openmls_bg.wasm.d.ts": "46092308c16e9d571f51091019768995a235d32707b25a268f19cd7e4273f842"
+  }
+}

@@ -1,7 +1,7 @@
-export type RoomAlarmKind = "idle" | "sab-bomb";
+export type RoomAlarmKind = "idle" | "sab-bomb" | "auth-sockets" | "secure-relay";
 export type RoomAlarmSchedule = Partial<Record<RoomAlarmKind, number>>;
 
-const DUE_PRIORITY: RoomAlarmKind[] = ["sab-bomb", "idle"];
+const DUE_PRIORITY: RoomAlarmKind[] = ["sab-bomb", "auth-sockets", "secure-relay", "idle"];
 
 export function normalizeRoomAlarmSchedule(input: unknown): RoomAlarmSchedule {
   const raw = input && typeof input === "object" ? input as RoomAlarmSchedule : {};
@@ -9,6 +9,12 @@ export function normalizeRoomAlarmSchedule(input: unknown): RoomAlarmSchedule {
   if (typeof raw.idle === "number" && Number.isFinite(raw.idle)) schedule.idle = raw.idle;
   if (typeof raw["sab-bomb"] === "number" && Number.isFinite(raw["sab-bomb"])) {
     schedule["sab-bomb"] = raw["sab-bomb"];
+  }
+  if (typeof raw["auth-sockets"] === "number" && Number.isFinite(raw["auth-sockets"])) {
+    schedule["auth-sockets"] = raw["auth-sockets"];
+  }
+  if (typeof raw["secure-relay"] === "number" && Number.isFinite(raw["secure-relay"])) {
+    schedule["secure-relay"] = raw["secure-relay"];
   }
   return schedule;
 }

@@ -1,16 +1,35 @@
 import { create } from "zustand";
 import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus, RoomLeaderboards, RoomGameQueue, RoomTheme, FortPassRoomPerks } from "../services/protocol";
-import { clearChatCryptoState } from "../services/chatCrypto";
 
 let msgId = 0;
+const MAX_UI_MESSAGES = 512;
+const STORED_NAME_KEY = "pillowfort-name";
+
+function readStoredName(): string {
+  try {
+    return globalThis.localStorage?.getItem(STORED_NAME_KEY) || "";
+  } catch {
+    // Storage can be disabled by browser/privacy policy. A display-name
+    // preference must never prevent the application from starting.
+    return "";
+  }
+}
+
+function writeStoredName(name: string): void {
+  try {
+    globalThis.localStorage?.setItem(STORED_NAME_KEY, name);
+  } catch {
+    // Keep the in-memory name even when persistence is unavailable.
+  }
+}
 
 function emptyLeaderboards(): RoomLeaderboards {
   return {
-    pillowFight: {},
-    rps: {},
-    ttt: {},
-    saboteur: {},
-    koth: {},
+    pillowFight: Object.create(null) as Record<string, number>,
+    rps: Object.create(null) as Record<string, number>,
+    ttt: Object.create(null) as Record<string, number>,
+    saboteur: Object.create(null) as Record<string, number>,
+    koth: Object.create(null) as Record<string, number>,
   };
 }
 
@@ -37,7 +56,7 @@ export interface RpsState {
   koth?: boolean;
   myPick?: RpsPick;
   result?: { pick1: RpsPick; pick2: RpsPick; winner: string | null };
-  phase: "challenged" | "picking" | "result";
+  phase: "challenged" | "waiting" | "picking" | "result";
   challengedBy?: string;
 }
 
@@ -49,7 +68,7 @@ export interface TttState {
   turn: number;
   winner: string | null;
   draw: boolean;
-  phase: "challenged" | "playing" | "result";
+  phase: "challenged" | "waiting" | "playing" | "result";
   challengedBy?: string;
 }
 
@@ -60,6 +79,12 @@ export interface SabVoteState {
   timerStart: number;
   endsAt: number;
   myVote?: "yes" | "no";
+}
+
+export interface PendingAdmission {
+  admissionId: string;
+  deviceFingerprint: string;
+  status: "pending" | "approving";
 }
 
 export interface GameStore {
@@ -103,14 +128,15 @@ export interface GameStore {
 
   // Host offer
   hostOffer: { oldHost: string } | null;
+  pendingAdmissions: PendingAdmission[];
+  pendingJoinFingerprint: string | null;
 
   // Minimized
   minimized: boolean;
 
   // Pending room from URL
   pendingRoom: string | null;
-  pendingFortPass: { code: string; sessionId: string } | null;
-  activityRoomId: string | null;
+  pendingFortPass: { code: string; sessionId: string; claimSecret: string } | null;
   activitySource: string | null;
 
   // Error
@@ -150,6 +176,8 @@ export interface GameStore {
   setLeaderboards: (leaderboards: RoomLeaderboards) => void;
   setGameQueue: (gameQueue: RoomGameQueue) => void;
   setHostOffer: (offer: { oldHost: string } | null) => void;
+  setPendingAdmissions: (admissions: PendingAdmission[]) => void;
+  setPendingJoinFingerprint: (fingerprint: string | null) => void;
   setMinimized: (minimized: boolean) => void;
   incrementUnread: () => void;
   resetUnread: () => void;
@@ -157,8 +185,8 @@ export interface GameStore {
   setReconnectAttempts: (attempts: number) => void;
   setIntentionalLeave: (intentional: boolean) => void;
   setPendingRoom: (room: string | null) => void;
-  setPendingFortPass: (fortPass: { code: string; sessionId: string } | null) => void;
-  setActivityContext: (roomId: string | null, source?: string | null) => void;
+  setPendingFortPass: (fortPass: { code: string; sessionId: string; claimSecret: string } | null) => void;
+  setActivityContext: (source: string | null) => void;
   showError: (message: string) => void;
   cleanup: () => void;
 }
@@ -176,7 +204,7 @@ function timeStr(): string {
 export const useGameStore = create<GameStore>((set, get) => ({
   // Connection
   screen: "home",
-  name: localStorage.getItem("pillowfort-name") || "",
+  name: readStoredName(),
   roomId: null,
   password: null,
   roomSafetyCode: null,
@@ -186,7 +214,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Room
   members: [],
-  memberPresence: {},
+  memberPresence: Object.create(null) as Record<string, MemberPresence>,
   mutedNames: new Set(),
   buddyListCollapsed: false,
   unreadCount: 0,
@@ -214,6 +242,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Host offer
   hostOffer: null,
+  pendingAdmissions: [],
+  pendingJoinFingerprint: null,
 
   // Minimized
   minimized: false,
@@ -221,7 +251,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Pending room
   pendingRoom: null,
   pendingFortPass: null,
-  activityRoomId: null,
   activitySource: null,
 
   // Error
@@ -231,7 +260,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Actions
   setScreen: (screen) => set({ screen }),
   setName: (name) => {
-    localStorage.setItem("pillowfort-name", name);
+    writeStoredName(name);
     set({ name });
   },
   setRoomId: (roomId) => set({ roomId }),
@@ -241,20 +270,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setRoomTheme: (roomTheme) => set({ roomTheme }),
   setFortPass: (fortPass) => set({ fortPass }),
   setMembers: (members) => set({ members }),
-  setMemberPresenceMap: (presence) => set({ memberPresence: presence }),
+  setMemberPresenceMap: (presence) => set({
+    memberPresence: Object.assign(Object.create(null) as Record<string, MemberPresence>, presence),
+  }),
   setMemberPresence: (name, status, awayText) =>
     set((s) => ({
-      memberPresence: {
-        ...s.memberPresence,
+      memberPresence: Object.assign(Object.create(null) as Record<string, MemberPresence>, s.memberPresence, {
         [name]: {
           status,
           ...(awayText?.trim() ? { awayText: awayText.trim().slice(0, 120) } : {}),
         },
-      },
+      }),
     })),
   clearMemberPresence: (name) =>
     set((s) => {
-      const next = { ...s.memberPresence };
+      const next = Object.assign(Object.create(null) as Record<string, MemberPresence>, s.memberPresence);
       delete next[name];
       return { memberPresence: next };
     }),
@@ -263,7 +293,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((s) => ({
       members: s.members.filter((n) => n !== name),
       memberPresence: (() => {
-        const next = { ...s.memberPresence };
+        const next = Object.assign(Object.create(null) as Record<string, MemberPresence>, s.memberPresence);
         delete next[name];
         return next;
       })(),
@@ -285,23 +315,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   addMessage: (msg) =>
     set((s) => ({
-      messages: [...s.messages, { ...msg, id: ++msgId }],
+      messages: [...s.messages, { ...msg, id: ++msgId }].slice(-MAX_UI_MESSAGES),
     })),
 
   addSystemMessage: (text) =>
     set((s) => ({
       messages: [
         ...s.messages,
-        { id: ++msgId, kind: "system", text, timestamp: timeStr() },
-      ],
+        { id: ++msgId, kind: "system" as const, text, timestamp: timeStr() },
+      ].slice(-MAX_UI_MESSAGES),
     })),
 
   addChatMessage: (from, text, style) =>
     set((s) => ({
       messages: [
         ...s.messages,
-        { id: ++msgId, kind: "chat", from, text, style, timestamp: timeStr() },
-      ],
+        { id: ++msgId, kind: "chat" as const, from, text, style, timestamp: timeStr() },
+      ].slice(-MAX_UI_MESSAGES),
     })),
 
   clearMessages: () => set({ messages: [] }),
@@ -320,6 +350,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setLeaderboards: (leaderboards) => set({ leaderboards }),
   setGameQueue: (gameQueue) => set({ gameQueue }),
   setHostOffer: (offer) => set({ hostOffer: offer }),
+  setPendingAdmissions: (pendingAdmissions) => set({ pendingAdmissions }),
+  setPendingJoinFingerprint: (pendingJoinFingerprint) => set({ pendingJoinFingerprint }),
   setMinimized: (minimized) => set({ minimized }),
   incrementUnread: () => set((s) => ({ unreadCount: s.unreadCount + 1 })),
   resetUnread: () => set({ unreadCount: 0 }),
@@ -328,7 +360,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setIntentionalLeave: (intentional) => set({ intentionalLeave: intentional }),
   setPendingRoom: (room) => set({ pendingRoom: room }),
   setPendingFortPass: (fortPass) => set({ pendingFortPass: fortPass }),
-  setActivityContext: (roomId, source = null) => set({ activityRoomId: roomId, activitySource: source }),
+  setActivityContext: (activitySource) => set({ activitySource }),
 
   showError: (message) => {
     const prev = get().errorTimer;
@@ -338,7 +370,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   cleanup: () => {
-    clearChatCryptoState();
     set({
       roomId: null,
       password: null,
@@ -347,12 +378,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       roomTheme: "away-message",
       fortPass: null,
       members: [],
-      memberPresence: {},
+      memberPresence: Object.create(null) as Record<string, MemberPresence>,
       mutedNames: new Set(),
       reconnecting: false,
       reconnectAttempts: 0,
       intentionalLeave: false,
+      messages: [],
       hostOffer: null,
+      pendingAdmissions: [],
+      pendingJoinFingerprint: null,
       activeVote: null,
       rpsState: null,
       tttState: null,

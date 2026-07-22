@@ -34,6 +34,7 @@ Ask for the smallest useful set:
 Do not ask for:
 
 - Room password.
+- Fort Pass claim secret or browser `sessionStorage` contents.
 - Chat message content.
 - Encryption keys.
 - Guest names unless the buyer volunteers them as context.
@@ -49,17 +50,17 @@ Recommended rule:
 - If the room already worked, still favor refunding during beta.
 - Treat refunds as learning cost, not a support argument.
 
-Current product constraint:
+Current product behavior:
 
-- Refund fulfillment is not automated yet.
-- Refunding in the payment provider does not currently revoke an already active
-  room entitlement inside Pillowfort.
-- Because Fort Pass is one-hangout state, this is acceptable for beta if support
-  copy does not promise instant revocation.
-
-Before a larger paid launch, add refund webhook handling that marks affected
-entitlements as `refunded` and prevents unused refunded codes from being
-redeemed.
+- Signed Stripe `charge.refunded` events for partial or full refunds and
+  `charge.dispute.created` events are verified against Stripe's current Charge,
+  PaymentIntent, and Checkout Session before revocation.
+- The exact current entitlement becomes a durable `refunded` tombstone. Premium
+  themes and extended idle time are removed immediately without destroying an
+  active encrypted room.
+- Delayed events for an older Checkout Session cannot revoke a newer owner.
+- Provider/API outages return a retryable webhook error rather than silently
+  accepting an unverified revocation.
 
 ## Common Cases
 
@@ -103,15 +104,17 @@ Symptom:
 
 Likely cause:
 
-- Buyer is setting up the paid code without the Checkout Session ID from the
-  success URL.
+- Buyer is setting up the paid code outside the browser tab that started
+  Checkout, so the tab-scoped claim secret is missing.
 - Someone else learned the code and tried to claim it.
 
 Action:
 
-- Ask the buyer to return from the checkout success URL or provide the Checkout
-  Session ID.
-- If the buyer cannot recover the success URL, refund manually during beta.
+- Ask the buyer to return to the same tab that started Checkout. Cancelling the
+  Setup screen keeps a same-tab recovery record until setup succeeds.
+- A copied success URL or Session ID is intentionally insufficient. Never ask
+  the buyer to send the claim secret; if the originating tab is gone, refund
+  manually during beta.
 
 ### Code Taken After Payment
 
@@ -139,8 +142,12 @@ Before enabling Fort Pass publicly:
 - Complete one test-mode Stripe purchase against the deployed URL.
 - Confirm `/api/stripe/webhook` rejects unsigned payloads.
 - Confirm a signed paid event makes the code unavailable.
+- Confirm partial refund, full refund, and dispute events revoke only their
+  exact Checkout Session and are safe to replay.
 - Confirm setup from the checkout success URL creates the paid room.
-- Confirm setup without the Checkout Session ID is rejected.
+- Confirm copied success URLs cannot redeem without the originating tab secret.
+- Confirm setup without either the Checkout Session ID or the matching claim
+  secret is rejected.
 
 ## Support Copy
 
