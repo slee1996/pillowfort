@@ -494,6 +494,8 @@ describe("Worker production entrypoint", () => {
     for (const query of [
       "room=abc12345&room=mallory1",
       "room=abc12345&protocol=4&protocol=3",
+      "room=abc12345&protocol=4&password=not-a-real-secret",
+      "room=abc12345&protocol=4&secret=not-a-real-secret",
     ]) {
       const res = await worker.fetch(new Request(`https://pillow.test/ws?${query}`, {
         headers: browserHeaders(),

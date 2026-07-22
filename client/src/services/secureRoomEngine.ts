@@ -68,6 +68,7 @@ import {
   decodeCanonicalBase64UrlV4,
   protectSecureRoomStateV1,
   randomSecureRoomIdV4,
+  secureRoomCredentialStoreKey,
   secureRoomOpaqueStoreKey,
   unprotectSecureRoomStateV1,
   type SecureRoomDurableStateV1,
@@ -434,7 +435,10 @@ export class SecureRoomEngine {
   private readonly roomSecret: string;
   private readonly store: CryptoStateStore;
   private readonly lease: RoomCryptoLockLease;
+  private readonly lockKey: string;
   private readonly storeKey: string;
+  private provisional: boolean;
+  private authenticationAmbiguous: boolean;
   private unavailable = false;
   private retired = false;
   /** Re-established from the server-forwarded invitation binding on every pending-join connection. */
@@ -454,7 +458,10 @@ export class SecureRoomEngine {
     roomSecret: string;
     store: CryptoStateStore;
     lease: RoomCryptoLockLease;
+    lockKey: string;
     storeKey: string;
+    provisional: boolean;
+    authenticationAmbiguous: boolean;
   }) {
     this.session = options.session;
     this.durable = cloneSecureRoomDurableStateV1(options.durable);
@@ -462,7 +469,10 @@ export class SecureRoomEngine {
     this.roomSecret = options.roomSecret;
     this.store = options.store;
     this.lease = options.lease;
+    this.lockKey = options.lockKey;
     this.storeKey = options.storeKey;
+    this.provisional = options.provisional;
+    this.authenticationAmbiguous = options.authenticationAmbiguous;
   }
 
   static async createFounder(options: CreateSecureRoomFounderOptions): Promise<SecureRoomEngine> {
@@ -479,8 +489,9 @@ export class SecureRoomEngine {
   ): Promise<SecureRoomEngine> {
     validateRoomAndDevice(options?.roomInstance, options?.deviceId);
     const store = options.store ?? new CryptoStateStore();
-    const storeKey = await secureRoomOpaqueStoreKey(options.roomInstance);
-    this.assertLease(options.lease, storeKey);
+    const lockKey = await secureRoomOpaqueStoreKey(options.roomInstance);
+    const storeKey = await secureRoomCredentialStoreKey(options.roomInstance, options.roomSecret);
+    this.assertLease(options.lease, lockKey);
     const deviceId = options.deviceId ?? randomSecureRoomIdV4(16);
     const roomBinding = decodeCanonicalBase64UrlV4(options.roomInstance, SECURE_ROOM_ID_BYTES, SECURE_ROOM_ID_BYTES)!;
     const identity = decodeCanonicalBase64UrlV4(deviceId, SECURE_DEVICE_ID_BYTES, SECURE_DEVICE_ID_BYTES)!;
@@ -521,12 +532,17 @@ export class SecureRoomEngine {
         pendingCommitRollback: null,
       };
       const wrapped = await protectSecureRoomStateV1(durable, options.roomSecret);
-      this.assertLease(options.lease, storeKey);
-      const committed = await store.compareAndSetOpaqueState(storeKey, null, wrapped);
+      this.assertLease(options.lease, lockKey);
+      const committed = await store.createProvisionalOpaqueState(storeKey, lockKey, wrapped);
       if (!committed.committed) {
-        throw new SecureRoomEngineError("state-exists", "secure room state already exists for this room");
+        throw new SecureRoomEngineError(
+          committed.reason === "provisional-saturated" ? "persistence-failed" : "state-exists",
+          committed.reason === "provisional-saturated"
+            ? "too many unresolved provisional secure room identities"
+            : "secure room state already exists for this room",
+        );
       }
-      this.assertLease(options.lease, storeKey);
+      this.assertLease(options.lease, lockKey);
       const engine = new SecureRoomEngine({
         session,
         durable,
@@ -534,7 +550,10 @@ export class SecureRoomEngine {
         roomSecret: options.roomSecret,
         store,
         lease: options.lease,
+        lockKey,
         storeKey,
+        provisional: true,
+        authenticationAmbiguous: false,
       });
       session = null;
       return engine;
@@ -550,11 +569,21 @@ export class SecureRoomEngine {
   static async restore(options: RestoreSecureRoomEngineOptions): Promise<SecureRoomEngine> {
     validateRoomAndDevice(options?.roomInstance);
     const store = options.store ?? new CryptoStateStore();
-    const storeKey = await secureRoomOpaqueStoreKey(options.roomInstance);
-    this.assertLease(options.lease, storeKey);
-    const record = await store.loadOpaqueState(storeKey);
+    const lockKey = await secureRoomOpaqueStoreKey(options.roomInstance);
+    const storeKey = await secureRoomCredentialStoreKey(options.roomInstance, options.roomSecret);
+    this.assertLease(options.lease, lockKey);
+    let record = await store.loadOpaqueState(storeKey);
+    let legacyStoreKey: string | null = null;
+    if (!record) {
+      const legacy = await store.loadOpaqueState(lockKey);
+      if (legacy) {
+        record = legacy;
+        legacyStoreKey = lockKey;
+      }
+    }
     if (!record) throw new SecureRoomEngineError("state-not-found", "no durable secure room state exists");
     let session: MlsCryptoSession | null = null;
+    let legacyAuthenticated = false;
     try {
       const durable = await unprotectSecureRoomStateV1(record.state, options.roomInstance, options.roomSecret);
       const roomBinding = decodeCanonicalBase64UrlV4(options.roomInstance, SECURE_ROOM_ID_BYTES, SECURE_ROOM_ID_BYTES)!;
@@ -571,26 +600,52 @@ export class SecureRoomEngine {
       if (durable.applicationState.members.some((member) => !rosterIds.has(member.deviceId))) {
         throw new SecureRoomEngineError("state-invalid", "application membership is not a subset of the MLS roster");
       }
-      this.assertLease(options.lease, storeKey);
+      legacyAuthenticated = legacyStoreKey !== null;
+      this.assertLease(options.lease, lockKey);
+      let revision = record.revision;
+      if (legacyStoreKey) {
+        const moved = await store.compareAndMoveOpaqueState(legacyStoreKey, record.revision, storeKey, lockKey);
+        if (!moved.moved) {
+          throw new SecureRoomEngineError(
+            moved.reason === "destination-exists" ? "state-exists" : "revision-conflict",
+            "legacy secure room state migration conflicted",
+          );
+        }
+        revision = moved.revision;
+        this.assertLease(options.lease, lockKey);
+      }
       const engine = new SecureRoomEngine({
         session,
         durable,
-        revision: record.revision,
+        revision,
         roomSecret: options.roomSecret,
         store,
         lease: options.lease,
+        lockKey,
         storeKey,
+        provisional: record.lifecycle === "provisional",
+        authenticationAmbiguous: record.lifecycle === "authentication-ambiguous",
       });
       session = null;
       return engine;
     } catch (error) {
       session?.dispose();
+      if (legacyStoreKey && !legacyAuthenticated) {
+        // A legacy room-only key cannot identify which credential produced its
+        // ciphertext. Preserve it for a future matching credential, but make a
+        // non-matching attempt behave like an empty credential-scoped slot so
+        // it cannot shadow a correct retry after this upgrade.
+        throw new SecureRoomEngineError(
+          "state-not-found",
+          "no durable secure room state exists for this credential",
+        );
+      }
       throw engineError(error, "state-invalid", "durable secure room state could not be restored");
     }
   }
 
-  private static assertLease(lease: RoomCryptoLockLease | undefined, storeKey: string): void {
-    if (!lease || lease.roomInstance !== storeKey || !lease.isActive() || lease.signal.aborted) {
+  private static assertLease(lease: RoomCryptoLockLease | undefined, lockKey: string): void {
+    if (!lease || lease.roomInstance !== lockKey || !lease.isActive() || lease.signal.aborted) {
       throw new SecureRoomEngineError("lock-required", "an active matching secure-room Web Lock lease is required");
     }
   }
@@ -616,6 +671,66 @@ export class SecureRoomEngine {
   get epoch(): bigint {
     this.assertUsable();
     return BigInt(this.durable.lastEpoch);
+  }
+
+  get isProvisional(): boolean {
+    return this.provisional;
+  }
+
+  get isAuthenticationAmbiguous(): boolean {
+    return this.authenticationAmbiguous;
+  }
+
+  /** Makes crash recovery conservative before any authentication frame is sent. */
+  async markAuthenticationAttempted(): Promise<void> {
+    this.assertUsable();
+    this.assertLease();
+    try {
+      const result = await this.store.markOpaqueStateAuthenticationAmbiguous(this.storeKey, this.revision);
+      if (!result.committed) {
+        await this.recoverFromAuthoritativeState();
+        throw new SecureRoomEngineError(
+          "revision-conflict",
+          "secure room authentication-attempt marker lost its revision race",
+        );
+      }
+      this.assertLease();
+      this.revision = result.revision;
+      if (this.provisional) {
+        this.provisional = false;
+        this.authenticationAmbiguous = true;
+      }
+    } catch (error) {
+      if (!(error instanceof SecureRoomEngineError && error.code === "revision-conflict") && !this.unavailable) {
+        await this.recoverFromAuthoritativeState();
+      }
+      throw engineError(error, "persistence-failed", "secure room authentication-attempt marker could not be persisted");
+    }
+  }
+
+  /** Protects a relay-accepted identity from bounded provisional-state GC. */
+  async markAuthenticated(): Promise<void> {
+    this.assertUsable();
+    this.assertLease();
+    try {
+      const result = await this.store.markOpaqueStateEstablished(this.storeKey, this.revision);
+      if (!result.committed) {
+        await this.recoverFromAuthoritativeState();
+        throw new SecureRoomEngineError(
+          "revision-conflict",
+          "secure room authentication marker lost its revision race",
+        );
+      }
+      this.assertLease();
+      this.revision = result.revision;
+      this.provisional = false;
+      this.authenticationAmbiguous = false;
+    } catch (error) {
+      if (!(error instanceof SecureRoomEngineError && error.code === "revision-conflict") && !this.unavailable) {
+        await this.recoverFromAuthoritativeState();
+      }
+      throw engineError(error, "persistence-failed", "secure room authentication marker could not be persisted");
+    }
   }
 
   get pendingOutboundMessageIds(): readonly string[] {
@@ -2321,6 +2436,8 @@ export class SecureRoomEngine {
       this.session = session;
       this.durable = durable;
       this.revision = record.revision;
+      this.provisional = record.lifecycle === "provisional";
+      this.authenticationAmbiguous = record.lifecycle === "authentication-ambiguous";
       this.unavailable = false;
     } catch {
       this.unavailable = true;
@@ -2978,7 +3095,7 @@ export class SecureRoomEngine {
   }
 
   private assertLease(): void {
-    SecureRoomEngine.assertLease(this.lease, this.storeKey);
+    SecureRoomEngine.assertLease(this.lease, this.lockKey);
   }
 
   private assertUsable(): void {
@@ -3177,4 +3294,8 @@ export class SecureRoomEngine {
 
 export async function secureRoomEngineStoreKey(roomInstance: string): Promise<string> {
   return secureRoomOpaqueStoreKey(roomInstance);
+}
+
+export async function secureRoomEngineStateKey(roomInstance: string, roomSecret: string): Promise<string> {
+  return secureRoomCredentialStoreKey(roomInstance, roomSecret);
 }

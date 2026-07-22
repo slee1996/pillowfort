@@ -5,5 +5,5 @@ export function ErrorBanner() {
 
   if (!errorMessage) return null;
 
-  return <div className="error-banner">{errorMessage}</div>;
+  return <div className="error-banner" role="alert" aria-live="assertive">{errorMessage}</div>;
 }

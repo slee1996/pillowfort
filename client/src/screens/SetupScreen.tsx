@@ -3,11 +3,16 @@ import { useGameStore } from "../stores/gameStore";
 import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
-import { setupSecureRoom } from "../services/ws";
+import { cancelSecureRoomConnection, getSecureRoomRecovery, setupSecureRoom } from "../services/ws";
 import { track } from "../services/analytics";
-import { checkFortPassCode, clearFortPassClaimSecret, getFortPassStatus, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
+import { checkFortPassCode, clearFortPassClaimSecret, getFortPassStatus, getPendingFortPassRedemption, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
-import { generateRoomId, generateRoomSecret, validateRoomSecret } from "../services/roomSecret";
+import {
+  generateRoomId,
+  generateRoomSecret,
+  validateCustomRoomSecret,
+  validateRoomSecret,
+} from "../services/roomSecret";
 import { showToast } from "../components/xp/Toast";
 
 type FortPassPreviewTheme = "campus-blue" | "top-8";
@@ -20,15 +25,28 @@ export function SetupScreen() {
   const setPendingFortPass = useGameStore((s) => s.setPendingFortPass);
   const activitySource = useGameStore((s) => s.activitySource);
   const activityMode = activitySource !== null;
+  const recoveryHint = useRef(getSecureRoomRecovery()).current;
+  const setupRecovery = recoveryHint?.mode === "setup" ? recoveryHint : null;
+  const setupDisplayName = setupRecovery?.displayName ?? name;
+  const [recoveryFortPass] = useState(() => setupRecovery ? getPendingFortPassRedemption() : null);
+  const activeFortPass = setupRecovery
+    ? recoveryFortPass?.code === setupRecovery.roomId ? recoveryFortPass : null
+    : pendingFortPass;
   const [fortPassCode, setFortPassCode] = useState("");
   const [fortPassStatus, setFortPassStatus] = useState("");
   const [fortPassConfig, setFortPassConfig] = useState<FortPassStatus | null>(null);
   const [fortPassBusy, setFortPassBusy] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("campus-blue");
-  const [secret, setSecret] = useState(generateRoomSecret);
+  const [secret, setSecret] = useState(() => setupRecovery ? "" : generateRoomSecret());
+  const [customSecret, setCustomSecret] = useState(!!setupRecovery);
+  const [generatedSecretSaved, setGeneratedSecretSaved] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [secretError, setSecretError] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [recoveryRequired, setRecoveryRequired] = useState(!!setupRecovery);
+  const [recoveryCredentialLocked, setRecoveryCredentialLocked] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const setupRoomIdRef = useRef<string | null>(setupRecovery?.roomId ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,43 +76,90 @@ export function SetupScreen() {
   }, [activityMode]);
 
   const handleCreate = async () => {
-    const validation = validateRoomSecret(secret);
+    if (connecting) return;
+    if (!recoveryRequired && !customSecret && !generatedSecretSaved) {
+      setSecretError("Copy the generated secret or confirm that you saved it before building the fort.");
+      return;
+    }
+    const roomId = setupRoomIdRef.current ??
+      (activityMode ? generateRoomId() : activeFortPass?.code || generateRoomId());
+    setupRoomIdRef.current = roomId;
+    const validation = recoveryRequired
+      ? validateRoomSecret(secret)
+      : customSecret
+      ? validateCustomRoomSecret(secret, { context: [setupDisplayName, roomId] })
+      : validateRoomSecret(secret);
     if (!validation.valid) {
       setSecretError(validation.message);
       passwordRef.current?.focus();
       return;
     }
     const pw = validation.secret;
+    setSecret(pw);
     setSecretError("");
-    setPassword(pw);
-    const roomId = activityMode ? generateRoomId() : pendingFortPass?.code || generateRoomId();
     const options = {
       roomId,
       roomSecret: pw,
-      displayName: name,
-      ...(!activityMode && pendingFortPass ? {
-        fortPassSessionId: pendingFortPass.sessionId,
-        fortPassClaimSecret: pendingFortPass.claimSecret,
+      displayName: setupDisplayName,
+      ...(!activityMode && activeFortPass ? {
+        fortPassSessionId: activeFortPass.sessionId,
+        fortPassClaimSecret: activeFortPass.claimSecret,
       } : {}),
     };
-    let result = await setupSecureRoom(options);
-    if (result.status === "busy" && window.confirm("This secure fort is open in another tab. Move it here?")) {
-      result = await setupSecureRoom({ ...options, lock: { takeover: true } });
-    }
-    if (result.status !== "connected") {
-      setSecretError(result.status === "busy"
-        ? "This secure fort is already open in another tab."
-        : "Secure browser storage and tab locking are required to create a fort.");
-    } else if (pendingFortPass) {
-      clearFortPassClaimSecret(pendingFortPass.sessionId);
-      setPendingFortPass(null);
+    if (recoveryRequired) setRecoveryCredentialLocked(true);
+    setConnecting(true);
+    try {
+      let result = await setupSecureRoom(options);
+      if (result.status === "busy" && window.confirm("This secure fort is open in another tab. Move it here?")) {
+        result = await setupSecureRoom({ ...options, lock: { takeover: true } });
+      }
+      if (result.status !== "connected") {
+        setPassword(null);
+        const currentRecovery = getSecureRoomRecovery();
+        const mustRecover = currentRecovery?.mode === "setup" ||
+          (result.status === "failed" &&
+            (result.reason === "recovery-required" || result.reason === "recovery-credential-mismatch"));
+        const credentialMismatch = result.status === "failed" &&
+          result.reason === "recovery-credential-mismatch";
+        setRecoveryRequired(mustRecover);
+        if (credentialMismatch) setRecoveryCredentialLocked(false);
+        else if (mustRecover) setRecoveryCredentialLocked(true);
+        setSecretError(credentialMismatch
+          ? "No saved setup matched that password. Re-enter the exact password you copied."
+          : mustRecover
+          ? "This setup may already exist. Retry Build with this exact password to resolve it."
+          : result.status === "busy"
+          ? "This secure fort is already open in another tab."
+          : result.status === "failed" && result.reason === "rate-limited"
+            ? "Too many attempts. Wait a minute, then try again."
+            : result.status === "failed" && result.reason === "authentication-failed"
+              ? "Could not create that fort. Check its flag and password."
+              : "Secure browser cryptography, storage, and tab locking are required to create a fort.");
+      } else {
+        setRecoveryRequired(false);
+        setPassword(pw);
+        if (activeFortPass) {
+          clearFortPassClaimSecret(activeFortPass.sessionId);
+          setPendingFortPass(null);
+        }
+      }
+    } finally {
+      setConnecting(false);
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     // Keep a successfully redeemed pass recoverable in this tab. The raw
     // claim secret remains session-scoped and is erased only after setup
     // succeeds; cancelling the screen must not strand a paid entitlement.
+    const canLeave = await cancelSecureRoomConnection();
+    setPassword(null);
+    setConnecting(false);
+    if (!canLeave) {
+      setRecoveryRequired(true);
+      setSecretError("This setup may already exist. Retry Build with this same password to resolve it before leaving.");
+      return;
+    }
     setScreen("home");
   };
 
@@ -158,16 +223,16 @@ export function SetupScreen() {
       <Window
         title="Set Up a Fort"
         className="auth-window"
-        buttons={[{ label: "✕", close: true, onClick: handleCancel }]}
+        buttons={[{ label: "✕", close: true, onClick: () => void handleCancel() }]}
       >
         <div className="xp-window-body">
           <p className="auth-note">
-            Pillowfort generated a strong room secret. Copy it now; Pillowfort does not store it.
+            Use the strong generated secret, or choose a shorter custom password. Pillowfort does not store either one.
           </p>
-          {pendingFortPass && !activityMode && (
+          {activeFortPass && !activityMode && (
             <div className="fort-pass-redeemed-panel" role="status">
               <div className="fort-pass-title">Fort Pass unlocked</div>
-              <div className="fort-pass-redeemed-code">flag: {pendingFortPass.code}</div>
+              <div className="fort-pass-redeemed-code">flag: {activeFortPass.code}</div>
               <div className="fort-pass-perk-row">
                 <span>custom code</span>
                 <span>6-hour idle</span>
@@ -186,50 +251,124 @@ export function SetupScreen() {
             label="Secret Password"
             type={showSecret ? "text" : "password"}
             value={secret}
-            readOnly
+            readOnly={!customSecret}
             aria-describedby="setup-secret-help setup-secret-error"
-            maxLength={64}
+            maxLength={128}
             autoComplete="new-password"
+            autoCapitalize="none"
             autoCorrect="off"
             ref={passwordRef}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            disabled={connecting || (recoveryRequired && recoveryCredentialLocked)}
+            placeholder={recoveryRequired ? "Re-enter the exact prior password" : customSecret ? "15–64 characters" : undefined}
+            onChange={(event) => {
+              setSecret(event.currentTarget.value);
+              if (secretError) setSecretError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleCreate();
+            }}
             autoFocus
           />
-          <div className="secret-controls">
+          <div
+            className="secret-controls secret-controls-grid"
+            role="group"
+            aria-label="Room password controls"
+          >
             <Button
               id="btn-toggle-setup-secret"
               onClick={() => setShowSecret((shown) => !shown)}
               aria-controls="setup-password"
               aria-pressed={showSecret}
+              disabled={connecting}
             >
               {showSecret ? "Hide" : "Show"}
+            </Button>
+            <Button
+              id="btn-custom-secret"
+              onClick={() => {
+                setCustomSecret(true);
+                setSecret("");
+                setGeneratedSecretSaved(false);
+                setSecretError("");
+                setShowSecret(false);
+                requestAnimationFrame(() => passwordRef.current?.focus());
+              }}
+              aria-pressed={customSecret}
+              disabled={customSecret || connecting || recoveryRequired}
+            >
+              Custom
             </Button>
             <Button
               id="btn-regenerate-secret"
               onClick={() => {
                 setSecret(generateRoomSecret());
+                setCustomSecret(false);
+                setGeneratedSecretSaved(false);
                 setSecretError("");
                 passwordRef.current?.focus();
               }}
+              aria-label={customSecret ? "Use generated password" : "Generated password selected; regenerate"}
+              aria-pressed={!customSecret}
+              disabled={connecting || recoveryRequired}
             >
-              Regenerate
+              {customSecret ? "Generated" : "Regenerate"}
             </Button>
             <Button
               id="btn-copy-secret"
               onClick={() => {
-                void navigator.clipboard.writeText(secret).then(
-                  () => showToast("Room secret copied"),
+                const validation = recoveryRequired
+                  ? validateRoomSecret(secret)
+                  : customSecret
+                  ? validateCustomRoomSecret(secret, { context: [setupDisplayName, activeFortPass?.code || ""] })
+                  : validateRoomSecret(secret);
+                if (!validation.valid) {
+                  setSecretError(validation.message);
+                  passwordRef.current?.focus();
+                  return;
+                }
+                setSecret(validation.secret);
+                void navigator.clipboard.writeText(validation.secret).then(
+                  () => {
+                    if (!customSecret && !recoveryRequired) setGeneratedSecretSaved(true);
+                    showToast("Room secret copied");
+                  },
                   () => showToast("Could not copy room secret")
                 );
               }}
+              disabled={connecting}
             >
               Copy
             </Button>
           </div>
-          <div id="setup-secret-help" className="secret-help">Generated securely and locked. Copy it, then share it privately with your guests.</div>
+          {!customSecret && !recoveryRequired && (
+            <label className="secret-save-confirmation" htmlFor="setup-secret-saved">
+              <input
+                id="setup-secret-saved"
+                type="checkbox"
+                checked={generatedSecretSaved}
+                disabled={connecting}
+                onChange={(event) => {
+                  setGeneratedSecretSaved(event.currentTarget.checked);
+                  if (event.currentTarget.checked && secretError) setSecretError("");
+                }}
+              />
+              <span>I saved this generated secret somewhere safe.</span>
+            </label>
+          )}
+          <div
+            id="setup-secret-help"
+            className={`secret-help${customSecret ? " secret-warning" : ""}`}
+            aria-live="polite"
+          >
+            {recoveryRequired
+              ? "Recovery mode: re-enter the exact password you copied. Pillowfort stores only the non-secret room pointer."
+              : customSecret
+              ? "Custom passwords can be guessed offline. Use 16+ characters or four unrelated words; never reuse an account password."
+              : "Generated securely and locked. Copy it, then share it privately with your guests."}
+          </div>
           {secretError && <div id="setup-secret-error" className="secret-error" role="alert">{secretError}</div>}
 
-          {!pendingFortPass && !activityMode && (
+          {!recoveryRequired && !activeFortPass && !activityMode && (
             <div className="fort-pass-panel">
               <div className="fort-pass-heading">
                 <div>
@@ -312,10 +451,15 @@ export function SetupScreen() {
           )}
 
           <div className="auth-actions">
-            <Button id="btn-create" primary onClick={handleCreate}>
-              Build the Fort
+            <Button
+              id="btn-create"
+              primary
+              disabled={connecting || (!customSecret && !recoveryRequired && !generatedSecretSaved)}
+              onClick={() => void handleCreate()}
+            >
+              {connecting ? "Building..." : "Build the Fort"}
             </Button>
-            <Button onClick={handleCancel}>Cancel</Button>
+            <Button onClick={() => void handleCancel()}>Cancel</Button>
           </div>
         </div>
       </Window>

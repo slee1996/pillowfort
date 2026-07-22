@@ -127,8 +127,14 @@ Current protocol-v4 design:
 - Authentication proofs bind a one-use server challenge to the exact room,
   device, protocol mode, credential, and KeyPackage. Host approval and an MLS
   Add commit are separately required before a new device becomes active.
-- The invitation public key is deterministic and can confirm a guessed secret,
-  so the first-party client requires a generated 256-bit `pf2_` room secret.
+- The invitation public key is deterministic and can confirm a guessed secret.
+  The first-party client therefore defaults to a generated 256-bit `pf2_`
+  secret. Explicit new custom passwords require 15–64 safe characters and pass
+  creation-only common/repetition/sequence/context checks before a
+  room-instance-bound 600,000-round PBKDF2 derivation into canonical secret
+  material. Join keeps a stable syntax policy so future strength-list updates
+  cannot lock an existing room. The UI warns that custom phrases remain
+  offline-guessable.
 - Every application event is encrypted inside MLS. The relay sees routing
   identifiers, protocol and destination class, timing/count, and coarse padded
   ciphertext size.
@@ -153,8 +159,16 @@ As of this document:
   application snapshot. It is not plaintext Durable Object state.
 - Every browser persists its wrapped MLS/application snapshot and replay state
   in IndexedDB before send, acknowledgement, or delivery. One Web Lock owns a
-  device/room state at a time; storage or revision failure is terminal until a
-  safe restore/rejoin.
+  device/room state at a time; credential-scoped opaque keys prevent abandoned
+  wrong-password state from shadowing a correct retry. Non-secret hashed scope
+  and lifecycle metadata bounds unresolved identities without evicting an
+  authentication-ambiguous or established state. Authentication ambiguity is
+  durably marked before send; a non-secret tab recovery pointer survives
+  reload while the exact password must be re-entered. Storage or revision
+  failure is terminal until a safe restore/rejoin.
+- Automatic Cloudflare invocation logs are disabled, and WebSocket edge/room
+  handlers emit no custom provider logs. The provider still processes request
+  URLs in transit, so credentials are never placed in URLs.
 - All application plaintext, room/invitation secrets, MLS private state, and
   authentication proofs are Class D at the server boundary.
 - Idle destruction uses a Durable Object alarm and is Class C.

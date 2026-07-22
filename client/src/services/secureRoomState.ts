@@ -31,6 +31,8 @@ const NONCE_BYTES = 12;
 const GCM_TAG_BYTES = 16;
 const HEADER_BYTES = 8 + 2 + 2 + 2 + SECURE_ROOM_ID_BYTES + SALT_BYTES + NONCE_BYTES + 4;
 const WRAP_DOMAIN = UTF8.encode("pillowfort:secure-room-state:v1\0");
+const CREDENTIAL_STORE_KEY_DOMAIN = UTF8.encode("pillowfort:secure-room-credential-state-key:v1\0");
+const OPAQUE_STATE_KEY_PREFIX = "pfri1_";
 const MAX_PERSISTED_BYTES = 8 * 1024 * 1024;
 const MAX_PLAINTEXT_BYTES = MAX_PERSISTED_BYTES - HEADER_BYTES - GCM_TAG_BYTES;
 const MAX_PENDING_OUTBOX_ENTRIES = 32;
@@ -359,6 +361,37 @@ export async function secureRoomOpaqueStoreKey(roomInstance: string): Promise<st
     throw new SecureRoomStateError("invalid-input", "invalid protocol-v4 room instance");
   }
   return deriveCryptoRoomInstanceV4(roomInstance);
+}
+
+/**
+ * Separates durable identities created with different credentials for the
+ * same public room instance. The room-scoped Web Lock intentionally continues
+ * to use secureRoomOpaqueStoreKey(); only the opaque IndexedDB record uses
+ * this credential-scoped digest. Consequently an abandoned wrong-password
+ * join cannot shadow an established identity or block a later correct retry.
+ */
+export async function secureRoomCredentialStoreKey(
+  roomInstance: string,
+  roomSecret: string,
+): Promise<string> {
+  const roomBinding = decodeCanonicalBase64UrlV4(roomInstance, SECURE_ROOM_ID_BYTES, SECURE_ROOM_ID_BYTES);
+  if (!roomBinding) throw new SecureRoomStateError("invalid-input", "invalid protocol-v4 room instance");
+  const secret = decodeRoomSecret(roomSecret);
+  let material: Uint8Array<ArrayBuffer> | null = null;
+  let digest: Uint8Array<ArrayBuffer> | null = null;
+  try {
+    material = concatBytes(CREDENTIAL_STORE_KEY_DOMAIN, roomBinding, secret);
+    digest = new Uint8Array(await browserCrypto().subtle.digest("SHA-256", material));
+    return `${OPAQUE_STATE_KEY_PREFIX}${encodeBase64Url(digest)}`;
+  } catch (error) {
+    if (error instanceof SecureRoomStateError) throw error;
+    throw new SecureRoomStateError("unavailable", "credential-scoped state derivation failed", error);
+  } finally {
+    material?.fill(0);
+    digest?.fill(0);
+    secret.fill(0);
+    roomBinding.fill(0);
+  }
 }
 
 function decodeRoomSecret(roomSecret: unknown): Uint8Array {

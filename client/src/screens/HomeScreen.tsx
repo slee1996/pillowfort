@@ -18,6 +18,7 @@ import {
   rememberPendingFortPassRedemption,
 } from "../services/fortPass";
 import { normalizeRoomId } from "../../../src/entitlements";
+import { getSecureRoomRecovery } from "../services/ws";
 
 export function HomeScreen() {
   const name = useGameStore((s) => s.name);
@@ -28,6 +29,28 @@ export function HomeScreen() {
 
   // Check for room link in URL on mount
   useEffect(() => {
+    const secureRoomRecovery = getSecureRoomRecovery();
+    if (secureRoomRecovery) {
+      // An authentication frame may have reached the relay even when its
+      // response did not reach this tab. Resume that exact identity before
+      // allowing a different setup/join flow to replace its UI context.
+      const pendingFortPass = secureRoomRecovery.mode === "setup"
+        ? getPendingFortPassRedemption()
+        : null;
+      useGameStore.getState().setName(secureRoomRecovery.displayName);
+      useGameStore.getState().setPendingRoom(
+        secureRoomRecovery.mode === "join" ? secureRoomRecovery.roomId : null,
+      );
+      // A setup claim is a bearer credential for one exact paid room code.
+      // Never attach an unrelated tab-scoped redemption to recovery; clearing
+      // only the in-memory slot leaves that unrelated session record intact.
+      useGameStore.getState().setPendingFortPass(
+        pendingFortPass?.code === secureRoomRecovery.roomId ? pendingFortPass : null,
+      );
+      setScreen(secureRoomRecovery.mode);
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       const activity = await getDiscordActivityContext().catch(() => null);

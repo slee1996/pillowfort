@@ -59,7 +59,9 @@ Primary runtime pieces:
 Core user flow:
 
 1. User picks a screen name.
-2. The app generates and locks a `pf2_` 256-bit room secret for the host.
+2. The app generates and locks a `pf2_` 256-bit room secret by default; the
+   host can explicitly switch to a 15–64 character custom password with
+   creation-time strength checks and an offline-guessing warning.
 3. App generates `f-` plus ten lowercase base32 symbols (50 random bits) for a
    free-room flag; human 4–10 character flags are Fort Pass-only.
 4. Host shares the code/link and room secret out of band.
@@ -163,8 +165,10 @@ The codebase has several real strengths:
   bounded schemas, applies causal order grants, and persists only routing,
   membership, liveness, commerce, and opaque encrypted delivery state.
 - Browser MLS/application state is wrapped and transactionally persisted in
-  IndexedDB under an exclusive per-room Web Lock. Mutation is durable before
-  send, acknowledgement, or UI delivery.
+  IndexedDB under an exclusive per-room Web Lock. Credential-scoped records
+  isolate mistyped passwords; bounded non-secret provisional metadata preserves
+  ambiguous accepted identities without unbounded same-room retries. Mutation
+  is durable before send, acknowledgement, or UI delivery.
 - Core and security tests cover lifecycle, admission, forged/stale/reordered
   frames, replay across restart, concurrent tabs, membership changes, recovery,
   host handoff, games, rate limiting, payments, and invite behavior.

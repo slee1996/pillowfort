@@ -34,7 +34,18 @@ import {
 import { isRpsPick, rpsWinner, tttWinner, voteHasMajority } from "../src/game";
 import { isDiscordActivityRequest, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders } from "../src/security";
 import { sanitizeDraw, sanitizeStyle, uniqueName, STYLE_COLORS, MAX_DRAW_POINTS, MAX_NAME_LEN } from "../src/shared";
-import { generateRoomId, generateRoomSecret, isCredentialSystemMessage, validateRoomSecret } from "../client/src/services/roomSecret";
+import {
+  CUSTOM_ROOM_SECRET_KDF,
+  CUSTOM_ROOM_SECRET_MAX_LENGTH,
+  CUSTOM_ROOM_SECRET_MIN_LENGTH,
+  deriveProtocolRoomSecret,
+  generateRoomId,
+  generateRoomSecret,
+  isCredentialSystemMessage,
+  isGeneratedRoomSecret,
+  validateCustomRoomSecret,
+  validateRoomSecret,
+} from "../client/src/services/roomSecret";
 import {
   computeStripeWebhookSignature,
   createFortPassStripeCheckoutSession,
@@ -83,15 +94,71 @@ describe("room secrets", () => {
     }
   });
 
-  it("accepts only generated-format room secrets", () => {
-    expect(validateRoomSecret("too-short").valid).toBe(false);
-    expect(validateRoomSecret("password-password").valid).toBe(false);
-    expect(validateRoomSecret("aaaaaaaaaaaaaaaa").valid).toBe(false);
-    expect(validateRoomSecret("abcdefghijklmnop").valid).toBe(false);
-    expect(validateRoomSecret("this-is-my-password-2026").valid).toBe(false);
-    expect(validateRoomSecret("correcthorsebatterystaple").valid).toBe(false);
-    expect(validateRoomSecret("SummerSummer2026!").valid).toBe(false);
+  it("accepts bounded custom passwords without weakening generated-secret parsing", () => {
+    const variedUnicode = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x400 + index)).join("");
+    const variedEmoji = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x1f300 + index)).join("");
+    expect(CUSTOM_ROOM_SECRET_MIN_LENGTH).toBe(15);
+    expect(CUSTOM_ROOM_SECRET_MAX_LENGTH).toBe(64);
+    expect(CUSTOM_ROOM_SECRET_KDF).toBe("pbkdf2-sha256-600k-room-v1");
+    expect(validateRoomSecret("Velvet!Orbit7-Cedar")).toEqual({ valid: true, secret: "Velvet!Orbit7-Cedar" });
+    expect(validateRoomSecret("four cozy pillows")).toEqual({ valid: true, secret: "four cozy pillows" });
+    expect(validateRoomSecret("cafe\u0301-night-4821")).toEqual({ valid: true, secret: "café-night-4821" });
+    expect(validateRoomSecret(variedUnicode).valid).toBe(true);
+    expect(validateRoomSecret(variedEmoji).valid).toBe(true);
+
+    expect(validateRoomSecret("eight888").valid).toBe(false);
+    expect(validateRoomSecret(variedUnicode + "Ж").valid).toBe(false);
+    expect(validateRoomSecret(variedEmoji + "🧸").valid).toBe(false);
+    expect(validateRoomSecret(" outer-space").valid).toBe(false);
+    expect(validateRoomSecret("outer-space ").valid).toBe(false);
+    expect(validateRoomSecret("line\tbreak").valid).toBe(false);
+    expect(validateRoomSecret("lantern\u2028blanket orbit").valid).toBe(false);
+    expect(validateRoomSecret("lantern\u2029blanket orbit").valid).toBe(false);
+    expect(validateRoomSecret("lantern\u00a0blanket orbit").valid).toBe(false);
+    expect(validateRoomSecret("lantern\ufdd0blanket orbit").valid).toBe(false);
+    expect(validateRoomSecret("lantern\ufffeblanket orbit").valid).toBe(false);
+    expect(validateRoomSecret("hidden\u200bvalue").valid).toBe(false);
+    expect(validateRoomSecret("broken\ud800value").valid).toBe(false);
+    expect(validateCustomRoomSecret("password-for-room").valid).toBe(false);
+    expect(validateCustomRoomSecret("z".repeat(15)).valid).toBe(false);
+    expect(validateCustomRoomSecret("abcd".repeat(16)).valid).toBe(false);
+    expect(validateCustomRoomSecret("correcthorsebatterystaple").valid).toBe(false);
+    expect(validateCustomRoomSecret("SummerSummer2026!").valid).toBe(false);
+    expect(validateCustomRoomSecret("Alice-orbit-velvet-7", { context: ["alice"] }).valid).toBe(false);
+    // Join/derive syntax is intentionally stable: future creation-policy
+    // changes must not lock an existing compatible room.
+    expect(validateRoomSecret("correcthorsebatterystaple").valid).toBe(true);
+    expect(validateRoomSecret("abcd".repeat(16)).valid).toBe(true);
+    expect(validateRoomSecret(null).valid).toBe(false);
+    expect(validateRoomSecret(`pf2_${"A".repeat(42)}`).valid).toBe(false);
     expect(validateRoomSecret(`pf2_${"A".repeat(42)}B`).valid).toBe(false);
+    expect(validateCustomRoomSecret(`pf2_${"A".repeat(43)}`).valid).toBe(false);
+  });
+
+  it("hardens custom passwords into room-instance-bound canonical protocol secrets", async () => {
+    const roomId = "abcdefghij";
+    const roomInstance = "AAAAAAAAAAAAAAAAAAAAAA";
+    const otherInstance = "AQEBAQEBAQEBAQEBAQEBAQ";
+    const password = "four cozy pillows";
+    const first = await deriveProtocolRoomSecret(roomId, roomInstance, password);
+    const repeated = await deriveProtocolRoomSecret(roomId, roomInstance, password);
+    const other = await deriveProtocolRoomSecret(roomId, otherInstance, password);
+
+    expect(first).toBe(repeated);
+    expect(first).toBe("pf2_SmahTVA-vkcg0zAhKi5tLv5cTiMS-9ou4RriSorYB5Y");
+    expect(first).not.toBe(other);
+    expect(isGeneratedRoomSecret(first)).toBe(true);
+    expect(validateRoomSecret(first)).toEqual({ valid: true, secret: first });
+
+    const generated = generateRoomSecret();
+    expect(await deriveProtocolRoomSecret(roomId, roomInstance, generated)).toBe(generated);
+    const creationBlockedLegacy = "correcthorsebatterystaple";
+    expect(validateCustomRoomSecret(creationBlockedLegacy).valid).toBe(false);
+    expect(await deriveProtocolRoomSecret(roomId, roomInstance, creationBlockedLegacy)).toBe(
+      await deriveProtocolRoomSecret(roomId, roomInstance, creationBlockedLegacy),
+    );
+    await expect(deriveProtocolRoomSecret("INVALID", roomInstance, password)).rejects.toThrow("invalid canonical room id");
+    await expect(deriveProtocolRoomSecret(roomId, "invalid", password)).rejects.toThrow("invalid canonical room instance");
   });
 
   it("generates crypto-backed room IDs in the expected format", () => {
@@ -109,6 +176,20 @@ describe("room secrets", () => {
     expect(isCredentialSystemMessage("Secret password is do-not-export")).toBe(true);
     expect(isCredentialSystemMessage("Secret: do-not-export")).toBe(true);
     expect(isCredentialSystemMessage("Share the fort flag and room secret privately.")).toBe(false);
+  });
+});
+
+describe("deployment privacy", () => {
+  it("disables Cloudflare invocation logs that include full request URLs", async () => {
+    const config = await Bun.file(new URL("../wrangler.toml", import.meta.url)).text();
+    const logsSection = config.match(/\[observability\.logs\]([\s\S]*?)(?=\n\[|$)/u)?.[1] || "";
+    expect(logsSection).toMatch(/\binvocation_logs\s*=\s*false\b/u);
+    expect(logsSection).not.toMatch(/\binvocation_logs\s*=\s*true\b/u);
+    const edgeSource = await Bun.file(new URL("../src/index.ts", import.meta.url)).text();
+    const websocketBoundary = edgeSource.match(/if \(url\.pathname === "\/ws"\) \{([\s\S]*?)\n  \}\n\n  if \(request\.method/u)?.[1] || "";
+    expect(websocketBoundary).not.toMatch(/console\.|logRateLimitedOpsEvent/u);
+    const roomSource = await Bun.file(new URL("../src/room.ts", import.meta.url)).text();
+    expect(roomSource).not.toMatch(/console\.(?:log|info|warn|error)/u);
   });
 });
 

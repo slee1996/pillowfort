@@ -20,4 +20,4 @@ new_classes = ["Room"]
 enabled = true
 
 [observability.logs]
-invocation_logs = true
+invocation_logs = false

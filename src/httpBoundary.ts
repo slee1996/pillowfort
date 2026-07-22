@@ -70,3 +70,12 @@ export function isJsonRequest(request: Request): boolean {
   const contentType = request.headers.get("content-type");
   return !!contentType && contentType.split(";", 1)[0].trim().toLowerCase() === "application/json";
 }
+
+/** Reject unexpected query fields before a request is routed or upgraded. */
+export function hasOnlyAllowedSearchParameters(url: URL, allowed: readonly string[]): boolean {
+  const allowedNames = new Set(allowed);
+  for (const name of url.searchParams.keys()) {
+    if (!allowedNames.has(name)) return false;
+  }
+  return true;
+}

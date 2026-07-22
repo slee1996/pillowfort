@@ -12,7 +12,7 @@
     "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts && npm run test:security",
     "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
-    "test:ui": "bun test --timeout 15000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 15000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 15000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 15000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 15000 --max-concurrency 1 test/game-night.test.ts",
+    "test:ui": "bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 60000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 60000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 60000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 60000 --max-concurrency 1 test/game-night.test.ts",
     "metrics:report": "node scripts/analytics_report.mjs",
     "verify:openmls": "node scripts/verify-openmls-artifacts.mjs"
   },

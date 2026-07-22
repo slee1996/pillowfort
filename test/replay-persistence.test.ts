@@ -235,6 +235,11 @@ describe("durable replay and cryptographic state", () => {
       const conflictingCommit = await store.compareAndSetOpaqueState(roomInstance, null, new Uint8Array([9]));
       const secondCommit = await store.compareAndSetOpaqueState(roomInstance, 1, new Uint8Array([4, 5]));
       const snapshot = await store.loadOpaqueState(roomInstance);
+      const occupiedDestination = await module.deriveCryptoRoomInstance("occupied-room", "D".repeat(43));
+      await store.compareAndSetOpaqueState(occupiedDestination, null, new Uint8Array([7, 8]));
+      const conflictingMove = await store.compareAndMoveOpaqueState(roomInstance, 2, occupiedDestination);
+      const sourceAfterMoveConflict = await store.loadOpaqueState(roomInstance);
+      const destinationAfterMoveConflict = await store.loadOpaqueState(occupiedDestination);
 
       const rawLedger = JSON.stringify({
         v: 1,
@@ -262,6 +267,9 @@ describe("durable replay and cryptographic state", () => {
         conflictingCommit,
         secondCommit,
         snapshot: snapshot && { ...snapshot, state: [...snapshot.state] },
+        conflictingMove,
+        sourceAfterMoveConflict: sourceAfterMoveConflict && [...sourceAfterMoveConflict.state],
+        destinationAfterMoveConflict: destinationAfterMoveConflict && [...destinationAfterMoveConflict.state],
         migration,
         repeatedMigration,
         highWater,
@@ -273,10 +281,125 @@ describe("durable replay and cryptographic state", () => {
     expect(result.conflictingCommit).toEqual({ committed: false, reason: "revision-conflict", currentRevision: 1 });
     expect(result.secondCommit).toEqual({ committed: true, revision: 2 });
     expect(result.snapshot).toEqual({ revision: 2, state: [4, 5], updatedAt: 1234 });
+    expect(result.conflictingMove).toEqual({ moved: false, reason: "destination-exists", currentRevision: 1 });
+    expect(result.sourceAfterMoveConflict).toEqual([4, 5]);
+    expect(result.destinationAfterMoveConflict).toEqual([7, 8]);
     expect(result.migration).toEqual({ migrated: true, importedEntries: 1 });
     expect(result.repeatedMigration).toEqual({ migrated: false, reason: "already-migrated", importedEntries: 1 });
     expect(result.highWater).toBe(15);
     expect(result.replay).toEqual({ accepted: false, reason: "replay", currentSequence: 15 });
+  }, 30_000);
+
+  it("bounds provisional identities without evicting established or ambiguous state", async () => {
+    const profile = await mkdtemp(join(tmpdir(), "pillowfort-provisional-registry-"));
+    profileDirectories.push(profile);
+    const databaseName = uniqueDatabase("provisional-registry");
+    const context = await persistentContext(profile);
+    const page = await readyPage(context);
+    const result = await page.evaluate(async ({ databaseName }) => {
+      const module = await import("/src/services/cryptoStateStore.ts");
+      const derive = (label: string) => module.deriveCryptoRoomInstance(label, "E".repeat(43));
+      const store = new module.CryptoStateStore({ databaseName, now: () => 5_000 });
+      const scope = await derive("scope-main");
+      const firstKey = await derive("state-first");
+      const first = await store.createProvisionalOpaqueState(firstKey, scope, new Uint8Array([1]));
+      const deleted = await store.compareAndDeleteOpaqueState(firstKey, 1);
+      const recreated = await store.createProvisionalOpaqueState(firstKey, scope, new Uint8Array([2]));
+      const ambiguous = await store.markOpaqueStateAuthenticationAmbiguous(firstKey, 1);
+      const ambiguousAgain = await store.markOpaqueStateAuthenticationAmbiguous(firstKey, 2);
+      const ambiguousSnapshot = await store.loadOpaqueState(firstKey);
+      const established = await store.markOpaqueStateEstablished(firstKey, 2);
+      const duplicateAfterEstablish = await store.createProvisionalOpaqueState(
+        firstKey, scope, new Uint8Array([9]),
+      );
+      const moveSource = await derive("state-move-source");
+      const moveDestination = await derive("state-move-destination");
+      await store.createProvisionalOpaqueState(moveSource, await derive("scope-move"), new Uint8Array([8]));
+      await store.markOpaqueStateAuthenticationAmbiguous(moveSource, 1);
+      const movedAmbiguous = await store.compareAndMoveOpaqueState(moveSource, 2, moveDestination);
+      const movedAmbiguousSnapshot = await store.loadOpaqueState(moveDestination);
+      const deletedMovedAmbiguous = await store.compareAndDeleteOpaqueState(moveDestination, 2);
+
+      const sameRoomCreates = [];
+      for (let index = 0; index < 4; index += 1) {
+        sameRoomCreates.push(await store.createProvisionalOpaqueState(
+          await derive(`state-same-${index}`), scope, new Uint8Array([10 + index]),
+        ));
+      }
+      const sameRoomOverflowKey = await derive("state-same-overflow");
+      const sameRoomOverflow = await store.createProvisionalOpaqueState(
+        sameRoomOverflowKey, scope, new Uint8Array([20]),
+      );
+
+      const globalCreates = [];
+      for (let index = 0; index < 12; index += 1) {
+        globalCreates.push(await store.createProvisionalOpaqueState(
+          await derive(`state-global-${index}`),
+          await derive(`scope-global-${index}`),
+          new Uint8Array([30 + index]),
+        ));
+      }
+      const globalOverflowKey = await derive("state-global-overflow");
+      const globalOverflow = await store.createProvisionalOpaqueState(
+        globalOverflowKey,
+        await derive("scope-global-overflow"),
+        new Uint8Array([99]),
+      );
+      const establishedSnapshot = await store.loadOpaqueState(firstKey);
+      const preservedAmbiguous = await Promise.all(sameRoomCreates.map(async (_entry, index) =>
+        store.loadOpaqueState(await derive(`state-same-${index}`))));
+      const rejectedKeysWereNotWritten = await store.loadOpaqueState(sameRoomOverflowKey) === null &&
+        await store.loadOpaqueState(globalOverflowKey) === null;
+      await store.close();
+      return {
+        first,
+        deleted,
+        recreated,
+        ambiguous,
+        ambiguousAgain,
+        ambiguousLifecycle: ambiguousSnapshot?.lifecycle,
+        established,
+        duplicateAfterEstablish,
+        movedAmbiguous,
+        movedAmbiguousLifecycle: movedAmbiguousSnapshot?.lifecycle,
+        deletedMovedAmbiguous,
+        sameRoomCreates,
+        sameRoomOverflow,
+        globalCreates,
+        globalOverflow,
+        establishedSnapshot: establishedSnapshot && {
+          revision: establishedSnapshot.revision,
+          state: [...establishedSnapshot.state],
+        },
+        preservedAmbiguous: preservedAmbiguous.every(Boolean),
+        rejectedKeysWereNotWritten,
+      };
+    }, { databaseName });
+
+    expect(result.first).toEqual({ committed: true, revision: 1 });
+    expect(result.deleted).toEqual({ erased: true, revision: 1 });
+    expect(result.recreated).toEqual({ committed: true, revision: 1 });
+    expect(result.ambiguous).toEqual({ committed: true, revision: 2 });
+    expect(result.ambiguousAgain).toEqual({ committed: true, revision: 2 });
+    expect(result.ambiguousLifecycle).toBe("authentication-ambiguous");
+    expect(result.established).toEqual({ committed: true, revision: 3 });
+    expect(result.duplicateAfterEstablish).toEqual({
+      committed: false, reason: "revision-conflict", currentRevision: 3,
+    });
+    expect(result.movedAmbiguous).toEqual({ moved: true, revision: 2 });
+    expect(result.movedAmbiguousLifecycle).toBe("authentication-ambiguous");
+    expect(result.deletedMovedAmbiguous).toEqual({ erased: true, revision: 2 });
+    expect(result.sameRoomCreates).toEqual(Array(4).fill({ committed: true, revision: 1 }));
+    expect(result.sameRoomOverflow).toEqual({
+      committed: false, reason: "provisional-saturated", currentRevision: null,
+    });
+    expect(result.globalCreates).toEqual(Array(12).fill({ committed: true, revision: 1 }));
+    expect(result.globalOverflow).toEqual({
+      committed: false, reason: "provisional-saturated", currentRevision: null,
+    });
+    expect(result.establishedSnapshot).toEqual({ revision: 3, state: [2] });
+    expect(result.preservedAmbiguous).toBe(true);
+    expect(result.rejectedKeysWereNotWritten).toBe(true);
   }, 30_000);
 
   it("fails closed for unavailable, corrupt, saturated, and transaction-failing storage", async () => {

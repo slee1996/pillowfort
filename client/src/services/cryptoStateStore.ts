@@ -9,6 +9,9 @@ const ROOM_INSTANCE_RE = /^pfri1_[A-Za-z0-9_-]{43}$/;
 const SECURE_ROOM_INSTANCE_V4_RE = /^[A-Za-z0-9_-]{21}[AQgw]$/;
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_OPAQUE_STATE_BYTES = 8 * 1024 * 1024;
+const MAX_PROVISIONAL_STATES_PER_ROOM = 4;
+const MAX_PROVISIONAL_STATES_GLOBAL = 16;
+const PROVISIONAL_STATE_REGISTRY_KEY = "provisional-state-registry-v1";
 const MAX_LEGACY_LEDGER_BYTES = 2_000_000;
 const MAX_LEGACY_ENTRIES = 10_000;
 
@@ -59,15 +62,22 @@ export interface OpaqueCryptoStateSnapshot {
   revision: number;
   state: Uint8Array;
   updatedAt: number;
+  roomScope?: string;
+  lifecycle?: "provisional" | "authentication-ambiguous" | "established";
 }
 
 export type OpaqueCryptoStateCommitResult =
   | { committed: true; revision: number }
-  | { committed: false; reason: "revision-conflict"; currentRevision: number | null };
+  | { committed: false; reason: "revision-conflict" | "provisional-saturated"; currentRevision: number | null };
 
 export type OpaqueCryptoStateEraseResult =
   | { erased: true; revision: number }
   | { erased: false; reason: "revision-conflict"; currentRevision: number | null };
+
+export type OpaqueCryptoStateMoveResult =
+  | { moved: true; revision: number }
+  | { moved: false; reason: "source-revision-conflict"; currentRevision: number | null }
+  | { moved: false; reason: "destination-exists"; currentRevision: number };
 
 export interface LegacyReplayMigrationInput {
   roomId: string;
@@ -95,6 +105,8 @@ interface OpaqueCryptoStateRecord {
   revision: number;
   state: ArrayBuffer;
   updatedAt: number;
+  roomScope?: string;
+  lifecycle?: "provisional" | "authentication-ambiguous" | "established";
 }
 
 interface MigrationRecord {
@@ -105,6 +117,14 @@ interface MigrationRecord {
   sourceVersion: 1;
   importedEntries: number;
   migratedAt: number;
+}
+
+interface ProvisionalStateRegistryRecord {
+  recordVersion: 1;
+  kind: "provisional-state-registry";
+  key: typeof PROVISIONAL_STATE_REGISTRY_KEY;
+  entries: Array<{ roomScope: string; stateKey: string; createdAt: number }>;
+  updatedAt: number;
 }
 
 interface LegacyReplayEntry {
@@ -230,9 +250,14 @@ function validateReplayRecord(value: unknown, key: string, roomInstance: string)
 }
 
 function validateOpaqueStateRecord(value: unknown, roomInstance: string): OpaqueCryptoStateRecord {
+  const hasScopedMetadata = isPlainRecord(value) &&
+    Object.prototype.hasOwnProperty.call(value, "roomScope");
   if (
     !isPlainRecord(value)
-    || !ownKeysExactly(value, ["recordVersion", "kind", "roomInstance", "revision", "state", "updatedAt"])
+    || !(ownKeysExactly(value, ["recordVersion", "kind", "roomInstance", "revision", "state", "updatedAt"]) ||
+      ownKeysExactly(value, [
+        "recordVersion", "kind", "roomInstance", "revision", "state", "updatedAt", "roomScope", "lifecycle",
+      ]))
     || value.recordVersion !== RECORD_VERSION
     || value.kind !== "opaque-state"
     || value.roomInstance !== roomInstance
@@ -242,6 +267,10 @@ function validateOpaqueStateRecord(value: unknown, roomInstance: string): Opaque
     || value.state.byteLength < 1
     || value.state.byteLength > MAX_OPAQUE_STATE_BYTES
     || !validTimestamp(value.updatedAt)
+    || (hasScopedMetadata &&
+      (typeof value.roomScope !== "string" || !ROOM_INSTANCE_RE.test(value.roomScope) ||
+        (value.lifecycle !== "provisional" && value.lifecycle !== "authentication-ambiguous" &&
+          value.lifecycle !== "established")))
   ) {
     throw new CryptoStateStoreError("corrupt-record", "invalid persisted cryptographic state record");
   }
@@ -250,6 +279,33 @@ function validateOpaqueStateRecord(value: unknown, roomInstance: string): Opaque
 
 function migrationKey(roomInstance: string): string {
   return `legacy-replay-v1:${roomInstance}`;
+}
+
+function validateProvisionalStateRegistryRecord(value: unknown): ProvisionalStateRegistryRecord {
+  if (
+    !isPlainRecord(value) ||
+    !ownKeysExactly(value, ["recordVersion", "kind", "key", "entries", "updatedAt"]) ||
+    value.recordVersion !== RECORD_VERSION || value.kind !== "provisional-state-registry" ||
+    value.key !== PROVISIONAL_STATE_REGISTRY_KEY || !Array.isArray(value.entries) ||
+    value.entries.length > MAX_PROVISIONAL_STATES_GLOBAL ||
+    value.entries.some((candidate) => !isPlainRecord(candidate) ||
+      !ownKeysExactly(candidate, ["roomScope", "stateKey", "createdAt"]) ||
+      typeof candidate.roomScope !== "string" || !ROOM_INSTANCE_RE.test(candidate.roomScope) ||
+      typeof candidate.stateKey !== "string" || !ROOM_INSTANCE_RE.test(candidate.stateKey) ||
+      candidate.stateKey === candidate.roomScope || !validTimestamp(candidate.createdAt)) ||
+    new Set(value.entries.map((candidate) => (candidate as { stateKey: string }).stateKey)).size !==
+      value.entries.length ||
+    !validTimestamp(value.updatedAt)
+  ) {
+    throw new CryptoStateStoreError("corrupt-record", "invalid provisional cryptographic state registry");
+  }
+  const record = value as unknown as ProvisionalStateRegistryRecord;
+  const counts = new Map<string, number>();
+  for (const entry of record.entries) counts.set(entry.roomScope, (counts.get(entry.roomScope) || 0) + 1);
+  if ([...counts.values()].some((count) => count > MAX_PROVISIONAL_STATES_PER_ROOM)) {
+    throw new CryptoStateStoreError("corrupt-record", "provisional room state registry is saturated");
+  }
+  return record;
 }
 
 function validateMigrationRecord(value: unknown, roomInstance: string): MigrationRecord {
@@ -527,6 +583,10 @@ export class CryptoStateStore {
         revision: record.revision,
         state: new Uint8Array(record.state.slice(0)),
         updatedAt: record.updatedAt,
+        ...(record.roomScope && record.lifecycle ? {
+          roomScope: record.roomScope,
+          lifecycle: record.lifecycle,
+        } : {}),
       };
     } catch (error) {
       abortQuietly(transaction);
@@ -584,8 +644,217 @@ export class CryptoStateStore {
         revision,
         state: copiedState,
         updatedAt: this.validNow(),
+        ...(prior?.roomScope && prior.lifecycle ? {
+          roomScope: prior.roomScope,
+          lifecycle: prior.lifecycle,
+        } : {}),
       };
       await requestResult(store.put(record));
+      await done;
+      return { committed: true, revision };
+    } catch (error) {
+      abortQuietly(transaction);
+      await done.catch(() => {});
+      throw transactionError(error);
+    }
+  }
+
+  /** Creates a bounded, room-scoped provisional identity in one transaction. */
+  async createProvisionalOpaqueState(
+    roomInstance: string,
+    roomScope: string,
+    state: Uint8Array,
+  ): Promise<OpaqueCryptoStateCommitResult> {
+    validateRoomInstance(roomInstance);
+    validateRoomInstance(roomScope);
+    if (roomInstance === roomScope || !(state instanceof Uint8Array) ||
+        state.byteLength < 1 || state.byteLength > MAX_OPAQUE_STATE_BYTES) {
+      throw new CryptoStateStoreError("invalid-input", "invalid provisional cryptographic state payload");
+    }
+
+    const database = await this.database();
+    let transaction: IDBTransaction;
+    try {
+      transaction = database.transaction([CRYPTO_STATE_STORE, METADATA_STORE], "readwrite", { durability: "strict" });
+    } catch (error) {
+      throw transactionError(error);
+    }
+    const done = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore(CRYPTO_STATE_STORE);
+      const metadata = transaction.objectStore(METADATA_STORE);
+      const priorCandidate = await requestResult(store.get(roomInstance));
+      const prior = priorCandidate === undefined ? null : validateOpaqueStateRecord(priorCandidate, roomInstance);
+      if (prior) {
+        await done;
+        return { committed: false, reason: "revision-conflict", currentRevision: prior.revision };
+      }
+
+      const registryCandidate = await requestResult(metadata.get(PROVISIONAL_STATE_REGISTRY_KEY));
+      const registry = registryCandidate === undefined
+        ? null
+        : validateProvisionalStateRegistryRecord(registryCandidate);
+      let entries = registry?.entries.map((entry) => ({ ...entry })) ?? [];
+      // A prior atomic delete may have come from an older client without the
+      // registry update. Reconcile only the exact absent destination; never
+      // infer that a different provisional identity was rejected.
+      entries = entries.filter((entry) => entry.stateKey !== roomInstance);
+      const now = this.validNow();
+      // Never evict a different provisional identity here: the relay may have
+      // accepted it before its response was lost, and this transaction holds
+      // only the current room's Web Lock. Definitive auth rejection/explicit
+      // abandon removes entries; otherwise the bounded registry fails closed.
+      if (entries.filter((entry) => entry.roomScope === roomScope).length >= MAX_PROVISIONAL_STATES_PER_ROOM ||
+          entries.length >= MAX_PROVISIONAL_STATES_GLOBAL) {
+        await done;
+        return { committed: false, reason: "provisional-saturated", currentRevision: null };
+      }
+
+      const record: OpaqueCryptoStateRecord = {
+        recordVersion: RECORD_VERSION,
+        kind: "opaque-state",
+        roomInstance,
+        revision: 1,
+        state: state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer,
+        updatedAt: now,
+        roomScope,
+        lifecycle: "provisional",
+      };
+      await requestResult(store.put(record));
+      entries.push({ roomScope, stateKey: roomInstance, createdAt: now });
+      await requestResult(metadata.put({
+        recordVersion: RECORD_VERSION,
+        kind: "provisional-state-registry",
+        key: PROVISIONAL_STATE_REGISTRY_KEY,
+        entries,
+        updatedAt: now,
+      } satisfies ProvisionalStateRegistryRecord));
+      await done;
+      return { committed: true, revision: 1 };
+    } catch (error) {
+      abortQuietly(transaction);
+      await done.catch(() => {});
+      throw transactionError(error);
+    }
+  }
+
+  /**
+   * Durably records that an authentication frame is about to leave the
+   * browser. The registry entry remains bounded until the relay later proves
+   * acceptance or a current-attempt rejection proves non-commit.
+   */
+  async markOpaqueStateAuthenticationAmbiguous(
+    roomInstance: string,
+    expectedRevision: number,
+  ): Promise<OpaqueCryptoStateCommitResult> {
+    validateRoomInstance(roomInstance);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+      throw new CryptoStateStoreError("invalid-input", "invalid ambiguous-state revision");
+    }
+    const database = await this.database();
+    let transaction: IDBTransaction;
+    try {
+      transaction = database.transaction([CRYPTO_STATE_STORE, METADATA_STORE], "readwrite", { durability: "strict" });
+    } catch (error) {
+      throw transactionError(error);
+    }
+    const done = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore(CRYPTO_STATE_STORE);
+      const metadata = transaction.objectStore(METADATA_STORE);
+      const candidate = await requestResult(store.get(roomInstance));
+      const prior = candidate === undefined ? null : validateOpaqueStateRecord(candidate, roomInstance);
+      if (prior?.revision !== expectedRevision) {
+        await done;
+        return {
+          committed: false,
+          reason: "revision-conflict",
+          currentRevision: prior?.revision ?? null,
+        };
+      }
+      if (!prior.roomScope || prior.lifecycle === "established" ||
+          prior.lifecycle === "authentication-ambiguous") {
+        await done;
+        return { committed: true, revision: prior.revision };
+      }
+      const registryCandidate = await requestResult(metadata.get(PROVISIONAL_STATE_REGISTRY_KEY));
+      const registry = registryCandidate === undefined
+        ? null
+        : validateProvisionalStateRegistryRecord(registryCandidate);
+      if (!registry || !registry.entries.some((entry) =>
+        entry.stateKey === roomInstance && entry.roomScope === prior.roomScope)) {
+        throw new CryptoStateStoreError("corrupt-record", "unresolved state is absent from its registry");
+      }
+      const revision = prior.revision + 1;
+      await requestResult(store.put({
+        ...prior,
+        revision,
+        lifecycle: "authentication-ambiguous",
+        updatedAt: this.validNow(),
+      } satisfies OpaqueCryptoStateRecord));
+      await done;
+      return { committed: true, revision };
+    } catch (error) {
+      abortQuietly(transaction);
+      await done.catch(() => {});
+      throw transactionError(error);
+    }
+  }
+
+  /** Marks a relay-authenticated identity as ineligible for provisional GC. */
+  async markOpaqueStateEstablished(
+    roomInstance: string,
+    expectedRevision: number,
+  ): Promise<OpaqueCryptoStateCommitResult> {
+    validateRoomInstance(roomInstance);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+      throw new CryptoStateStoreError("invalid-input", "invalid established-state revision");
+    }
+    const database = await this.database();
+    let transaction: IDBTransaction;
+    try {
+      transaction = database.transaction([CRYPTO_STATE_STORE, METADATA_STORE], "readwrite", { durability: "strict" });
+    } catch (error) {
+      throw transactionError(error);
+    }
+    const done = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore(CRYPTO_STATE_STORE);
+      const metadata = transaction.objectStore(METADATA_STORE);
+      const candidate = await requestResult(store.get(roomInstance));
+      const prior = candidate === undefined ? null : validateOpaqueStateRecord(candidate, roomInstance);
+      if (prior?.revision !== expectedRevision) {
+        await done;
+        return {
+          committed: false,
+          reason: "revision-conflict",
+          currentRevision: prior?.revision ?? null,
+        };
+      }
+      if (!prior.roomScope || prior.lifecycle === "established") {
+        await done;
+        return { committed: true, revision: prior.revision };
+      }
+      const registryCandidate = await requestResult(metadata.get(PROVISIONAL_STATE_REGISTRY_KEY));
+      const registry = registryCandidate === undefined
+        ? null
+        : validateProvisionalStateRegistryRecord(registryCandidate);
+      if (!registry || !registry.entries.some((entry) =>
+        entry.stateKey === roomInstance && entry.roomScope === prior.roomScope)) {
+        throw new CryptoStateStoreError("corrupt-record", "provisional state is absent from its registry");
+      }
+      const revision = prior.revision + 1;
+      await requestResult(store.put({
+        ...prior,
+        revision,
+        lifecycle: "established",
+        updatedAt: this.validNow(),
+      } satisfies OpaqueCryptoStateRecord));
+      await requestResult(metadata.put({
+        ...registry,
+        entries: registry.entries.filter((entry) => entry.stateKey !== roomInstance),
+        updatedAt: this.validNow(),
+      } satisfies ProvisionalStateRegistryRecord));
       await done;
       return { committed: true, revision };
     } catch (error) {
@@ -612,13 +881,14 @@ export class CryptoStateStore {
     const database = await this.database();
     let transaction: IDBTransaction;
     try {
-      transaction = database.transaction(CRYPTO_STATE_STORE, "readwrite", { durability: "strict" });
+      transaction = database.transaction([CRYPTO_STATE_STORE, METADATA_STORE], "readwrite", { durability: "strict" });
     } catch (error) {
       throw transactionError(error);
     }
     const done = transactionDone(transaction);
     try {
       const store = transaction.objectStore(CRYPTO_STATE_STORE);
+      const metadata = transaction.objectStore(METADATA_STORE);
       const candidate = await requestResult(store.get(roomInstance));
       const prior = candidate === undefined ? null : validateOpaqueStateRecord(candidate, roomInstance);
       const currentRevision = prior?.revision ?? null;
@@ -626,9 +896,126 @@ export class CryptoStateStore {
         await done;
         return { erased: false, reason: "revision-conflict", currentRevision };
       }
+      if (prior?.roomScope && prior.lifecycle !== "established") {
+        const registryCandidate = await requestResult(metadata.get(PROVISIONAL_STATE_REGISTRY_KEY));
+        const registry = registryCandidate === undefined
+          ? null
+          : validateProvisionalStateRegistryRecord(registryCandidate);
+        if (!registry || !registry.entries.some((entry) =>
+          entry.stateKey === roomInstance && entry.roomScope === prior.roomScope)) {
+          throw new CryptoStateStoreError("corrupt-record", "unresolved state is absent from its registry");
+        }
+        await requestResult(metadata.put({
+          ...registry,
+          entries: registry.entries.filter((entry) => entry.stateKey !== roomInstance),
+          updatedAt: this.validNow(),
+        } satisfies ProvisionalStateRegistryRecord));
+      }
       await requestResult(store.delete(roomInstance));
       await done;
       return { erased: true, revision: expectedRevision };
+    } catch (error) {
+      abortQuietly(transaction);
+      await done.catch(() => {});
+      throw transactionError(error);
+    }
+  }
+
+  /**
+   * Atomically migrates an authenticated opaque snapshot to a new key. The
+   * caller must authenticate/decrypt the source before requesting this move.
+   * Requiring the destination to be absent prevents a legacy migration from
+   * silently choosing between divergent durable identities.
+   */
+  async compareAndMoveOpaqueState(
+    sourceRoomInstance: string,
+    expectedSourceRevision: number,
+    destinationRoomInstance: string,
+    destinationRoomScope?: string,
+  ): Promise<OpaqueCryptoStateMoveResult> {
+    validateRoomInstance(sourceRoomInstance);
+    validateRoomInstance(destinationRoomInstance);
+    if (destinationRoomScope !== undefined) validateRoomInstance(destinationRoomScope);
+    if (sourceRoomInstance === destinationRoomInstance ||
+        !Number.isSafeInteger(expectedSourceRevision) || expectedSourceRevision < 1) {
+      throw new CryptoStateStoreError("invalid-input", "invalid opaque cryptographic state migration");
+    }
+
+    const database = await this.database();
+    let transaction: IDBTransaction;
+    try {
+      transaction = database.transaction([CRYPTO_STATE_STORE, METADATA_STORE], "readwrite", { durability: "strict" });
+    } catch (error) {
+      throw transactionError(error);
+    }
+    const done = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore(CRYPTO_STATE_STORE);
+      const metadata = transaction.objectStore(METADATA_STORE);
+      const sourceCandidate = await requestResult(store.get(sourceRoomInstance));
+      const source = sourceCandidate === undefined
+        ? null
+        : validateOpaqueStateRecord(sourceCandidate, sourceRoomInstance);
+      if (source?.revision !== expectedSourceRevision) {
+        await done;
+        return {
+          moved: false,
+          reason: "source-revision-conflict",
+          currentRevision: source?.revision ?? null,
+        };
+      }
+      const destinationCandidate = await requestResult(store.get(destinationRoomInstance));
+      const destination = destinationCandidate === undefined
+        ? null
+        : validateOpaqueStateRecord(destinationCandidate, destinationRoomInstance);
+      if (destination) {
+        await done;
+        return {
+          moved: false,
+          reason: "destination-exists",
+          currentRevision: destination.revision,
+        };
+      }
+      if (source.roomScope && destinationRoomScope && source.roomScope !== destinationRoomScope) {
+        throw new CryptoStateStoreError("invalid-input", "opaque state migration changed its room scope");
+      }
+
+      const migrated: OpaqueCryptoStateRecord = {
+        recordVersion: RECORD_VERSION,
+        kind: "opaque-state",
+        roomInstance: destinationRoomInstance,
+        revision: source.revision,
+        state: source.state.slice(0),
+        updatedAt: source.updatedAt,
+        ...(source.roomScope && source.lifecycle ? {
+          roomScope: source.roomScope,
+          lifecycle: source.lifecycle,
+        } : destinationRoomScope ? {
+          roomScope: destinationRoomScope,
+          lifecycle: "established" as const,
+        } : {}),
+      };
+      if (source.roomScope && source.lifecycle !== "established") {
+        const registryCandidate = await requestResult(metadata.get(PROVISIONAL_STATE_REGISTRY_KEY));
+        const registry = registryCandidate === undefined
+          ? null
+          : validateProvisionalStateRegistryRecord(registryCandidate);
+        if (!registry || !registry.entries.some((entry) =>
+          entry.stateKey === sourceRoomInstance && entry.roomScope === source.roomScope)) {
+          throw new CryptoStateStoreError("corrupt-record", "migrated unresolved state is absent from its registry");
+        }
+        await requestResult(metadata.put({
+          ...registry,
+          entries: registry.entries.map((entry) => entry.stateKey === sourceRoomInstance
+            ? { ...entry, stateKey: destinationRoomInstance }
+            : entry),
+          updatedAt: this.validNow(),
+        } satisfies ProvisionalStateRegistryRecord));
+      }
+      await requestResult(store.put(migrated));
+      await requestResult(store.delete(sourceRoomInstance));
+      await done;
+      return { moved: true, revision: source.revision };
     } catch (error) {
       abortQuietly(transaction);
       await done.catch(() => {});

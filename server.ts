@@ -1,7 +1,7 @@
 import { isRpsPick, rpsWinner, tttWinner, voteHasMajority, type RpsPick } from "./src/game";
 import { analyticsLogLine, readAnalyticsEvent } from "./src/analytics";
 import { constantTimeFortPassClaimHashEqual, customRoomCodeAvailability, FORT_PASS_RESERVATION_MS, fortPassAllowsCustomRoomCode, fortPassAllowsRoomTheme, fortPassClaimHash, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, isGeneratedFreeRoomId, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeFortPassEntitlement, normalizeRoomId, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./src/entitlements";
-import { checkoutPublicOrigin, isJsonRequest, isStrictSameOriginRequest } from "./src/httpBoundary";
+import { checkoutPublicOrigin, hasOnlyAllowedSearchParameters, isJsonRequest, isStrictSameOriginRequest } from "./src/httpBoundary";
 import { readByteLimitedText } from "./src/requestBody";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./src/security";
 import { createFortPassStripeCheckoutSession, createStripeFulfillmentClaimToken, normalizeStripeHostedCheckoutUrl, normalizeStripeRedemptionRequest, resolveFortPassCheckoutSession, resolveFortPassEntitlementFromStripeEvent, resolveFortPassRevocationFromStripeEvent, stripeFulfillmentSessionKey, stripeRevocationEventKey, verifyStripeWebhookSignature, type StripeFortPassRevocationReason } from "./src/stripe";
@@ -3226,6 +3226,10 @@ async function handleHttp(
     if (!isStrictSameOriginRequest(req)) {
       logRateLimitedOpsEvent("ws-local", "ws_rejected", { reason: "bad_origin", surface: "local", status: 403 });
       return new Response("forbidden", { status: 403 });
+    }
+    if (!hasOnlyAllowedSearchParameters(url, ["room", "protocol"])) {
+      logRateLimitedOpsEvent("ws-local", "ws_rejected", { reason: "unexpected_parameters", surface: "local", status: 400 });
+      return new Response("invalid websocket parameters", { status: 400 });
     }
     const ip = server.requestIP(req)?.address || "unknown";
     if (url.searchParams.getAll("room").length > 1) {

@@ -6,13 +6,10 @@ logs without storing room IDs, passwords, names, message text, or checkout IDs.
 
 ## Weekly Command
 
-Save a Cloudflare log sample, then run:
-
-```bash
-npm run metrics:report -- cloudflare-tail.log
-```
-
-Or pipe logs directly:
+Never save a raw Cloudflare tail: authorized real-time events can include the
+request URL even though automatic invocation-log persistence is disabled. Pipe
+the live stream directly into the report, which retains only sanitized
+`[analytics]` event bodies and aggregate counts:
 
 ```bash
 wrangler tail pillowfort --format pretty | npm run metrics:report --
@@ -56,5 +53,5 @@ and operational events.
   in-room game prompt and default game choices.
 - If Fort Pass checkouts start but do not return, inspect Stripe abandonment,
   webhook delivery, and setup copy.
-- If room joins fail frequently with `wrong_password`, make invite/password
-  copy clearer without weakening the password model.
+- Review password usability through opt-in user feedback, not room-scoped
+  failure logs; the WebSocket path intentionally emits no provider logs.

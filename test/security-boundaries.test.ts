@@ -538,6 +538,13 @@ describe("legacy local-server security and fairness randomness", () => {
       expect(whitespaceSocket.status).toBe(400);
       expect(await whitespaceSocket.text()).toBe("invalid room");
 
+      const secretQuerySocket = await fetch(
+        `${origin}/ws?room=party-1&protocol=legacy&password=not-a-real-secret`,
+        { headers: { origin } },
+      );
+      expect(secretQuerySocket.status).toBe(400);
+      expect(await secretQuerySocket.text()).toBe("invalid websocket parameters");
+
       const canonicalSocket = await fetch(`${origin}/ws?room=party-1&protocol=legacy`, { headers: { origin } });
       expect(canonicalSocket.status).toBe(400);
       expect(await canonicalSocket.text()).toBe("upgrade failed");

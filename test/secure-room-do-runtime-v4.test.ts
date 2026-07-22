@@ -801,6 +801,12 @@ describe("protocol-v4 Durable Object runtime", () => {
       expect(response.status).toBe(426);
     }
 
+    const secretQuery = await room.fetch(new Request(
+      "https://pillowfort.invalid/ws?room=boundroom&protocol=4&password=not-a-real-secret",
+      { headers: { Upgrade: "websocket" } },
+    ));
+    expect(secretQuery.status).toBe(400);
+
     const response = await room.fetch(new Request(
       "https://pillowfort.invalid/ws?room=otherroom&protocol=4",
       { headers: { Upgrade: "websocket" } },

@@ -218,6 +218,7 @@ async function setupRoom(page: Page): Promise<string> {
   await page.fill("#name-input", "luna");
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
+  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");

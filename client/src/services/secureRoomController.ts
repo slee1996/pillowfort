@@ -14,6 +14,8 @@ import {
 } from "../../../src/roomInvitationMemberBindingV4";
 import {
   MAX_SECURE_WEBSOCKET_FRAME_BYTES,
+  SECURE_ROOM_ID_BYTES,
+  canonicalBase64UrlByteLength,
   type SecureMemberHelloV4,
   type SecureRelayEnvelopeV4,
 } from "../../../src/protocolV4";
@@ -73,8 +75,16 @@ import {
   resetSecureRoomUiV4,
   secureDeviceIdForNameV4,
 } from "./secureUiV4";
+import {
+  deriveProtocolRoomSecret,
+  isGeneratedRoomSecret,
+  validateCustomRoomSecret,
+  validateRoomSecret,
+} from "./roomSecret";
 
 const UTF8 = new TextEncoder();
+const RECOVERY_SESSION_KEY = "pillowfort:secure-room-recovery:v1";
+const RECOVERY_MAX_AGE_MS = 24 * 60 * 60_000;
 const MAX_QUEUED_ACTIONS = 64;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 const VOTE_DURATION_MS = 30_000;
@@ -90,7 +100,7 @@ export const SECURE_PCS_UPDATE_INTERVAL_MS = 15 * 60_000;
 export type SecureRoomConnectResult =
   | { status: "connected"; roomInstance: string }
   | Exclude<RoomCryptoLockAcquireResult, { status: "acquired" }>
-  | { status: "failed"; reason: "invalid-input" | "authentication-failed" | "socket-failed" | "aborted" };
+  | { status: "failed"; reason: "invalid-input" | "authentication-failed" | "rate-limited" | "unavailable" | "recovery-required" | "recovery-credential-mismatch" | "socket-failed" | "aborted" };
 
 export interface SecureRoomStartOptions {
   roomId: string;
@@ -103,12 +113,73 @@ export interface SecureRoomStartOptions {
 
 interface SessionConfig {
   initialMode: "setup" | "join";
+  /** An earlier authentication frame may have committed; never mint a replacement identity. */
+  recoveryOnly: boolean;
   roomId: string;
   roomSecret: string;
+  roomSecretResolvedFor: string | null;
   displayName: string;
   fortPassSessionId?: string;
   fortPassClaimSecret?: string;
+  /** Exact protocol instance known before setup or learned from the relay before join authentication. */
+  roomInstance: string | null;
   setupRoomInstance: string | null;
+}
+
+export interface SecureRoomRecoveryHint {
+  mode: "setup" | "join";
+  roomId: string;
+  displayName: string;
+}
+
+interface SecureRoomRecoveryContext extends SecureRoomRecoveryHint {
+  v: 1;
+  roomInstance: string;
+  savedAt: number;
+}
+
+function recoveryStorage(): Storage | null {
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function loadRecoveryContext(): SecureRoomRecoveryContext | null {
+  const storage = recoveryStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(RECOVERY_SESSION_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!plainRecord(value) || Object.keys(value).sort().join(",") !==
+        "displayName,mode,roomId,roomInstance,savedAt,v" || value.v !== 1 ||
+        (value.mode !== "setup" && value.mode !== "join") ||
+        typeof value.roomId !== "string" || normalizeRoomId(value.roomId) !== value.roomId ||
+        typeof value.displayName !== "string" || !isSecureDisplayNameV4(value.displayName) ||
+        !Number.isSafeInteger(value.savedAt) || (value.savedAt as number) < 0 ||
+        Date.now() < (value.savedAt as number) || Date.now() - (value.savedAt as number) > RECOVERY_MAX_AGE_MS ||
+        canonicalBase64UrlByteLength(value.roomInstance) !== SECURE_ROOM_ID_BYTES) {
+      storage.removeItem(RECOVERY_SESSION_KEY);
+      return null;
+    }
+    return value as unknown as SecureRoomRecoveryContext;
+  } catch {
+    try { storage.removeItem(RECOVERY_SESSION_KEY); } catch {}
+    return null;
+  }
+}
+
+function persistRecoveryContext(context: SecureRoomRecoveryContext | null): void {
+  const storage = recoveryStorage();
+  if (!storage) return;
+  try {
+    if (context) storage.setItem(RECOVERY_SESSION_KEY, JSON.stringify(context));
+    else storage.removeItem(RECOVERY_SESSION_KEY);
+  } catch {
+    // Recovery remains available for this page lifetime when storage is blocked.
+  }
 }
 
 interface GrantIntent {
@@ -221,6 +292,20 @@ export class SecureRoomController {
   /** Monotonic identity for a single WebSocket within a controller session. */
   private socketEpoch = 0;
   private authenticated = false;
+  /** True only for local MLS state that has never completed relay authentication. */
+  private discardEngineOnAuthenticationFailure = false;
+  /** The relay may have durably committed the most recently sent auth frame. */
+  private authenticationMayHaveCommitted = false;
+  /** One-shot recovery override for a locally-active join that is still pending at the relay. */
+  private nextAuthenticationMode: "join" | "resume" | null = null;
+  /** Non-secret tab-scoped pointer needed to retry an ambiguous authentication. */
+  private recoveryContext: SecureRoomRecoveryContext | null = loadRecoveryContext();
+  private recoverySetup: { roomId: string; roomInstance: string } | null =
+    this.recoveryContext?.mode === "setup"
+      ? { roomId: this.recoveryContext.roomId, roomInstance: this.recoveryContext.roomInstance }
+      : null;
+  /** Keeps Setup/Join mounted until a transmitted authentication attempt is resolved. */
+  private unresolvedAuthentication = false;
   private authenticatedMode: "setup" | "join" | "resume" | null = null;
   private challengeHandled = false;
   private stopped = true;
@@ -271,6 +356,15 @@ export class SecureRoomController {
     return this.engine;
   }
 
+  get pendingRecovery(): SecureRoomRecoveryHint | null {
+    const recovery = this.recoveryContext;
+    return recovery ? {
+      mode: recovery.mode,
+      roomId: recovery.roomId,
+      displayName: recovery.displayName,
+    } : null;
+  }
+
   async setup(options: SecureRoomStartOptions): Promise<SecureRoomConnectResult> {
     return this.start("setup", options);
   }
@@ -291,24 +385,108 @@ export class SecureRoomController {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) this.scheduleReconnect();
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
+    if (this.unresolvedAuthentication || this.authenticationMayHaveCommitted ||
+        this.recoveryContext !== null || !!this.engine?.isAuthenticationAmbiguous) {
+      await this.cancelPendingConnection();
+      return;
+    }
     this.pendingHandshake?.settle({ status: "failed", reason: "aborted" });
     this.pendingHandshake = null;
     this.generation += 1;
     this.stopped = true;
     this.authenticated = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.recoverySetup = null;
+    this.recoveryContext = null;
+    persistRecoveryContext(null);
+    this.unresolvedAuthentication = false;
     this.clearReconnectTimer();
     this.closeSocket("disconnected");
     this.engine?.dispose();
     this.engine = null;
+    this.discardEngineOnAuthenticationFailure = false;
     this.releaseLease();
     this.config = null;
     this.clearTimers();
-    resetSecureRoomUiV4();
+    this.resetUiSession();
   }
 
-  replaceLockCoordinatorForTests(coordinator: RoomCryptoLockCoordinator): void {
-    this.disconnect();
+  /** Explicitly abandons only state first created by the in-flight handshake. */
+  async cancelPendingConnection(): Promise<boolean> {
+    const config = this.config;
+    this.pendingHandshake?.settle({ status: "failed", reason: "aborted" });
+    this.pendingHandshake = null;
+    this.generation += 1;
+    const cancelGeneration = this.generation;
+    this.stopped = true;
+    const wasAuthenticated = this.authenticated;
+    this.authenticated = false;
+    this.clearReconnectTimer();
+    this.closeSocket("secure room setup cancelled");
+    const engine = this.engine;
+    // Once an authentication frame is on the wire, a lost response cannot
+    // prove that the relay did not commit it. Preserve the recovery identity
+    // rather than stranding a room or a redeemed Fort Pass.
+    const recoveryRequired = this.unresolvedAuthentication || this.recoveryContext !== null ||
+      this.recoverySetup !== null ||
+      (!!engine && (engine.isAuthenticationAmbiguous ||
+        (engine.isProvisional && (this.authenticationMayHaveCommitted || wasAuthenticated))));
+    const discard = !!engine?.isProvisional && !recoveryRequired;
+    this.engine = null;
+    this.discardEngineOnAuthenticationFailure = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.unresolvedAuthentication = recoveryRequired;
+    this.config = null;
+    this.clearTimers();
+    this.resetUiSession();
+    // A crypto/create operation already in the serial queue observes the new
+    // generation and retires its own freshly-created artifact before return.
+    await this.serialQueue.catch(() => {});
+    let finalRecoveryRequired = recoveryRequired;
+    try {
+      if (engine && discard) {
+        try {
+          await engine.retire();
+        } catch (error) {
+          if (!(error instanceof SecureRoomEngineError && error.code === "retired")) {
+            finalRecoveryRequired = true;
+          }
+        }
+      }
+      if (finalRecoveryRequired) this.rememberRecoveryContext(config);
+      else this.clearRecoveryForCurrentConfig(config);
+      this.unresolvedAuthentication = finalRecoveryRequired;
+    } finally {
+      engine?.dispose();
+      if (this.generation === cancelGeneration) {
+        // An operation that had already passed the queue's generation gate may
+        // have completed captured-local UI/auth work while cancellation was
+        // awaiting it. Scrub once more at the serialization boundary without
+        // touching a newer session.
+        this.pendingHandshake = null;
+        this.authenticated = false;
+        this.authenticatedMode = null;
+        this.config = null;
+        this.disposeCurrentEngine();
+        this.discardEngineOnAuthenticationFailure = false;
+        this.authenticationMayHaveCommitted = false;
+        this.nextAuthenticationMode = null;
+        this.unresolvedAuthentication = finalRecoveryRequired;
+        this.nextAuthenticationMode = null;
+        this.closeSocket("secure room setup cancelled");
+        this.clearTimers();
+        this.resetUiSession();
+        this.releaseLease();
+      }
+    }
+    return !finalRecoveryRequired;
+  }
+
+  async replaceLockCoordinatorForTests(coordinator: RoomCryptoLockCoordinator): Promise<void> {
+    await this.disconnect();
     this.lockCoordinator.close();
     this.lockCoordinator = coordinator;
   }
@@ -319,25 +497,46 @@ export class SecureRoomController {
   ): Promise<SecureRoomConnectResult> {
     const roomId = normalizeRoomId(options.roomId);
     const displayName = options.displayName.normalize("NFC").trim();
+    const exactRecovery = this.recoveryContext?.mode === mode &&
+      this.recoveryContext.roomId === roomId && this.recoveryContext.displayName === displayName;
+    const roomSecret = mode === "setup" && !exactRecovery && !isGeneratedRoomSecret(options.roomSecret)
+      ? validateCustomRoomSecret(options.roomSecret, { context: [roomId || "", displayName] })
+      : validateRoomSecret(options.roomSecret);
     const hasFortPassSession = options.fortPassSessionId !== undefined;
     const hasFortPassClaim = options.fortPassClaimSecret !== undefined;
-    if (!roomId || roomId !== options.roomId || !isSecureDisplayNameV4(displayName) ||
+    if (!roomId || roomId !== options.roomId || !roomSecret.valid || !isSecureDisplayNameV4(displayName) ||
         (mode !== "setup" && (hasFortPassSession || hasFortPassClaim)) ||
         hasFortPassSession !== hasFortPassClaim ||
         (hasFortPassSession && (!/^[a-zA-Z0-9_:-]{1,128}$/u.test(options.fortPassSessionId!) ||
           !/^[a-f0-9]{64}$/u.test(options.fortPassClaimSecret!)))) {
       return { status: "failed", reason: "invalid-input" };
     }
-    this.disconnect();
+    if (this.recoveryContext &&
+        (this.recoveryContext.mode !== mode || this.recoveryContext.roomId !== roomId ||
+          this.recoveryContext.displayName !== displayName)) {
+      return { status: "failed", reason: "recovery-required" };
+    }
+    const priorConnectionResolved = await this.cancelPendingConnection();
+    if (!priorConnectionResolved && !exactRecovery) {
+      return { status: "failed", reason: "recovery-required" };
+    }
     const generation = ++this.generation;
+    const setupRoomInstance = mode === "setup"
+      ? this.recoverySetup?.roomId === roomId
+        ? this.recoverySetup.roomInstance
+        : randomSecureRoomIdV4(16)
+      : null;
     const config: SessionConfig = {
       initialMode: mode,
+      recoveryOnly: exactRecovery,
       roomId,
-      roomSecret: options.roomSecret,
+      roomSecret: roomSecret.secret,
+      roomSecretResolvedFor: null,
       displayName,
       ...(options.fortPassSessionId && { fortPassSessionId: options.fortPassSessionId }),
       ...(options.fortPassClaimSecret && { fortPassClaimSecret: options.fortPassClaimSecret }),
-      setupRoomInstance: mode === "setup" ? randomSecureRoomIdV4(16) : null,
+      roomInstance: setupRoomInstance ?? (exactRecovery ? this.recoveryContext!.roomInstance : null),
+      setupRoomInstance,
     };
 
     return new Promise<SecureRoomConnectResult>((resolve) => {
@@ -366,9 +565,12 @@ export class SecureRoomController {
         this.closeSocket("replaced secure room session");
         this.engine?.dispose();
         this.engine = null;
+        this.discardEngineOnAuthenticationFailure = false;
+        this.authenticationMayHaveCommitted = false;
+        this.nextAuthenticationMode = null;
         this.releaseLease();
         this.clearTimers();
-        resetSecureRoomUiV4();
+        this.resetUiSession();
         this.stopped = false;
         this.terminal = false;
         this.config = config;
@@ -426,13 +628,32 @@ export class SecureRoomController {
       // frame look stale when it reaches the queue (notably room retirement
       // and self-removal commits). Reconcile the close in the same queue so
       // every earlier message event is authenticated and applied first.
-      this.enqueue(() => {
+      this.enqueue(async () => {
         if (!this.isCurrentSocket(socket, generation, socketEpoch)) return;
+        const connectionWasAuthenticated = this.authenticated;
         this.socket = null;
         this.socketEpoch += 1;
         this.authenticated = false;
-        handshake?.settle({ status: "failed", reason: "socket-failed" });
-        if (!this.stopped && !this.terminal && this.lease?.isActive() && this.config) this.scheduleReconnect();
+        const canReconnect = !this.stopped && !this.terminal && this.lease?.isActive() && this.config;
+        if (!connectionWasAuthenticated && canReconnect && this.reconnectAttempts >= 3) {
+          if (handshake || this.pendingHandshake) {
+            const preserveRecovery = this.authenticationMayHaveCommitted ||
+              !!this.engine?.isAuthenticationAmbiguous;
+            await this.stopPendingConnection(
+              handshake,
+              { status: "failed", reason: preserveRecovery ? "recovery-required" : "socket-failed" },
+              preserveRecovery,
+            );
+          } else {
+            await this.protocolClose("authentication reconnect limit reached", "The secure connection could not recover. Try again.");
+          }
+          return;
+        }
+        if (canReconnect) {
+          this.scheduleReconnect();
+        } else {
+          handshake?.settle({ status: "failed", reason: "socket-failed" });
+        }
       }, generation);
     };
   }
@@ -454,7 +675,7 @@ export class SecureRoomController {
       } catch (error) {
         // A late failure from an obsolete room/session must never fail-close a
         // replacement room that now owns this controller.
-        if (generation === this.generation) this.failClosed(error);
+        if (generation === this.generation) await this.failClosed(error);
       } finally {
         this.executingGeneration = previousGeneration;
       }
@@ -474,14 +695,14 @@ export class SecureRoomController {
     try {
       value = JSON.parse(wire);
     } catch {
-      this.protocolClose("invalid JSON");
+      await this.protocolClose("invalid JSON");
       return;
     }
     if (!this.authenticated) {
       const challenge = parseSecureAuthChallengeFrameV4(value);
       if (challenge) {
         if (this.challengeHandled) {
-          this.protocolClose("duplicate authentication challenge");
+          await this.protocolClose("duplicate authentication challenge");
           return;
         }
         this.challengeHandled = true;
@@ -499,7 +720,7 @@ export class SecureRoomController {
         return;
       }
       if (!this.challengeHandled || this.authenticatedMode === null || response?.type !== "authenticated") {
-        this.protocolClose("invalid authentication frame");
+        await this.protocolClose("invalid authentication frame");
         return;
       }
       await this.handleServerFrame(response, handshake);
@@ -507,11 +728,11 @@ export class SecureRoomController {
     }
     const frame = parseSecureServerFrameV4(value);
     if (!frame) {
-      this.protocolClose("invalid secure server frame");
+      await this.protocolClose("invalid secure server frame");
       return;
     }
     if (frame.type === "authenticated") {
-      this.protocolClose("duplicate authentication response");
+      await this.protocolClose("duplicate authentication response");
       return;
     }
     await this.handleServerFrame(frame, handshake);
@@ -526,11 +747,47 @@ export class SecureRoomController {
     const config = this.config;
     if (!config) throw new Error("secure room configuration disappeared");
     const isBrandNewSetup = challenge.roomInstance === null;
+    const knownRoomInstance = canonicalBase64UrlByteLength(config.roomInstance) === SECURE_ROOM_ID_BYTES
+      ? config.roomInstance
+      : null;
+    const recoveryMayHaveCommitted = config.recoveryOnly || this.recoveryContext !== null ||
+      this.unresolvedAuthentication || this.authenticationMayHaveCommitted ||
+      !!this.engine?.isAuthenticationAmbiguous;
+    const recoveryInstanceUnavailable = knownRoomInstance !== null && recoveryMayHaveCommitted &&
+      ((config.initialMode === "join" && challenge.roomInstance === null) ||
+        (challenge.roomInstance !== null && challenge.roomInstance !== knownRoomInstance));
+    if (recoveryInstanceUnavailable) {
+      await this.resolveUnavailableRecoveryRoom(
+        knownRoomInstance,
+        handshake,
+        lockOptions,
+        isCurrentConnection,
+      );
+      return;
+    }
     const roomInstance = isBrandNewSetup ? config.setupRoomInstance : challenge.roomInstance;
     if (!roomInstance ||
         (isBrandNewSetup && config.initialMode !== "setup") ||
         (this.engine !== null && this.engine.roomInstance !== roomInstance)) {
-      this.protocolClose("room instance mismatch");
+      await this.protocolClose("room instance mismatch");
+      handshake?.settle({ status: "failed", reason: "authentication-failed" });
+      return;
+    }
+    config.roomInstance = roomInstance;
+
+    if (config.roomSecretResolvedFor == null) {
+      try {
+        const resolved = await deriveProtocolRoomSecret(config.roomId, roomInstance, config.roomSecret);
+        if (!isCurrentConnection()) return;
+        config.roomSecret = resolved;
+        config.roomSecretResolvedFor = roomInstance;
+      } catch {
+        await this.protocolClose("room secret derivation failed");
+        handshake?.settle({ status: "failed", reason: "authentication-failed" });
+        return;
+      }
+    } else if (config.roomSecretResolvedFor !== roomInstance) {
+      await this.protocolClose("room secret instance mismatch");
       handshake?.settle({ status: "failed", reason: "authentication-failed" });
       return;
     }
@@ -560,7 +817,7 @@ export class SecureRoomController {
         const retainedSetup = this.retainedJoinAuthEntry();
         if (!retainedSetup || !this.engine.isActive() ||
             this.engine.state.hostDeviceId !== this.engine.deviceId) {
-          this.protocolClose("invalid founder setup retry");
+          await this.protocolClose("invalid founder setup retry");
           handshake?.settle({ status: "failed", reason: "authentication-failed" });
           return;
         }
@@ -572,18 +829,77 @@ export class SecureRoomController {
           : "join";
       }
     } else if (isBrandNewSetup) {
-      const created = await SecureRoomEngine.createFounder({
-        roomInstance,
-        roomSecret: config.roomSecret,
-        displayName: config.displayName,
-        lease: this.lease!,
-      });
-      if (!isCurrentConnection()) {
-        created.dispose();
-        return;
+      if (config.recoveryOnly) {
+        let restored: SecureRoomEngine;
+        try {
+          restored = await SecureRoomEngine.restore({
+            roomInstance,
+            roomSecret: config.roomSecret,
+            lease: this.lease!,
+          });
+        } catch (error) {
+          if (!isCurrentConnection()) return;
+          const reason = error instanceof SecureRoomEngineError && error.code === "state-not-found"
+            ? "recovery-credential-mismatch" as const
+            : "recovery-required" as const;
+          await this.stopPendingConnection(
+            handshake,
+            { status: "failed", reason },
+            true,
+          );
+          return;
+        }
+        if (!isCurrentConnection()) {
+          restored.dispose();
+          return;
+        }
+        // A crash can occur after the relay accepted setup and the durable
+        // lifecycle became established, but before the non-secret pointer was
+        // cleared. A later null-instance challenge authoritatively means that
+        // accepted room has since expired/retired; it must be retired locally,
+        // not replayed as setup or preserved in an unresolvable recovery loop.
+        if (!restored.isProvisional && !restored.isAuthenticationAmbiguous) {
+          this.engine = restored;
+          await this.resolveUnavailableRecoveryRoom(
+            roomInstance,
+            handshake,
+            lockOptions,
+            isCurrentConnection,
+          );
+          return;
+        }
+        const retainedSetup = restored.pendingOutbox.find((entry) =>
+          entry.kind === "admission" && entry.welcomeMessageId === null) ?? null;
+        if (restored.isProvisional || !restored.isAuthenticationAmbiguous ||
+            !restored.isActive() || restored.state.hostDeviceId !== restored.deviceId ||
+            retainedSetup?.kind !== "admission") {
+          restored.dispose();
+          await this.stopPendingConnection(
+            handshake,
+            { status: "failed", reason: "recovery-required" },
+            true,
+          );
+          return;
+        }
+        this.engine = restored;
+        this.discardEngineOnAuthenticationFailure = false;
+        authMode = "setup";
+      } else {
+        const created = await SecureRoomEngine.createFounder({
+          roomInstance,
+          roomSecret: config.roomSecret,
+          displayName: config.displayName,
+          lease: this.lease!,
+        });
+        if (!isCurrentConnection()) {
+          try { await created.retire(); } catch {}
+          created.dispose();
+          return;
+        }
+        this.engine = created;
+        this.discardEngineOnAuthenticationFailure = true;
+        authMode = "setup";
       }
-      this.engine = created;
-      authMode = "setup";
     } else {
       try {
         const restored = await SecureRoomEngine.restore({
@@ -599,14 +915,45 @@ export class SecureRoomController {
         const retainedJoin = this.retainedJoinAuthEntry();
         const restoredActiveMember = restored.isActive() && restored.state.members.some((member) =>
           member.deviceId === restored.deviceId);
+        const validSetupRecovery = config.initialMode !== "setup" ||
+          (restored.isActive() && restored.state.hostDeviceId === restored.deviceId);
+        const validRecoveryState = !config.recoveryOnly ||
+          (!restored.isProvisional && validSetupRecovery &&
+            (restoredActiveMember || retainedJoin !== null));
+        if (!validRecoveryState) {
+          this.engine = null;
+          restored.dispose();
+          await this.stopPendingConnection(
+            handshake,
+            { status: "failed", reason: "recovery-required" },
+            true,
+          );
+          return;
+        }
+        // A durable provisional marker proves no authentication frame was
+        // ever sent (the marker is advanced atomically before transmission),
+        // so a definitive rejection may clean it. Ambiguous and established
+        // restores are never treated as artifacts of this attempt.
+        this.discardEngineOnAuthenticationFailure = restored.isProvisional;
         // A device may crash after the relay activates setup/admission but
         // before the authenticated/result response arrives. Durable active
         // membership resumes even while the original admission outbox remains.
         authMode = restoredActiveMember ? "resume" : retainedJoin ? "join" : "resume";
       } catch (error) {
+        if (config.recoveryOnly) {
+          const reason = error instanceof SecureRoomEngineError && error.code === "state-not-found"
+            ? "recovery-credential-mismatch" as const
+            : "recovery-required" as const;
+          await this.stopPendingConnection(
+            handshake,
+            { status: "failed", reason },
+            true,
+          );
+          return;
+        }
         if (!(error instanceof SecureRoomEngineError) || error.code !== "state-not-found") throw error;
         if (config.initialMode === "setup") {
-          this.protocolClose("founder state is unavailable for resume");
+          await this.protocolClose("founder state is unavailable for resume");
           handshake?.settle({ status: "failed", reason: "authentication-failed" });
           return;
         }
@@ -616,20 +963,150 @@ export class SecureRoomController {
           lease: this.lease!,
         });
         if (!isCurrentConnection()) {
+          try { await created.retire(); } catch {}
           created.dispose();
           return;
         }
         this.engine = created;
+        this.discardEngineOnAuthenticationFailure = true;
         authMode = "join";
       }
+    }
+
+    if (this.nextAuthenticationMode !== null) {
+      const forcedMode = this.nextAuthenticationMode;
+      const retainedJoin = this.retainedJoinAuthEntry();
+      if (forcedMode === "join" && config.initialMode === "join" && retainedJoin) {
+        authMode = "join";
+      } else if (forcedMode === "resume" && this.engine?.isActive()) {
+        authMode = "resume";
+      } else {
+        await this.protocolClose("invalid authentication recovery mode");
+        handshake?.settle({ status: "failed", reason: "authentication-failed" });
+        return;
+      }
+      this.nextAuthenticationMode = null;
     }
 
     const authenticate = await this.createAuthenticateFrame(challenge, authMode);
     // Crypto and durable storage can outlive a socket. Never route an
     // authentication frame created for socket A through a replacement socket B.
     if (!isCurrentConnection()) return;
+    await this.requireEngine().markAuthenticationAttempted();
+    if (!isCurrentConnection()) return;
     this.authenticatedMode = authMode;
+    this.authenticationMayHaveCommitted = true;
+    this.unresolvedAuthentication = true;
+    this.rememberRecoveryContext();
     this.sendAuthentication(authenticate);
+  }
+
+  /**
+   * The relay has authoritatively shown that the pinned room instance no
+   * longer exists at this flag. Retire only the exact credential-scoped local
+   * identity; a wrong password cannot locate it and therefore keeps recovery
+   * editable instead of clearing someone else's state.
+   */
+  private async resolveUnavailableRecoveryRoom(
+    roomInstance: string,
+    handshake: PendingHandshake | undefined,
+    lockOptions: AcquireRoomCryptoLockOptions = {},
+    isCurrentConnection: () => boolean = () => true,
+  ): Promise<void> {
+    const config = this.config;
+    if (!config || canonicalBase64UrlByteLength(roomInstance) !== SECURE_ROOM_ID_BYTES) {
+      await this.protocolClose("missing pinned recovery instance");
+      return;
+    }
+    if (config.roomSecretResolvedFor == null) {
+      try {
+        config.roomSecret = await deriveProtocolRoomSecret(config.roomId, roomInstance, config.roomSecret);
+        if (!isCurrentConnection()) return;
+        config.roomSecretResolvedFor = roomInstance;
+      } catch {
+        if (!isCurrentConnection()) return;
+        await this.stopPendingConnection(
+          handshake,
+          { status: "failed", reason: "recovery-required" },
+          true,
+        );
+        return;
+      }
+    } else if (config.roomSecretResolvedFor !== roomInstance) {
+      await this.stopPendingConnection(
+        handshake,
+        { status: "failed", reason: "recovery-required" },
+        true,
+      );
+      return;
+    }
+
+    if (!this.lease?.isActive()) {
+      const storeKey = await secureRoomOpaqueStoreKey(roomInstance);
+      if (!isCurrentConnection()) return;
+      const acquired = await this.lockCoordinator.acquire(storeKey, lockOptions);
+      if (!isCurrentConnection()) {
+        if (acquired.status === "acquired") acquired.lease.release();
+        return;
+      }
+      if (acquired.status !== "acquired") {
+        await this.stopPendingConnection(
+          handshake,
+          { status: "failed", reason: "recovery-required" },
+          true,
+        );
+        return;
+      }
+      this.lease = acquired.lease;
+      this.installLeaseAbort(acquired.lease);
+    }
+
+    if (!this.engine) {
+      try {
+        this.engine = await SecureRoomEngine.restore({
+          roomInstance,
+          roomSecret: config.roomSecret,
+          lease: this.lease!,
+        });
+      } catch (error) {
+        if (!isCurrentConnection()) return;
+        const reason = error instanceof SecureRoomEngineError && error.code === "state-not-found"
+          ? "recovery-credential-mismatch" as const
+          : "recovery-required" as const;
+        await this.stopPendingConnection(handshake, { status: "failed", reason }, true);
+        return;
+      }
+    }
+    if (!isCurrentConnection()) return;
+    if (this.engine.roomInstance !== roomInstance || this.engine.isProvisional) {
+      await this.stopPendingConnection(
+        handshake,
+        { status: "failed", reason: "recovery-required" },
+        true,
+      );
+      return;
+    }
+    try {
+      await this.engine.retire();
+    } catch (error) {
+      if (!(error instanceof SecureRoomEngineError && error.code === "retired")) {
+        await this.stopPendingConnection(
+          handshake,
+          { status: "failed", reason: "recovery-required" },
+          true,
+        );
+        return;
+      }
+    }
+    this.authenticationMayHaveCommitted = false;
+    this.unresolvedAuthentication = false;
+    this.discardEngineOnAuthenticationFailure = false;
+    await this.stopPendingConnection(
+      handshake,
+      { status: "failed", reason: "authentication-failed" },
+      false,
+    );
+    useGameStore.getState().showError("That secure fort instance no longer exists. You can join or create another fort.");
   }
 
   private isCurrentSocket(socket: WebSocket, generation: number, socketEpoch: number): boolean {
@@ -818,7 +1295,7 @@ export class SecureRoomController {
         : frame.status === "pending";
     if (frame.mode !== this.authenticatedMode || frame.roomInstance !== engine.roomInstance ||
         frame.deviceId !== engine.deviceId || !statusMatchesMode) {
-      this.protocolClose("authentication result mismatch");
+      await this.protocolClose("authentication result mismatch");
       handshake?.settle({ status: "failed", reason: "authentication-failed" });
       return;
     }
@@ -834,7 +1311,7 @@ export class SecureRoomController {
             expected: founderBinding,
             roomSecret: config.roomSecret,
           })) {
-        this.protocolClose("invalid founder member binding");
+        await this.protocolClose("invalid founder member binding");
         handshake?.settle({ status: "failed", reason: "authentication-failed" });
         return;
       }
@@ -847,16 +1324,29 @@ export class SecureRoomController {
     }
     const config = this.config;
     if (!config) throw new Error("secure room configuration disappeared after authentication");
+    // Setup and resume prove an active/resumable relay identity. A fresh join
+    // remains bounded until the relay's authoritative own-member activation;
+    // local MLS may become active earlier when it consumes Welcome.
+    if (frame.mode !== "join") await engine.markAuthenticated();
     const safetyCode = await secureRoomInvitationSafetyCodeV4(
       config.roomId,
       engine.roomInstance,
       config.roomSecret,
     );
+    this.discardEngineOnAuthenticationFailure = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.unresolvedAuthentication = frame.mode === "join";
     this.authenticated = true;
     useGameStore.getState().setRoomSafetyCode(safetyCode);
     // The paid-setup bearer is single-purpose. Drop the controller's only
     // reference immediately after the server accepts setup authentication.
-    if (frame.mode === "setup" && this.config) delete this.config.fortPassClaimSecret;
+    if (config.initialMode === "setup") {
+      delete config.fortPassClaimSecret;
+      this.clearRecoveryForCurrentConfig();
+    } else if (frame.mode === "resume") {
+      this.clearRecoveryForCurrentConfig();
+    }
     this.reconnectAttempts = 0;
     useGameStore.getState().setReconnecting(false);
     useGameStore.getState().setReconnectAttempts(0);
@@ -900,7 +1390,7 @@ export class SecureRoomController {
   ): Promise<void> {
     const engine = this.requireEngine();
     if (!this.isHost()) {
-      this.protocolClose("non-host received KeyPackage");
+      await this.protocolClose("non-host received KeyPackage");
       return;
     }
     const keyPackage = fromBase64Url(frame.hello.keyPackage);
@@ -908,7 +1398,7 @@ export class SecureRoomController {
     const config = this.config;
     if (!keyPackage || !memberBinding || !config || frame.hello.deviceId !== frame.fromDeviceId ||
         frame.hello.roomInstance !== engine.roomInstance || frame.admissionId === engine.deviceId) {
-      this.protocolClose("invalid KeyPackage delivery");
+      await this.protocolClose("invalid KeyPackage delivery");
       return;
     }
     const keyPackageEncoding = toBase64Url(keyPackage);
@@ -928,7 +1418,7 @@ export class SecureRoomController {
           roomSecret: config.roomSecret,
         })) {
       keyPackage.fill(0);
-      this.protocolClose("KeyPackage is not invitation-authorized");
+      await this.protocolClose("KeyPackage is not invitation-authorized");
       return;
     }
     const existing = this.pendingHostAdmissions.get(frame.admissionId);
@@ -936,7 +1426,7 @@ export class SecureRoomController {
       if (existing.fromDeviceId !== frame.fromDeviceId || existing.keyPackageEncoding !== keyPackageEncoding ||
           existing.memberBinding.proof !== memberBinding.proof) {
         keyPackage.fill(0);
-        this.protocolClose("admission id rebound to different KeyPackage material");
+        await this.protocolClose("admission id rebound to different KeyPackage material");
       } else {
         keyPackage.fill(0);
       }
@@ -1114,23 +1604,23 @@ export class SecureRoomController {
     const engine = this.requireEngine();
     const envelope = delivery.frame.envelope;
     if (envelope.roomInstance !== engine.roomInstance) {
-      this.protocolClose("cross-room relay");
+      await this.protocolClose("cross-room relay");
       return;
     }
     const payload = fromBase64Url(envelope.payload);
     if (!payload) {
-      this.protocolClose("invalid relay payload");
+      await this.protocolClose("invalid relay payload");
       return;
     }
 
     if (delivery.frame.relayKind === "welcome") {
       if (delivery.logicalOrder !== null || envelope.route !== "device" || envelope.to !== engine.deviceId) {
-        this.protocolClose("invalid Welcome route");
+        await this.protocolClose("invalid Welcome route");
         return;
       }
       const bundle = decodeSecureAdmissionBundleV4(payload);
       if (!bundle) {
-        this.protocolClose("invalid Welcome bundle");
+        await this.protocolClose("invalid Welcome bundle");
         return;
       }
       const result = await engine.join(
@@ -1150,7 +1640,7 @@ export class SecureRoomController {
     if (delivery.frame.relayKind === "commit" && delivery.logicalOrder !== null ||
         delivery.frame.relayKind !== "commit" && (delivery.logicalOrder === null ||
           delivery.logicalOrder !== delivery.frame.grant.logicalOrder)) {
-      this.protocolClose("invalid relay logical order");
+      await this.protocolClose("invalid relay logical order");
       return;
     }
     const relayContext = inboundRelayContext(delivery.frame);
@@ -1273,7 +1763,7 @@ export class SecureRoomController {
   private async handleGrant(grant: SecureLogicalOrderGrantV4): Promise<void> {
     const engine = this.requireEngine();
     if (grant.roomInstance !== engine.roomInstance || grant.deviceId !== engine.deviceId) {
-      this.protocolClose("misbound order grant");
+      await this.protocolClose("misbound order grant");
       return;
     }
     if (this.pendingGrant?.requestId === grant.requestId) {
@@ -1319,7 +1809,7 @@ export class SecureRoomController {
       this.sendPendingEntry(retry.messageId);
       return;
     }
-    this.protocolClose("unsolicited order grant");
+    await this.protocolClose("unsolicited order grant");
   }
 
   private async handleOrderExpired(tokenId: string): Promise<void> {
@@ -1463,7 +1953,7 @@ export class SecureRoomController {
     );
     if (!entry) return;
     if (entry.event.logicalOrder !== result.logicalOrder) {
-      this.protocolClose("application result order mismatch");
+      await this.protocolClose("application result order mismatch");
       return;
     }
     const content = entry.event.content;
@@ -1690,7 +2180,7 @@ export class SecureRoomController {
   private async handleBacklogEnd(lastMessageId: string): Promise<void> {
     if (!this.replayingBacklog) return;
     if (!this.roomStateSnapshotReceived) {
-      this.protocolClose("resume backlog omitted its authoritative room snapshot");
+      await this.protocolClose("resume backlog omitted its authoritative room snapshot");
       return;
     }
     if (this.resumeCompleteRequestId !== null) {
@@ -1896,6 +2386,11 @@ export class SecureRoomController {
     let admissionResolved = false;
     if (status === "active" || status === "retired") {
       admissionResolved = await engine.completeAdmissionLifecycle(deviceId, status);
+    }
+    if (status === "active" && deviceId === engine.deviceId && engine.isAuthenticationAmbiguous) {
+      await engine.markAuthenticated();
+      this.unresolvedAuthentication = false;
+      this.clearRecoveryForCurrentConfig();
     }
     if (status === "retired") {
       const retirement = this.currentRetirementBarrier();
@@ -2825,9 +3320,12 @@ export class SecureRoomController {
       this.enqueue(async () => {
         this.engine?.dispose();
         this.engine = null;
+        this.discardEngineOnAuthenticationFailure = false;
+        this.authenticationMayHaveCommitted = false;
+        this.nextAuthenticationMode = null;
         this.lease = null;
         this.clearTimers();
-        resetSecureRoomUiV4();
+        this.resetUiSession();
         const store = useGameStore.getState();
         store.showError("This secure room moved to another tab.");
         store.cleanup();
@@ -2852,7 +3350,7 @@ export class SecureRoomController {
       this.enqueue(async () => {
         if (generation === this.generation && !this.stopped && !this.terminal && !this.socket &&
             this.lease?.isActive()) {
-          this.openSocket(generation);
+          this.openSocket(generation, this.pendingHandshake ?? undefined);
         }
       }, generation);
     }, delay);
@@ -2912,12 +3410,158 @@ export class SecureRoomController {
     lease?.release();
   }
 
-  private protocolClose(_reason: string): void {
-    this.pendingHandshake?.settle({ status: "failed", reason: "authentication-failed" });
+  private disposeCurrentEngine(): void {
+    const engine = this.engine;
+    this.engine = null;
+    engine?.dispose();
+  }
+
+  private rememberRecoveryContext(config: SessionConfig | null = this.config): void {
+    if (!config || canonicalBase64UrlByteLength(config.roomInstance) !== SECURE_ROOM_ID_BYTES) return;
+    this.recoveryContext = {
+      v: 1,
+      mode: config.initialMode,
+      roomId: config.roomId,
+      displayName: config.displayName,
+      roomInstance: config.roomInstance!,
+      savedAt: Date.now(),
+    };
+    if (config?.initialMode === "setup" && config.setupRoomInstance) {
+      this.recoverySetup = {
+        roomId: config.roomId,
+        roomInstance: config.setupRoomInstance,
+      };
+    }
+    persistRecoveryContext(this.recoveryContext);
+  }
+
+  private clearRecoveryForCurrentConfig(config: SessionConfig | null = this.config): void {
+    if (!config) return;
+    if (this.recoveryContext?.mode === config.initialMode &&
+        this.recoveryContext.roomId === config.roomId &&
+        this.recoveryContext.displayName === config.displayName) {
+      this.recoveryContext = null;
+      persistRecoveryContext(null);
+    }
+    if (config.initialMode === "setup" && this.recoverySetup?.roomId === config.roomId) {
+      this.recoverySetup = null;
+    }
+    this.unresolvedAuthentication = false;
+  }
+
+  private async stopPendingConnection(
+    handshake: PendingHandshake | undefined,
+    result: Extract<SecureRoomConnectResult, { status: "failed" }>,
+    preserveRecovery: boolean,
+  ): Promise<void> {
+    const config = this.config;
+    const ownedHandshake = handshake ?? this.pendingHandshake;
+    const engine = this.engine;
+    const lease = this.lease;
+    this.pendingHandshake = null;
+    this.generation += 1;
+    this.stopped = true;
+    this.terminal = false;
+    this.authenticated = false;
+    this.authenticatedMode = null;
+    this.discardEngineOnAuthenticationFailure = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.unresolvedAuthentication = preserveRecovery;
+    this.config = null;
+    this.closeSocket("secure room connection stopped");
+    this.engine = null;
+    this.lease = null;
+    this.clearTimers();
+    let finalResult = result;
+    let finalPreserveRecovery = preserveRecovery;
+    try {
+      // A provisional identity is proven unsent. Remove it before releasing
+      // the room lock so retries cannot orphan or accumulate stale records.
+      if (engine?.isProvisional && !preserveRecovery) {
+        try {
+          await engine.retire();
+        } catch (error) {
+          if (!(error instanceof SecureRoomEngineError && error.code === "retired")) {
+            finalPreserveRecovery = true;
+            finalResult = { status: "failed", reason: "recovery-required" };
+          }
+        }
+      }
+      if (finalPreserveRecovery) this.rememberRecoveryContext(config);
+      else this.clearRecoveryForCurrentConfig(config);
+      this.unresolvedAuthentication = finalPreserveRecovery;
+    } finally {
+      // Settle after durable cleanup but before best-effort object teardown;
+      // an implementation-specific dispose/release exception must not leave
+      // the UI awaiting this handshake forever.
+      ownedHandshake?.settle(finalResult);
+      try { engine?.dispose(); } catch {}
+      try { lease?.release(); } catch {}
+      this.resetUiSession();
+      if (finalPreserveRecovery && config) useGameStore.getState().setScreen(config.initialMode);
+    }
+  }
+
+  private async retryPendingAuthentication(
+    handshake: PendingHandshake | undefined,
+    nextMode: "join" | "resume" | null = null,
+  ): Promise<boolean> {
+    if (this.stopped || this.terminal || !this.config || !this.lease?.isActive()) return false;
+    if (this.reconnectAttempts >= 3) {
+      await this.stopPendingConnection(
+        handshake,
+        { status: "failed", reason: "recovery-required" },
+        true,
+      );
+      return true;
+    }
+    this.nextAuthenticationMode = nextMode;
+    this.authenticated = false;
+    this.authenticatedMode = null;
+    this.closeSocket("retrying secure authentication");
+    this.scheduleReconnect();
+    return true;
+  }
+
+  private resetUiSession(): void {
+    this.uiInitialized = false;
+    this.reconnectAttempts = 0;
+    const store = useGameStore.getState();
+    store.setReconnecting(false);
+    store.setReconnectAttempts(0);
+    resetSecureRoomUiV4();
+  }
+
+  private async protocolClose(_reason: string, userMessage = "The secure connection failed closed."): Promise<void> {
+    if (this.unresolvedAuthentication || this.authenticationMayHaveCommitted ||
+        !!this.engine?.isAuthenticationAmbiguous) {
+      await this.stopPendingConnection(
+        this.pendingHandshake ?? undefined,
+        { status: "failed", reason: "recovery-required" },
+        true,
+      );
+      useGameStore.getState().showError(userMessage);
+      return;
+    }
+    if (this.pendingHandshake || (!this.authenticated && this.engine?.isProvisional)) {
+      await this.stopPendingConnection(
+        this.pendingHandshake ?? undefined,
+        { status: "failed", reason: "authentication-failed" },
+        false,
+      );
+      useGameStore.getState().showError(userMessage);
+      return;
+    }
     this.pendingHandshake = null;
     this.terminal = true;
     this.stopped = true;
     this.authenticated = false;
+    this.discardEngineOnAuthenticationFailure = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.unresolvedAuthentication = false;
+    this.clearRecoveryForCurrentConfig();
     this.config = null;
     this.closeSocket("secure protocol error");
     this.engine?.dispose();
@@ -2925,22 +3569,27 @@ export class SecureRoomController {
     this.releaseLease();
     this.clearTimers();
     const store = useGameStore.getState();
-    store.showError("The secure connection failed closed.");
+    store.showError(userMessage);
     store.cleanup();
     useGameStore.getState().setScreen("home");
-    resetSecureRoomUiV4();
+    this.resetUiSession();
   }
 
   private async finishTerminal(message: string, erase = true): Promise<void> {
     const engine = this.engine;
+    const config = this.config;
+    const handshake = this.pendingHandshake;
     // Gate every producer before durable erasure yields. Otherwise a terminal
     // relay error can return to the queue while retire() is still pending and
     // later frames/UI work can race deletion of the same cryptographic state.
-    this.pendingHandshake?.settle({ status: "failed", reason: "authentication-failed" });
     this.pendingHandshake = null;
     this.terminal = true;
     this.stopped = true;
     this.authenticated = false;
+    this.discardEngineOnAuthenticationFailure = false;
+    this.authenticationMayHaveCommitted = false;
+    this.nextAuthenticationMode = null;
+    this.unresolvedAuthentication = false;
     this.config = null;
     this.closeSocket("secure room ended");
     this.clearTimers();
@@ -2950,17 +3599,31 @@ export class SecureRoomController {
           if (!(error instanceof SecureRoomEngineError) || error.code !== "retired") throw error;
         }
       }
-    } finally {
-      engine?.dispose();
-      if (this.engine === engine) this.engine = null;
-      this.releaseLease();
-      resetSecureRoomUiV4();
-      const left = message.startsWith("You left");
-      const store = useGameStore.getState();
-      store.cleanup();
-      useGameStore.getState().setScreen(left ? "home" : "knocked");
-      useGameStore.getState().addSystemMessage(message);
+    } catch {
+      // Durable erasure is part of the terminal transition. If it is
+      // unavailable, keep the exact recovery pointer and identity so a later
+      // retry can finish cleanup instead of silently orphaning ciphertext.
+      this.rememberRecoveryContext(config);
+      await this.stopPendingConnection(
+        handshake ?? undefined,
+        { status: "failed", reason: "recovery-required" },
+        true,
+      );
+      if (config) useGameStore.getState().setScreen(config.initialMode);
+      useGameStore.getState().showError("Secure room cleanup could not finish. Retry with the same password.");
+      return;
     }
+    this.clearRecoveryForCurrentConfig(config);
+    handshake?.settle({ status: "failed", reason: "authentication-failed" });
+    try { engine?.dispose(); } catch {}
+    if (this.engine === engine) this.engine = null;
+    this.releaseLease();
+    this.resetUiSession();
+    const left = message.startsWith("You left");
+    const store = useGameStore.getState();
+    store.cleanup();
+    useGameStore.getState().setScreen(left ? "home" : "knocked");
+    useGameStore.getState().addSystemMessage(message);
   }
 
   private async handleServerError(
@@ -2968,8 +3631,98 @@ export class SecureRoomController {
     handshake?: PendingHandshake,
   ): Promise<void> {
     if (!this.authenticated) {
-      handshake?.settle({ status: "failed", reason: "authentication-failed" });
-      this.protocolClose("authentication rejected");
+      if (frame.code === "room-retired" && this.config?.recoveryOnly &&
+          this.config.roomInstance && !this.engine) {
+        await this.resolveUnavailableRecoveryRoom(this.config.roomInstance, handshake);
+        return;
+      }
+      const engine = this.engine;
+      const retainedJoin = engine ? this.retainedJoinAuthEntry() : null;
+      // A crash can make MLS locally active while the relay still has the
+      // exact idempotent Join pending. Try device resume first; an authoritative
+      // lifecycle miss switches one attempt back to the retained Join frame.
+      if (engine?.isAuthenticationAmbiguous && retainedJoin && engine.isActive() &&
+          this.authenticatedMode === "resume" &&
+          (frame.code === "invalid-lifecycle" || frame.code === "unknown-device")) {
+        if (await this.retryPendingAuthentication(handshake, "join")) return;
+      }
+      // Conversely, the relay may have activated that Join just before its
+      // response was lost. A replayed Join then collides, so prove the durable
+      // device identity with resume instead of creating another admission.
+      if (engine?.isAuthenticationAmbiguous && retainedJoin && engine.isActive() &&
+          this.authenticatedMode === "join" &&
+          (frame.code === "duplicate-id" || frame.code === "device-exists")) {
+        if (await this.retryPendingAuthentication(handshake, "resume")) return;
+      }
+      if (frame.code === "persistence-failed" || frame.code === "internal-error" ||
+          frame.code === "room-state-invalid") {
+        if (await this.retryPendingAuthentication(handshake)) return;
+      }
+
+      if (frame.code === "room-retired" || frame.code === "fresh-admission-required" ||
+          (frame.code === "unknown-device" && this.authenticatedMode === "resume")) {
+        let erased = true;
+        if (engine) {
+          try {
+            await engine.retire();
+          } catch (error) {
+            if (!(error instanceof SecureRoomEngineError && error.code === "retired")) erased = false;
+          }
+        }
+        this.authenticationMayHaveCommitted = false;
+        this.discardEngineOnAuthenticationFailure = false;
+        await this.stopPendingConnection(
+          handshake,
+          { status: "failed", reason: erased ? "authentication-failed" : "recovery-required" },
+          !erased,
+        );
+        if (!erased) {
+          useGameStore.getState().showError(
+            "Secure room cleanup could not finish. Retry with the same password.",
+          );
+        }
+        return;
+      }
+
+      // Only state created by this exact attempt may be deleted on a
+      // pre-commit rejection. Restored ambiguous state may represent an older
+      // accepted attempt even when this newest challenge expires or is rated.
+      let retiredFreshState = false;
+      if (engine && this.discardEngineOnAuthenticationFailure) {
+        try {
+          await engine.retire();
+          retiredFreshState = true;
+        } catch {
+          // Credential-scoped records prevent this failed cleanup from
+          // shadowing a later correct credential; never surface secret details.
+        }
+      }
+      const preserveRecovery = !retiredFreshState && !!engine?.isAuthenticationAmbiguous;
+      this.discardEngineOnAuthenticationFailure = false;
+      this.authenticationMayHaveCommitted = false;
+      const failure = frame.code === "rate-limited"
+        ? {
+            reason: "rate-limited" as const,
+            message: "Too many secure-room attempts. Wait a minute, then try again.",
+          }
+        : frame.code === "authentication-expired" || frame.code === "persistence-failed" ||
+            frame.code === "internal-error" || frame.code === "room-state-invalid"
+          ? {
+              reason: "unavailable" as const,
+              message: frame.code === "authentication-expired"
+                ? "The secure check expired. Try again."
+                : "The secure fort is temporarily unavailable. Try again.",
+            }
+          : {
+              reason: "authentication-failed" as const,
+              message: "Could not connect. Check the fort flag and password.",
+            };
+      await this.stopPendingConnection(
+        handshake,
+        { status: "failed", reason: preserveRecovery ? "recovery-required" : failure.reason },
+        preserveRecovery,
+      );
+      useGameStore.getState().showError(failure.message);
       return;
     }
     if (frame.code === "room-retired" || frame.code === "fresh-admission-required") {
@@ -2986,15 +3739,16 @@ export class SecureRoomController {
       this.pumpGrantQueue();
       return;
     }
-    this.protocolClose("relay rejected secure protocol state");
+    await this.protocolClose("relay rejected secure protocol state");
   }
 
-  private failClosed(error: unknown): void {
+  private async failClosed(error: unknown): Promise<void> {
     if (this.stopped || this.terminal) return;
-    if (error instanceof SecureRoomEngineError &&
+    if (this.pendingHandshake || this.unresolvedAuthentication || this.authenticationMayHaveCommitted ||
+        !!this.engine?.isAuthenticationAmbiguous || (error instanceof SecureRoomEngineError &&
         (error.code === "transition-invalid" || error.code === "unauthorized" || error.code === "state-invalid" ||
-          error.code === "persistence-failed" || error.code === "revision-conflict" || error.code === "lock-required")) {
-      this.protocolClose("secure engine rejected state");
+          error.code === "persistence-failed" || error.code === "revision-conflict" || error.code === "lock-required"))) {
+      await this.protocolClose("secure engine rejected state");
       return;
     }
     this.showOperationError(error);

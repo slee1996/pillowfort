@@ -1,6 +1,5 @@
 import type { Env } from "./index";
 import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
-import { opsLogLine } from "./analytics";
 import {
   FORT_PASS_RESERVATION_MS,
   constantTimeFortPassClaimHashEqual,
@@ -21,7 +20,7 @@ import {
 import { isRpsPick, rpsWinner, tttWinner, voteHasMajority, type RpsPick } from "./game";
 import { ROOM_CREATE_LIMIT_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_FORT_PASS_RELEASE_PATH, ROOM_FORT_PASS_RESERVATION_PATH, ROOM_FORT_PASS_RESERVE_PATH, ROOM_FORT_PASS_REVOKE_PATH, ROOM_STATUS_PATH, ROOM_STRIPE_SESSION_LEDGER_PATH, ROOM_WS_OPEN_LIMIT_PATH } from "./routes";
 import { readByteLimitedText } from "./requestBody";
-import { isJsonRequest } from "./httpBoundary";
+import { hasOnlyAllowedSearchParameters, isJsonRequest } from "./httpBoundary";
 import { sanitizeDraw, uniqueName, MAX_DRAW_EVENTS_PER_5S, GRACE_MS } from "./shared";
 import {
   createRoomAuthChallenge,
@@ -1103,11 +1102,12 @@ export class Room implements DurableObject {
     // Never place room identifiers, display names, game choices, roles, or
     // targets in provider logs. Protocol v4 hides those values entirely, and
     // legacy-room observability must not retain them either.
-    console.log(`[room] ${msg}`);
+    void msg;
   }
 
   private metric(event: "room_setup_failed" | "room_join_failed", reason: string) {
-    console.log(opsLogLine(event, { reason, surface: "room" }));
+    void event;
+    void reason;
   }
 
   private async handleStripeSessionLedger(request: Request): Promise<Response> {
@@ -1728,7 +1728,8 @@ export class Room implements DurableObject {
 
     const roomParameters = url.searchParams.getAll("room");
     const roomId = roomParameters[0] || "";
-    if (roomParameters.length !== 1 || !roomId || normalizeRoomId(roomId) !== roomId) {
+    if (!hasOnlyAllowedSearchParameters(url, ["room", "protocol"]) ||
+        roomParameters.length !== 1 || !roomId || normalizeRoomId(roomId) !== roomId) {
       return new Response("invalid room", { status: 400 });
     }
     // The edge normally selects this Durable Object from the same canonical

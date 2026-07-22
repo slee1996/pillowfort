@@ -61,10 +61,11 @@ describe("protocol-v4 durable secure room engine", () => {
       });
       const databaseName = `secure-engine-persistence-${crypto.randomUUID()}`;
       const store = new storeModule.CryptoStateStore({ databaseName });
-      const storeKey = await engineModule.secureRoomEngineStoreKey(roomInstance);
+      const lockKey = await engineModule.secureRoomEngineStoreKey(roomInstance);
+      const storeKey = await engineModule.secureRoomEngineStateKey(roomInstance, roomSecret);
       const controller = new AbortController();
       const lease = {
-        roomInstance: storeKey,
+        roomInstance: lockKey,
         signal: controller.signal,
         released: new Promise<"released">(() => {}),
         isActive: () => !controller.signal.aborted,
@@ -94,6 +95,18 @@ describe("protocol-v4 durable secure room engine", () => {
         store,
         lease,
       });
+      const createdWasProvisional = engine.isProvisional && !engine.isAuthenticationAmbiguous;
+      await engine.markAuthenticationAttempted();
+      const attemptedRecord = await store.loadOpaqueState(storeKey);
+      const attemptWasDurable = !engine.isProvisional && engine.isAuthenticationAmbiguous &&
+        attemptedRecord?.lifecycle === "authentication-ambiguous";
+      engine.dispose();
+      engine = await engineModule.SecureRoomEngine.restore({ roomInstance, roomSecret, store, lease });
+      const ambiguitySurvivedRestore = engine.isAuthenticationAmbiguous;
+      await engine.markAuthenticated();
+      const establishedRecord = await store.loadOpaqueState(storeKey);
+      const authenticationWasEstablished = !engine.isProvisional && !engine.isAuthenticationAmbiguous &&
+        establishedRecord?.lifecycle === "established";
       const rawSession = (engine as any).session;
       const originalEncrypt = rawSession.encrypt.bind(rawSession);
       let capturedPlaintext: Uint8Array | null = null;
@@ -229,7 +242,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const roomSwapCode = await code(() => stateModule.unprotectSecureRoomStateV1(currentRecord.state, otherRoom, roomSecret));
 
       await store.advanceReplay({
-        roomInstance: storeKey,
+        roomInstance: lockKey,
         senderId: engine.deviceId,
         sessionId: "A".repeat(16),
         sequence: 7,
@@ -238,7 +251,7 @@ describe("protocol-v4 durable secure room engine", () => {
       await engine.retire();
       const erasedOpaqueState = await store.loadOpaqueState(storeKey) === null;
       const replaySurvived = await store.replayHighWater({
-        roomInstance: storeKey,
+        roomInstance: lockKey,
         senderId: deviceId,
         sessionId: "A".repeat(16),
       });
@@ -246,6 +259,10 @@ describe("protocol-v4 durable secure room engine", () => {
       await store.close();
 
       return {
+        createdWasProvisional,
+        attemptWasDurable,
+        ambiguitySurvivedRestore,
+        authenticationWasEstablished,
         wrapperMagic: new TextDecoder().decode(initialRecord.state.slice(0, 8)),
         plaintextAbsent: !decodedInitial.includes("Alice") && !decodedInitial.includes(roomSecret),
         plaintextZeroedAfterEncrypt,
@@ -276,6 +293,10 @@ describe("protocol-v4 durable secure room engine", () => {
     });
 
     expect(result.wrapperMagic).toBe("PFRMST01");
+    expect(result.createdWasProvisional).toBe(true);
+    expect(result.attemptWasDurable).toBe(true);
+    expect(result.ambiguitySurvivedRestore).toBe(true);
+    expect(result.authenticationWasEstablished).toBe(true);
     expect(result.plaintextAbsent).toBe(true);
     expect(result.plaintextZeroedAfterEncrypt).toBe(true);
     expect(result.outputWithheldUntilCas).toBe(true);
@@ -301,6 +322,121 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.erasedOpaqueState).toBe(true);
     expect(result.replaySurvived).toBe(7);
     expect(result.retiredCode).toBe("retired");
+  }, 120_000);
+
+  it("isolates abandoned wrong-password state and atomically migrates legacy room-scoped records", async () => {
+    const result = await page.evaluate(async () => {
+      const [engineModule, storeModule] = await Promise.all([
+        import("/src/services/secureRoomEngine.ts"),
+        import("/src/services/cryptoStateStore.ts"),
+      ]);
+      const base64Url = (bytes: Uint8Array) => {
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+      };
+      const randomId = () => base64Url(crypto.getRandomValues(new Uint8Array(16)));
+      const randomSecret = () => `pf2_${base64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
+      const makeLease = (roomInstance: string) => {
+        const controller = new AbortController();
+        return engineModule.secureRoomEngineStoreKey(roomInstance).then((lockKey: string) => ({
+          roomInstance: lockKey,
+          signal: controller.signal,
+          released: new Promise<"released">(() => {}),
+          isActive: () => !controller.signal.aborted,
+          release: () => controller.abort(),
+        }));
+      };
+
+      const roomInstance = randomId();
+      const wrongSecret = randomSecret();
+      const correctSecret = randomSecret();
+      const store = new storeModule.CryptoStateStore({
+        databaseName: `secure-engine-credential-scope-${crypto.randomUUID()}`,
+      });
+      const lease = await makeLease(roomInstance);
+      const abandoned = await engineModule.SecureRoomEngine.createJoiner({
+        roomInstance, roomSecret: wrongSecret, store, lease,
+      });
+      abandoned.dispose();
+      const correct = await engineModule.SecureRoomEngine.createJoiner({
+        roomInstance, roomSecret: correctSecret, store, lease,
+      });
+      const wrongKey = await engineModule.secureRoomEngineStateKey(roomInstance, wrongSecret);
+      const correctKey = await engineModule.secureRoomEngineStateKey(roomInstance, correctSecret);
+      const abandonedWrongStateDidNotBlockCorrect = wrongKey !== correctKey &&
+        await store.loadOpaqueState(wrongKey) !== null &&
+        await store.loadOpaqueState(correctKey) !== null;
+      const restoredAbandoned = await engineModule.SecureRoomEngine.restore({
+        roomInstance, roomSecret: wrongSecret, store, lease,
+      });
+      await restoredAbandoned.retire();
+      await correct.retire();
+      await store.close();
+
+      const legacyRoomInstance = randomId();
+      const legacySecret = randomSecret();
+      const wrongLegacySecret = randomSecret();
+      const legacyStore = new storeModule.CryptoStateStore({
+        databaseName: `secure-engine-legacy-move-${crypto.randomUUID()}`,
+      });
+      const legacyLease = await makeLease(legacyRoomInstance);
+      const legacySourceKey = await engineModule.secureRoomEngineStoreKey(legacyRoomInstance);
+      const migratedKey = await engineModule.secureRoomEngineStateKey(legacyRoomInstance, legacySecret);
+      const seeded = await engineModule.SecureRoomEngine.createJoiner({
+        roomInstance: legacyRoomInstance,
+        roomSecret: legacySecret,
+        store: legacyStore,
+        lease: legacyLease,
+      });
+      seeded.dispose();
+      const credentialRecord = await legacyStore.loadOpaqueState(migratedKey);
+      if (!credentialRecord) throw new Error("credential-scoped seed is missing");
+      const removedSeed = await legacyStore.compareAndDeleteOpaqueState(migratedKey, credentialRecord.revision);
+      if (!removedSeed.erased) throw new Error("credential-scoped seed could not be moved to legacy key");
+      const legacySeed = await legacyStore.compareAndSetOpaqueState(
+        legacySourceKey,
+        null,
+        credentialRecord.state,
+      );
+      if (!legacySeed.committed) throw new Error("legacy seed could not be created");
+      let wrongLegacyRestoreCode = "accepted";
+      try {
+        await engineModule.SecureRoomEngine.restore({
+          roomInstance: legacyRoomInstance,
+          roomSecret: wrongLegacySecret,
+          store: legacyStore,
+          lease: legacyLease,
+        });
+      } catch (error) {
+        wrongLegacyRestoreCode = (error as { code?: string }).code || "error";
+      }
+      const wrongLegacyKey = await engineModule.secureRoomEngineStateKey(legacyRoomInstance, wrongLegacySecret);
+      const wrongCredentialCouldNotMoveLegacy = wrongLegacyRestoreCode === "state-not-found" &&
+        await legacyStore.loadOpaqueState(legacySourceKey) !== null &&
+        await legacyStore.loadOpaqueState(wrongLegacyKey) === null;
+      const restored = await engineModule.SecureRoomEngine.restore({
+        roomInstance: legacyRoomInstance,
+        roomSecret: legacySecret,
+        store: legacyStore,
+        lease: legacyLease,
+      });
+      const migratedRecord = await legacyStore.loadOpaqueState(migratedKey);
+      const legacyMigrationWasAtomic = migratedRecord?.revision === legacySeed.revision &&
+        await legacyStore.loadOpaqueState(legacySourceKey) === null;
+      await restored.retire();
+      await legacyStore.close();
+
+      return {
+        abandonedWrongStateDidNotBlockCorrect,
+        wrongCredentialCouldNotMoveLegacy,
+        legacyMigrationWasAtomic,
+      };
+    });
+
+    expect(result.abandonedWrongStateDidNotBlockCorrect).toBe(true);
+    expect(result.wrongCredentialCouldNotMoveLegacy).toBe(true);
+    expect(result.legacyMigrationWasAtomic).toBe(true);
   }, 120_000);
 
   it("admits a member privately, inspects without mutation, rejects replay/reorder/forgeries, and authorizes commit summaries", async () => {
@@ -346,8 +482,9 @@ describe("protocol-v4 durable secure room engine", () => {
       });
       const hostStore = new storeModule.CryptoStateStore({ databaseName: `secure-engine-host-${crypto.randomUUID()}` });
       const bobStore = new storeModule.CryptoStateStore({ databaseName: `secure-engine-bob-${crypto.randomUUID()}` });
-      const storeKey = await engineModule.secureRoomEngineStoreKey(roomInstance);
-      const fakeLease = (leaseStoreKey = storeKey) => {
+      const lockKey = await engineModule.secureRoomEngineStoreKey(roomInstance);
+      const storeKey = await engineModule.secureRoomEngineStateKey(roomInstance, roomSecret);
+      const fakeLease = (leaseStoreKey = lockKey) => {
         const controller = new AbortController();
         return {
           roomInstance: leaseStoreKey,
@@ -1100,7 +1237,7 @@ describe("protocol-v4 durable secure room engine", () => {
       }));
 
       await bobStore.advanceReplay({
-        roomInstance: storeKey,
+        roomInstance: lockKey,
         senderId: host.deviceId,
         sessionId: "B".repeat(16),
         sequence: 9,
@@ -1220,7 +1357,7 @@ describe("protocol-v4 durable secure room engine", () => {
         control.kind === "retire-member" && control.deviceId === bob.deviceId);
       const removedOpaqueErased = await bobStore.loadOpaqueState(storeKey) === null;
       const removedReplaySurvived = await bobStore.replayHighWater({
-        roomInstance: storeKey,
+        roomInstance: lockKey,
         senderId: host.deviceId,
         sessionId: "B".repeat(16),
       });
@@ -1230,13 +1367,14 @@ describe("protocol-v4 durable secure room engine", () => {
       const doomedStore = new storeModule.CryptoStateStore({
         databaseName: `secure-engine-doomed-${crypto.randomUUID()}`,
       });
-      const doomedStoreKey = await engineModule.secureRoomEngineStoreKey(doomedRoomInstance);
+      const doomedLockKey = await engineModule.secureRoomEngineStoreKey(doomedRoomInstance);
+      const doomedStoreKey = await engineModule.secureRoomEngineStateKey(doomedRoomInstance, doomedRoomSecret);
       const doomed = await engineModule.SecureRoomEngine.createFounder({
         roomInstance: doomedRoomInstance,
         roomSecret: doomedRoomSecret,
         displayName: "Doomed",
         store: doomedStore,
-        lease: fakeLease(doomedStoreKey),
+        lease: fakeLease(doomedLockKey),
       });
       const doomedUpdate = await doomed.selfUpdate({
         v: 4,
@@ -1777,7 +1915,7 @@ describe("protocol-v4 durable secure room engine", () => {
       harness.intentKeys.add("disconnect-leftover");
       harness.outboundUi.set("disconnect-leftover", { state: applicationState, effects: [] });
       harness.socket = null;
-      controller.disconnect();
+      await controller.disconnect();
       const disconnectClearsTransientState = harness.intentKeys.size === 0 && harness.outboundUi.size === 0 &&
         useGameStore.getState().pendingAdmissions.length === 0 &&
         useGameStore.getState().pendingJoinFingerprint === null;
@@ -2146,6 +2284,7 @@ describe("protocol-v4 durable secure room engine", () => {
 
   it("binds authentication to one socket and completes founder resume through an authoritative snapshot", async () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, reducerModule, engineModule] = await Promise.all([
         import("/src/services/secureRoomController.ts"),
         import("/src/services/secureRoomState.ts"),
@@ -2183,6 +2322,8 @@ describe("protocol-v4 durable secure room engine", () => {
         get pendingOutbox() { return pendingOutbox; },
         pendingRelayControls: [] as unknown[],
         pendingAdmissionBarrier: null,
+        isProvisional: false,
+        isAuthenticationAmbiguous: false,
         isActive: () => true,
         roster: () => [{ leafIndex: 0, deviceId, signaturePublicKey }],
         acknowledgeOutbound: async (messageId: string) => {
@@ -2192,6 +2333,8 @@ describe("protocol-v4 durable secure room engine", () => {
         completeJoinAdmission: async (admissionId: string) => {
           pendingOutbox = pendingOutbox.filter((entry) => entry.admissionId !== admissionId);
         },
+        markAuthenticated: async () => {},
+        markAuthenticationAttempted: async () => {},
         dispose: () => {},
       };
       const controller = new SecureRoomController();
@@ -2216,7 +2359,10 @@ describe("protocol-v4 durable secure room engine", () => {
         initialMode: "setup",
         roomId: "abcdefghij",
         roomSecret,
+        roomSecretResolvedFor: roomInstance,
         displayName: "Founder",
+        fortPassSessionId: "session-1",
+        fortPassClaimSecret: "f".repeat(64),
         // Deliberately differs: an existing founder must restore the
         // server-challenged room rather than attempt a second setup identity.
         setupRoomInstance: stateModule.randomSecureRoomIdV4(16),
@@ -2250,6 +2396,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const preAuthResponseAccepted = harness.authenticated && harness.replayingBacklog &&
         pendingOutbox.length === 0 &&
         (settlements[0] as { status?: string } | undefined)?.status === "connected";
+      const fortPassClaimClearedAfterResume = harness.config.fortPassClaimSecret === undefined;
       await harness.handleWire(socket, generation, socketEpoch, JSON.stringify({
         kind: "secure-server", v: 4, suite: 1, type: "room-state-snapshot",
         hostDeviceId: deviceId,
@@ -2302,6 +2449,7 @@ describe("protocol-v4 durable secure room engine", () => {
         (engineModule.SecureRoomEngine as any).restore = originalRestore;
       }
       const crashRestoredActiveAdmissionResumes = restoredModes.join(",") === "resume";
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
 
       const snapshotBypassController = new SecureRoomController();
       const snapshotBypass = snapshotBypassController as any;
@@ -2497,6 +2645,7 @@ describe("protocol-v4 durable secure room engine", () => {
       return {
         challengeProducedResume,
         preAuthResponseAccepted,
+        fortPassClaimClearedAfterResume,
         snapshotPrecedesResumeComplete,
         resumeActivatedOnlyAfterAck,
         crashRestoredActiveAdmissionResumes,
@@ -2510,6 +2659,7 @@ describe("protocol-v4 durable secure room engine", () => {
 
     expect(result.challengeProducedResume).toBe(true);
     expect(result.preAuthResponseAccepted).toBe(true);
+    expect(result.fortPassClaimClearedAfterResume).toBe(true);
     expect(result.snapshotPrecedesResumeComplete).toBe(true);
     expect(result.resumeActivatedOnlyAfterAck).toBe(true);
     expect(result.crashRestoredActiveAdmissionResumes).toBe(true);
@@ -2518,6 +2668,1122 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.staleSocketCouldNotAuthenticateReplacement).toBe(true);
     expect(result.obsoleteGenerationCouldNotPoisonReplacement).toBe(true);
     expect(result.executingHandshakeWasAborted).toBe(true);
+  });
+
+  it("retires only fresh identities when pre-authentication is rejected", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const roomSecret = `pf2_${"A".repeat(43)}`;
+      const challenge = {
+        kind: "secure-auth-challenge", v: 4, suite: 1,
+        connectionId: stateModule.randomSecureRoomIdV4(16),
+        challenge: stateModule.randomSecureRoomIdV4(32),
+        roomInstance,
+      };
+      const rejection = {
+        kind: "secure-server", v: 4, suite: 1, type: "error", code: "rate-limited",
+      };
+
+      const exercise = async (
+        source: "restored-active" | "restored-pending" | "fresh",
+        errorCode: "rate-limited" | "internal-error" = "rate-limited",
+      ) => {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const deviceId = stateModule.randomSecureRoomIdV4(16);
+        let retireCalls = 0;
+        let provisional = source === "fresh";
+        let authenticationAmbiguous = source === "restored-pending";
+        const fakeEngine = {
+          roomInstance,
+          deviceId,
+          state: {
+            members: source === "restored-active" ? [{ deviceId }] : [],
+          },
+          pendingOutbox: [],
+          get isProvisional() { return provisional; },
+          get isAuthenticationAmbiguous() { return authenticationAmbiguous; },
+          isActive: () => source === "restored-active",
+          markAuthenticationAttempted: async () => {
+            if (provisional) {
+              provisional = false;
+              authenticationAmbiguous = true;
+            }
+          },
+          retire: async () => { retireCalls += 1; },
+          dispose: () => {},
+        };
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        const stops: Array<{ reason: string; preserveRecovery: boolean }> = [];
+        let retries = 0;
+        harness.lease = { isActive: () => true, release: () => {} };
+        harness.config = {
+          initialMode: "join",
+          recoveryOnly: false,
+          roomId: "abcdefghij",
+          roomSecret,
+          roomSecretResolvedFor: roomInstance,
+          displayName: "Guest",
+          roomInstance: null,
+          setupRoomInstance: null,
+        };
+        harness.createAuthenticateFrame = async () => ({ test: true });
+        harness.sendAuthentication = () => {};
+        harness.stopPendingConnection = (_handshake: unknown, result: { reason: string }, preserveRecovery: boolean) => {
+          stops.push({ reason: result.reason, preserveRecovery });
+        };
+        harness.retryPendingAuthentication = () => {
+          retries += 1;
+          return true;
+        };
+
+        const originalRestore = (engineModule.SecureRoomEngine as any).restore;
+        const originalCreateJoiner = (engineModule.SecureRoomEngine as any).createJoiner;
+        try {
+          if (source === "fresh") {
+            (engineModule.SecureRoomEngine as any).restore = async () => {
+              throw new engineModule.SecureRoomEngineError("state-not-found", "missing");
+            };
+            (engineModule.SecureRoomEngine as any).createJoiner = async () => fakeEngine;
+          } else {
+            (engineModule.SecureRoomEngine as any).restore = async () => fakeEngine;
+          }
+          await harness.handleChallenge(challenge, undefined, {});
+          const discardBeforeError = harness.discardEngineOnAuthenticationFailure;
+          await harness.handleServerError({ ...rejection, code: errorCode }, undefined);
+          return { discardBeforeError, retireCalls, stops, retries };
+        } finally {
+          (engineModule.SecureRoomEngine as any).restore = originalRestore;
+          (engineModule.SecureRoomEngine as any).createJoiner = originalCreateJoiner;
+        }
+      };
+
+      const outcomes = {
+        restoredActive: await exercise("restored-active"),
+        restoredPending: await exercise("restored-pending"),
+        fresh: await exercise("fresh"),
+        freshAmbiguous: await exercise("fresh", "internal-error"),
+      };
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      return outcomes;
+    });
+
+    expect(result.restoredActive).toEqual({
+      discardBeforeError: false,
+      retireCalls: 0,
+      stops: [{ reason: "rate-limited", preserveRecovery: false }],
+      retries: 0,
+    });
+    expect(result.restoredPending).toEqual({
+      discardBeforeError: false,
+      retireCalls: 0,
+      stops: [{ reason: "recovery-required", preserveRecovery: true }],
+      retries: 0,
+    });
+    expect(result.fresh).toEqual({
+      discardBeforeError: true,
+      retireCalls: 1,
+      stops: [{ reason: "rate-limited", preserveRecovery: false }],
+      retries: 0,
+    });
+    expect(result.freshAmbiguous).toEqual({
+      discardBeforeError: true,
+      retireCalls: 0,
+      stops: [],
+      retries: 1,
+    });
+  });
+
+  it("erases only pre-send cancellation and preserves an exact reload recovery pointer", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+      ]);
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const makeHarness = (ambiguous: boolean) => {
+        let retireCalls = 0;
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        harness.engine = {
+          isProvisional: !ambiguous,
+          isAuthenticationAmbiguous: ambiguous,
+          retire: async () => { retireCalls += 1; },
+          dispose: () => {},
+        };
+        harness.config = {
+          initialMode: "setup",
+          roomId: "abcdefghij",
+          roomSecret: `pf2_${"A".repeat(43)}`,
+          roomSecretResolvedFor: roomInstance,
+          displayName: "Founder",
+          roomInstance,
+          setupRoomInstance: roomInstance,
+        };
+        harness.lease = { release: () => {}, isActive: () => true };
+        harness.stopped = false;
+        harness.authenticationMayHaveCommitted = ambiguous;
+        harness.unresolvedAuthentication = ambiguous;
+        return { controller, harness, retireCalls: () => retireCalls };
+      };
+
+      const preSend = makeHarness(false);
+      const preSendCanLeave = await preSend.controller.cancelPendingConnection();
+      const preSendRecovery = preSend.controller.pendingRecovery;
+
+      const postSend = makeHarness(true);
+      const postSendCanLeave = await postSend.controller.cancelPendingConnection();
+      const postSendRecovery = postSend.controller.pendingRecovery;
+      const secondCancelCanLeave = await postSend.controller.cancelPendingConnection();
+      const reloaded = new SecureRoomController();
+      const reloadRecovery = reloaded.pendingRecovery;
+      const mismatchedStart = await reloaded.setup({
+        roomId: "different1",
+        roomSecret: `pf2_${"A".repeat(43)}`,
+        displayName: "Founder",
+      });
+      await reloaded.disconnect();
+
+      return {
+        preSendCanLeave,
+        preSendRetired: preSend.retireCalls(),
+        preSendRecovery,
+        postSendCanLeave,
+        postSendRetired: postSend.retireCalls(),
+        postSendRecovery,
+        secondCancelCanLeave,
+        reloadRecovery,
+        mismatchedStart,
+      };
+    });
+
+    expect(result.preSendCanLeave).toBe(true);
+    expect(result.preSendRetired).toBe(1);
+    expect(result.preSendRecovery).toBeNull();
+    expect(result.postSendCanLeave).toBe(false);
+    expect(result.postSendRetired).toBe(0);
+    expect(result.postSendRecovery).toEqual({
+      mode: "setup", roomId: "abcdefghij", displayName: "Founder",
+    });
+    expect(result.secondCancelCanLeave).toBe(false);
+    expect(result.reloadRecovery).toEqual(result.postSendRecovery);
+    expect(result.mismatchedStart).toEqual({ status: "failed", reason: "recovery-required" });
+  });
+
+  it("preserves exact setup recovery and blocks replacement when provisional retirement fails", async () => {
+    const result = await page.evaluate(async () => {
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomId = "abcdefghij";
+      const displayName = "Failed Cleanup Founder";
+      const roomSecret = `pf2_${"A".repeat(43)}`;
+
+      const exercise = async (replace: boolean) => {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const roomInstance = stateModule.randomSecureRoomIdV4(16);
+        const events: string[] = [];
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        harness.config = {
+          initialMode: "setup",
+          recoveryOnly: false,
+          roomId,
+          roomSecret,
+          roomSecretResolvedFor: roomInstance,
+          displayName,
+          roomInstance,
+          setupRoomInstance: roomInstance,
+        };
+        harness.engine = {
+          isProvisional: true,
+          isAuthenticationAmbiguous: false,
+          retire: async () => {
+            events.push("retire");
+            throw new engineModule.SecureRoomEngineError(
+              "persistence-failed",
+              "test retirement failure",
+            );
+          },
+          dispose: () => { events.push("dispose"); },
+        };
+        harness.lease = {
+          isActive: () => true,
+          release: () => { events.push("release"); },
+        };
+        harness.stopped = false;
+        let openSocketCalls = 0;
+        harness.openSocket = () => { openSocketCalls += 1; };
+
+        const outcome = replace
+          ? await controller.setup({
+              roomId: "different1",
+              roomSecret,
+              displayName: "Replacement Founder",
+            })
+          : await controller.cancelPendingConnection();
+        const raw = sessionStorage.getItem("pillowfort:secure-room-recovery:v1");
+        const persisted = raw ? JSON.parse(raw) as Record<string, unknown> : null;
+        return {
+          roomInstance,
+          outcome,
+          recovery: controller.pendingRecovery,
+          persistedRoomInstance: persisted?.roomInstance ?? null,
+          events,
+          openSocketCalls,
+        };
+      };
+
+      try {
+        return {
+          direct: await exercise(false),
+          replacement: await exercise(true),
+        };
+      } finally {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.direct.outcome).toBe(false);
+    expect(result.replacement.outcome).toEqual({ status: "failed", reason: "recovery-required" });
+    for (const outcome of [result.direct, result.replacement]) {
+      expect(outcome.recovery).toEqual({
+        mode: "setup",
+        roomId: "abcdefghij",
+        displayName: "Failed Cleanup Founder",
+      });
+      expect(outcome.persistedRoomInstance).toBe(outcome.roomInstance);
+      expect(outcome.events).toEqual(["retire", "dispose", "release"]);
+      expect(outcome.openSocketCalls).toBe(0);
+    }
+  });
+
+  it("keeps ambiguous authentication recovery across an explicit disconnect", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+      ]);
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const events: string[] = [];
+      const controller = new SecureRoomController();
+      const harness = controller as any;
+      harness.config = {
+        initialMode: "join",
+        recoveryOnly: false,
+        roomId: "abcdefghij",
+        roomSecret: `pf2_${"A".repeat(43)}`,
+        roomSecretResolvedFor: roomInstance,
+        displayName: "Ambiguous Guest",
+        roomInstance,
+        setupRoomInstance: null,
+      };
+      harness.engine = {
+        isProvisional: false,
+        isAuthenticationAmbiguous: true,
+        retire: async () => { events.push("retire"); },
+        dispose: () => { events.push("dispose"); },
+      };
+      harness.lease = {
+        isActive: () => true,
+        release: () => { events.push("release"); },
+      };
+      harness.stopped = false;
+      harness.authenticationMayHaveCommitted = true;
+      harness.unresolvedAuthentication = true;
+      harness.rememberRecoveryContext();
+      try {
+        await controller.disconnect();
+        const raw = sessionStorage.getItem("pillowfort:secure-room-recovery:v1");
+        const persisted = raw ? JSON.parse(raw) as Record<string, unknown> : null;
+        return {
+          roomInstance,
+          recovery: controller.pendingRecovery,
+          persistedRoomInstance: persisted?.roomInstance ?? null,
+          events,
+          stopped: harness.stopped,
+          engineCleared: harness.engine === null,
+          leaseCleared: harness.lease === null,
+        };
+      } finally {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.recovery).toEqual({
+      mode: "join", roomId: "abcdefghij", displayName: "Ambiguous Guest",
+    });
+    expect(result.persistedRoomInstance).toBe(result.roomInstance);
+    expect(result.events).toEqual(["dispose", "release"]);
+    expect(result.stopped).toBe(true);
+    expect(result.engineCleared).toBe(true);
+    expect(result.leaseCleared).toBe(true);
+  });
+
+  it("preserves recovery when terminal or definitive rejection cleanup cannot retire local state", async () => {
+    const result = await page.evaluate(async () => {
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+
+      const exercise = async (kind: "terminal" | "pre-auth") => {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const roomInstance = stateModule.randomSecureRoomIdV4(16);
+        const events: string[] = [];
+        const settlements: unknown[] = [];
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        harness.config = {
+          initialMode: "join",
+          recoveryOnly: true,
+          roomId: "abcdefghij",
+          roomSecret: `pf2_${"A".repeat(43)}`,
+          roomSecretResolvedFor: roomInstance,
+          displayName: "Cleanup Guest",
+          roomInstance,
+          setupRoomInstance: null,
+        };
+        harness.engine = {
+          roomInstance,
+          pendingOutbox: [],
+          isProvisional: false,
+          isAuthenticationAmbiguous: true,
+          isActive: () => false,
+          retire: async () => {
+            events.push("retire");
+            throw new engineModule.SecureRoomEngineError(
+              "persistence-failed",
+              "test terminal retirement failure",
+            );
+          },
+          dispose: () => { events.push("dispose"); },
+        };
+        harness.lease = {
+          isActive: () => true,
+          release: () => { events.push("release"); },
+        };
+        harness.stopped = false;
+        harness.terminal = false;
+        harness.unresolvedAuthentication = true;
+        harness.rememberRecoveryContext();
+        if (kind === "terminal") {
+          harness.authenticated = true;
+          await harness.finishTerminal("This secure fort is no longer available.");
+        } else {
+          harness.authenticated = false;
+          harness.authenticatedMode = "join";
+          const handshake = {
+            generation: 0,
+            settle: (value: unknown) => settlements.push(value),
+          };
+          harness.pendingHandshake = handshake;
+          await harness.handleServerError({
+            kind: "secure-server", v: 4, suite: 1, type: "error", code: "room-retired",
+          }, handshake);
+        }
+        const raw = sessionStorage.getItem("pillowfort:secure-room-recovery:v1");
+        const persisted = raw ? JSON.parse(raw) as Record<string, unknown> : null;
+        return {
+          roomInstance,
+          settlement: settlements[0] ?? null,
+          recovery: controller.pendingRecovery,
+          persistedRoomInstance: persisted?.roomInstance ?? null,
+          events,
+          stopped: harness.stopped,
+          terminal: harness.terminal,
+          engineCleared: harness.engine === null,
+          leaseCleared: harness.lease === null,
+        };
+      };
+
+      try {
+        return {
+          terminal: await exercise("terminal"),
+          preAuth: await exercise("pre-auth"),
+        };
+      } finally {
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.terminal.settlement).toBeNull();
+    expect(result.preAuth.settlement).toEqual({ status: "failed", reason: "recovery-required" });
+    for (const outcome of [result.terminal, result.preAuth]) {
+      expect(outcome.recovery).toEqual({
+        mode: "join", roomId: "abcdefghij", displayName: "Cleanup Guest",
+      });
+      expect(outcome.persistedRoomInstance).toBe(outcome.roomInstance);
+      expect(outcome.events).toEqual(["retire", "dispose", "release"]);
+      expect(outcome.stopped).toBe(true);
+      expect(outcome.terminal).toBe(false);
+      expect(outcome.engineCleared).toBe(true);
+      expect(outcome.leaseCleared).toBe(true);
+    }
+  });
+
+  it("makes ambiguous authentication recovery restore-only across reload and lifecycle failure", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomId = "abcdefghij";
+      const displayName = "Recovery User";
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const roomSecret = `pf2_${"A".repeat(43)}`;
+      const deviceId = stateModule.randomSecureRoomIdV4(16);
+      const admissionId = stateModule.randomSecureRoomIdV4(16);
+      const challenge = (instance: string | null) => ({
+        kind: "secure-auth-challenge", v: 4, suite: 1,
+        connectionId: stateModule.randomSecureRoomIdV4(16),
+        challenge: stateModule.randomSecureRoomIdV4(32),
+        roomInstance: instance,
+      });
+      const lease = () => ({
+        isActive: () => true,
+        release: () => {},
+      });
+      const config = (mode: "setup" | "join") => ({
+        initialMode: mode,
+        recoveryOnly: true,
+        roomId,
+        roomSecret,
+        roomSecretResolvedFor: roomInstance,
+        displayName,
+        roomInstance,
+        setupRoomInstance: mode === "setup" ? roomInstance : null,
+      });
+      const ambiguousEngine = (activeFounder: boolean) => ({
+        roomInstance,
+        deviceId,
+        state: {
+          hostDeviceId: activeFounder ? deviceId : null,
+          members: activeFounder ? [{ deviceId }] : [],
+        },
+        pendingOutbox: [{
+          kind: "admission",
+          messageId: admissionId,
+          admissionId,
+          welcomeMessageId: null,
+          commitAcknowledged: false,
+          outbound: new Uint8Array([1]),
+        }],
+        isProvisional: false,
+        isAuthenticationAmbiguous: true,
+        isActive: () => activeFounder,
+        markAuthenticationAttempted: async () => {},
+        retire: async () => {},
+        dispose: () => {},
+      });
+      const seedRecovery = (controller: InstanceType<typeof SecureRoomController>, mode: "setup" | "join") => {
+        const harness = controller as any;
+        harness.config = config(mode);
+        harness.engine = ambiguousEngine(mode === "setup");
+        harness.unresolvedAuthentication = true;
+        harness.rememberRecoveryContext();
+        harness.engine = null;
+        harness.lease = lease();
+        harness.stopped = false;
+        return harness;
+      };
+
+      const originalRestore = (engineModule.SecureRoomEngine as any).restore;
+      const originalCreateFounder = (engineModule.SecureRoomEngine as any).createFounder;
+      const originalCreateJoiner = (engineModule.SecureRoomEngine as any).createJoiner;
+      let createFounderCalls = 0;
+      let createJoinerCalls = 0;
+      let restoreCalls = 0;
+      try {
+        (engineModule.SecureRoomEngine as any).createFounder = async () => {
+          createFounderCalls += 1;
+          throw new Error("recovery created a replacement founder");
+        };
+        (engineModule.SecureRoomEngine as any).createJoiner = async () => {
+          createJoinerCalls += 1;
+          throw new Error("recovery created a replacement joiner");
+        };
+
+        const setupController = new SecureRoomController();
+        const setup = seedRecovery(setupController, "setup");
+        const setupModes: string[] = [];
+        let setupSends = 0;
+        (engineModule.SecureRoomEngine as any).restore = async () => {
+          restoreCalls += 1;
+          return ambiguousEngine(true);
+        };
+        setup.createAuthenticateFrame = async (_challenge: unknown, mode: string) => {
+          setupModes.push(mode);
+          return { test: true };
+        };
+        setup.sendAuthentication = () => { setupSends += 1; };
+        await setup.handleChallenge(challenge(null), undefined, {});
+        const setupRestored = setupModes.join(",") === "setup" && setupSends === 1 &&
+          setup.engine?.isAuthenticationAmbiguous === true;
+
+        const wrongSetupController = new SecureRoomController();
+        const wrongSetup = seedRecovery(wrongSetupController, "setup");
+        const wrongSetupSettlements: unknown[] = [];
+        (engineModule.SecureRoomEngine as any).restore = async () => {
+          restoreCalls += 1;
+          throw new engineModule.SecureRoomEngineError("state-not-found", "wrong recovery credential");
+        };
+        await wrongSetup.handleChallenge(challenge(null), {
+          generation: 0,
+          settle: (value: unknown) => wrongSetupSettlements.push(value),
+        }, {});
+        const wrongSetupPreserved = wrongSetupController.pendingRecovery?.mode === "setup" &&
+          (wrongSetupSettlements[0] as { reason?: string } | undefined)?.reason ===
+            "recovery-credential-mismatch";
+
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const joinController = new SecureRoomController();
+        const join = seedRecovery(joinController, "join");
+        const joinSettlements: unknown[] = [];
+        let joinRestoreAttempt = 0;
+        let joinRetireCalls = 0;
+        const restoredJoin = {
+          ...ambiguousEngine(false),
+          retire: async () => { joinRetireCalls += 1; },
+        };
+        (engineModule.SecureRoomEngine as any).restore = async () => {
+          restoreCalls += 1;
+          joinRestoreAttempt += 1;
+          if (joinRestoreAttempt === 1) {
+            throw new engineModule.SecureRoomEngineError("state-not-found", "wrong recovery credential");
+          }
+          return restoredJoin;
+        };
+        join.createAuthenticateFrame = async (_challenge: unknown, mode: string) => {
+          joinModes.push(mode);
+          return { test: true };
+        };
+        join.sendAuthentication = () => { joinSends += 1; };
+        const joinModes: string[] = [];
+        let joinSends = 0;
+        await join.handleChallenge(challenge(roomInstance), {
+          generation: 0,
+          settle: (value: unknown) => joinSettlements.push(value),
+        }, {});
+        const wrongJoinPreserved = joinController.pendingRecovery?.mode === "join" &&
+          (joinSettlements[0] as { reason?: string } | undefined)?.reason ===
+            "recovery-credential-mismatch" &&
+          joinRetireCalls === 0;
+
+        join.config = config("join");
+        join.lease = lease();
+        join.stopped = false;
+        await join.handleChallenge(challenge(roomInstance), {
+          generation: 1,
+          settle: (value: unknown) => joinSettlements.push(value),
+        }, {});
+        const correctJoinRestored = joinModes.join(",") === "join" && joinSends === 1 &&
+          join.engine === restoredJoin;
+
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const lifecycleController = new SecureRoomController();
+        const lifecycle = lifecycleController as any;
+        let lifecycleRetireCalls = 0;
+        lifecycle.generation = 7;
+        lifecycle.config = config("join");
+        lifecycle.engine = {
+          roomInstance,
+          deviceId,
+          state: { members: [{ deviceId }] },
+          isProvisional: false,
+          isAuthenticationAmbiguous: true,
+          roster: () => [{ deviceId }],
+          completeAdmissionLifecycle: async () => {
+            throw new engineModule.SecureRoomEngineError("persistence-failed", "lifecycle persistence failed");
+          },
+          retire: async () => { lifecycleRetireCalls += 1; },
+          dispose: () => {},
+        };
+        lifecycle.lease = lease();
+        lifecycle.stopped = false;
+        lifecycle.authenticated = true;
+        lifecycle.unresolvedAuthentication = true;
+        lifecycle.rememberRecoveryContext();
+        lifecycle.enqueue(
+          () => lifecycle.handleMemberLifecycle(deviceId, "active"),
+          lifecycle.generation,
+        );
+        await lifecycle.serialQueue;
+        const lifecycleFailurePreserved = lifecycleController.pendingRecovery?.mode === "join" &&
+          lifecycleRetireCalls === 0 && lifecycle.stopped === true && lifecycle.terminal === false;
+
+        return {
+          setupRestored,
+          wrongSetupPreserved,
+          wrongJoinPreserved,
+          correctJoinRestored,
+          lifecycleFailurePreserved,
+          createFounderCalls,
+          createJoinerCalls,
+          restoreCalls,
+          joinRetireCalls,
+        };
+      } finally {
+        (engineModule.SecureRoomEngine as any).restore = originalRestore;
+        (engineModule.SecureRoomEngine as any).createFounder = originalCreateFounder;
+        (engineModule.SecureRoomEngine as any).createJoiner = originalCreateJoiner;
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result).toEqual({
+      setupRestored: true,
+      wrongSetupPreserved: true,
+      wrongJoinPreserved: true,
+      correctJoinRestored: true,
+      lifecycleFailurePreserved: true,
+      createFounderCalls: 0,
+      createJoinerCalls: 0,
+      restoreCalls: 4,
+      joinRetireCalls: 0,
+    });
+  });
+
+  it("terminally clears established setup recovery when the relay room is missing", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomId = "abcdefghij";
+      const displayName = "Established Founder";
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const roomSecret = `pf2_${"A".repeat(43)}`;
+      const deviceId = stateModule.randomSecureRoomIdV4(16);
+      let retireCalls = 0;
+      let disposeCalls = 0;
+      let createFounderCalls = 0;
+      let createAuthenticateCalls = 0;
+      let sendAuthenticationCalls = 0;
+      const establishedFounder = {
+        roomInstance,
+        deviceId,
+        state: { hostDeviceId: deviceId, members: [{ deviceId }] },
+        pendingOutbox: [],
+        isProvisional: false,
+        isAuthenticationAmbiguous: false,
+        isActive: () => true,
+        retire: async () => { retireCalls += 1; },
+        dispose: () => { disposeCalls += 1; },
+      };
+      const controller = new SecureRoomController();
+      const harness = controller as any;
+      harness.config = {
+        initialMode: "setup",
+        recoveryOnly: true,
+        roomId,
+        roomSecret,
+        roomSecretResolvedFor: roomInstance,
+        displayName,
+        roomInstance,
+        setupRoomInstance: roomInstance,
+      };
+      harness.engine = establishedFounder;
+      harness.unresolvedAuthentication = true;
+      harness.rememberRecoveryContext();
+      harness.engine = null;
+      harness.lease = { isActive: () => true, release: () => {} };
+      harness.stopped = false;
+      harness.terminal = false;
+      const settlements: unknown[] = [];
+      const originalRestore = (engineModule.SecureRoomEngine as any).restore;
+      const originalCreateFounder = (engineModule.SecureRoomEngine as any).createFounder;
+      try {
+        (engineModule.SecureRoomEngine as any).restore = async () => establishedFounder;
+        (engineModule.SecureRoomEngine as any).createFounder = async () => {
+          createFounderCalls += 1;
+          throw new Error("missing-room recovery minted a replacement founder");
+        };
+        harness.createAuthenticateFrame = async () => {
+          createAuthenticateCalls += 1;
+          throw new Error("missing-room recovery constructed authentication");
+        };
+        harness.sendAuthentication = () => { sendAuthenticationCalls += 1; };
+        await harness.handleChallenge({
+          kind: "secure-auth-challenge", v: 4, suite: 1,
+          connectionId: stateModule.randomSecureRoomIdV4(16),
+          challenge: stateModule.randomSecureRoomIdV4(32),
+          roomInstance: null,
+        }, {
+          generation: 0,
+          settle: (value: unknown) => settlements.push(value),
+        }, {});
+        return {
+          settlement: settlements[0] ?? null,
+          pendingRecovery: controller.pendingRecovery,
+          persistedRecovery: sessionStorage.getItem("pillowfort:secure-room-recovery:v1"),
+          retireCalls,
+          disposeCalls,
+          createFounderCalls,
+          createAuthenticateCalls,
+          sendAuthenticationCalls,
+          engineCleared: harness.engine === null,
+        };
+      } finally {
+        (engineModule.SecureRoomEngine as any).restore = originalRestore;
+        (engineModule.SecureRoomEngine as any).createFounder = originalCreateFounder;
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result).toEqual({
+      settlement: { status: "failed", reason: "authentication-failed" },
+      pendingRecovery: null,
+      persistedRecovery: null,
+      retireCalls: 1,
+      disposeCalls: 1,
+      createFounderCalls: 0,
+      createAuthenticateCalls: 0,
+      sendAuthenticationCalls: 0,
+      engineCleared: true,
+    });
+  });
+
+  it("settles a recovered handshake when local authentication construction throws", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomInstance = stateModule.randomSecureRoomIdV4(16);
+      const deviceId = stateModule.randomSecureRoomIdV4(16);
+      const admissionId = stateModule.randomSecureRoomIdV4(16);
+      let disposed = 0;
+      let retired = 0;
+      const restored = {
+        roomInstance,
+        deviceId,
+        state: { hostDeviceId: deviceId, members: [{ deviceId }] },
+        pendingOutbox: [{
+          kind: "admission",
+          messageId: admissionId,
+          admissionId,
+          welcomeMessageId: null,
+          commitAcknowledged: false,
+          outbound: new Uint8Array([1]),
+        }],
+        isProvisional: false,
+        isAuthenticationAmbiguous: true,
+        isActive: () => true,
+        markAuthenticationAttempted: async () => {},
+        retire: async () => { retired += 1; },
+        dispose: () => { disposed += 1; },
+      };
+      const controller = new SecureRoomController();
+      const harness = controller as any;
+      harness.generation = 19;
+      harness.config = {
+        initialMode: "setup",
+        recoveryOnly: true,
+        roomId: "abcdefghij",
+        roomSecret: `pf2_${"A".repeat(43)}`,
+        roomSecretResolvedFor: roomInstance,
+        displayName: "Recovery User",
+        roomInstance,
+        setupRoomInstance: roomInstance,
+      };
+      harness.engine = restored;
+      harness.unresolvedAuthentication = true;
+      harness.rememberRecoveryContext();
+      harness.engine = null;
+      harness.lease = { isActive: () => true, release: () => {} };
+      harness.stopped = false;
+      harness.terminal = false;
+      const settlements: unknown[] = [];
+      const handshake = {
+        generation: harness.generation,
+        settle: (value: unknown) => settlements.push(value),
+      };
+      harness.pendingHandshake = handshake;
+      harness.createAuthenticateFrame = async () => {
+        throw new Error("local authentication construction failed");
+      };
+      const originalRestore = (engineModule.SecureRoomEngine as any).restore;
+      try {
+        (engineModule.SecureRoomEngine as any).restore = async () => restored;
+        harness.enqueue(() => harness.handleChallenge({
+          kind: "secure-auth-challenge", v: 4, suite: 1,
+          connectionId: stateModule.randomSecureRoomIdV4(16),
+          challenge: stateModule.randomSecureRoomIdV4(32),
+          roomInstance: null,
+        }, handshake, {}), harness.generation);
+        await harness.serialQueue;
+        return {
+          settlement: settlements[0] ?? null,
+          recovery: controller.pendingRecovery,
+          stopped: harness.stopped,
+          terminal: harness.terminal,
+          pendingHandshakeCleared: harness.pendingHandshake === null,
+          retired,
+          disposed,
+        };
+      } finally {
+        (engineModule.SecureRoomEngine as any).restore = originalRestore;
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.settlement).toEqual({ status: "failed", reason: "recovery-required" });
+    expect(result.recovery).toEqual({
+      mode: "setup", roomId: "abcdefghij", displayName: "Recovery User",
+    });
+    expect(result.stopped).toBe(true);
+    expect(result.terminal).toBe(false);
+    expect(result.pendingHandshakeCleared).toBe(true);
+    expect(result.retired).toBe(0);
+    expect(result.disposed).toBe(1);
+  });
+
+  it("retires a pre-send provisional identity before reconnect exhaustion releases its lease", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+      ]);
+      const NativeWebSocket = window.WebSocket;
+      const sockets: Array<{
+        readyState: number;
+        onmessage: ((event: { data: string }) => void) | null;
+        onclose: (() => void) | null;
+        onerror: (() => void) | null;
+        close: () => void;
+      }> = [];
+      class FakeWebSocket {
+        static readonly OPEN = 1;
+        readyState = FakeWebSocket.OPEN;
+        onmessage: ((event: { data: string }) => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor(_url: string) { sockets.push(this); }
+        close() { this.readyState = 3; }
+      }
+      Object.defineProperty(window, "WebSocket", {
+        configurable: true,
+        writable: true,
+        value: FakeWebSocket,
+      });
+      try {
+        const roomInstance = stateModule.randomSecureRoomIdV4(16);
+        const events: string[] = [];
+        let provisionalPresent = true;
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        const generation = 29;
+        harness.generation = generation;
+        harness.stopped = false;
+        harness.terminal = false;
+        harness.authenticated = false;
+        harness.reconnectAttempts = 3;
+        harness.config = {
+          initialMode: "join",
+          recoveryOnly: false,
+          roomId: "abcdefghij",
+          roomSecret: `pf2_${"A".repeat(43)}`,
+          roomSecretResolvedFor: roomInstance,
+          displayName: "Provisional User",
+          roomInstance,
+          setupRoomInstance: null,
+        };
+        harness.engine = {
+          isProvisional: true,
+          isAuthenticationAmbiguous: false,
+          retire: async () => {
+            events.push("retire");
+            provisionalPresent = false;
+          },
+          dispose: () => { events.push("dispose"); },
+        };
+        harness.lease = {
+          isActive: () => true,
+          release: () => { events.push("release"); },
+        };
+        const settlements: unknown[] = [];
+        const handshake = {
+          generation,
+          settle: (value: unknown) => settlements.push(value),
+        };
+        harness.pendingHandshake = handshake;
+        harness.openSocket(generation, handshake);
+        sockets[0]?.onclose?.();
+        await harness.serialQueue;
+        return {
+          settlement: settlements[0] ?? null,
+          provisionalPresent,
+          events,
+          pointerCleared: controller.pendingRecovery === null,
+          engineCleared: harness.engine === null,
+          leaseCleared: harness.lease === null,
+        };
+      } finally {
+        Object.defineProperty(window, "WebSocket", {
+          configurable: true,
+          writable: true,
+          value: NativeWebSocket,
+        });
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.settlement).toEqual({ status: "failed", reason: "socket-failed" });
+    expect(result.provisionalPresent).toBe(false);
+    expect(result.events.indexOf("retire")).toBeGreaterThanOrEqual(0);
+    expect(result.events.indexOf("retire")).toBeLessThan(result.events.indexOf("release"));
+    expect(result.pointerCleared).toBe(true);
+    expect(result.engineCleared).toBe(true);
+    expect(result.leaseCleared).toBe(true);
+  });
+
+  it("binds recovered joins to their serialized room instance and terminally resolves replacement", async () => {
+    const result = await page.evaluate(async () => {
+      sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/services/secureRoomEngine.ts"),
+      ]);
+      const roomId = "abcdefghij";
+      const displayName = "Recovery User";
+      const originalRoomInstance = stateModule.randomSecureRoomIdV4(16);
+      const replacementRoomInstance = stateModule.randomSecureRoomIdV4(16);
+      const roomSecret = `pf2_${"A".repeat(43)}`;
+      const originalRestore = (engineModule.SecureRoomEngine as any).restore;
+      const originalCreateJoiner = (engineModule.SecureRoomEngine as any).createJoiner;
+      const restoreInstances: string[] = [];
+      let createJoinerCalls = 0;
+      let retireCalls = 0;
+
+      const seed = () => {
+        const controller = new SecureRoomController();
+        const harness = controller as any;
+        const engine = {
+          roomInstance: originalRoomInstance,
+          deviceId: stateModule.randomSecureRoomIdV4(16),
+          state: { hostDeviceId: null, members: [] },
+          pendingOutbox: [],
+          isProvisional: false,
+          isAuthenticationAmbiguous: true,
+          isActive: () => false,
+          retire: async () => { retireCalls += 1; },
+          dispose: () => {},
+        };
+        harness.config = {
+          initialMode: "join",
+          recoveryOnly: true,
+          roomId,
+          roomSecret,
+          roomSecretResolvedFor: originalRoomInstance,
+          displayName,
+          roomInstance: originalRoomInstance,
+          setupRoomInstance: null,
+        };
+        harness.engine = engine;
+        harness.unresolvedAuthentication = true;
+        harness.rememberRecoveryContext();
+        const raw = sessionStorage.getItem("pillowfort:secure-room-recovery:v1");
+        const pointer = raw ? JSON.parse(raw) as Record<string, unknown> : null;
+        harness.engine = null;
+        harness.lease = { isActive: () => true, release: () => {} };
+        harness.stopped = false;
+        harness.terminal = false;
+        const settlements: unknown[] = [];
+        return { controller, harness, engine, pointer, settlements };
+      };
+
+      try {
+        (engineModule.SecureRoomEngine as any).restore = async (options: { roomInstance: string }) => {
+          restoreInstances.push(options.roomInstance);
+          const current = activeEngine;
+          if (!current) throw new Error("missing test recovery engine");
+          return current;
+        };
+        (engineModule.SecureRoomEngine as any).createJoiner = async () => {
+          createJoinerCalls += 1;
+          throw new Error("terminal recovery minted a replacement joiner");
+        };
+
+        let activeEngine: ReturnType<typeof seed>["engine"] | null = null;
+        const missing = seed();
+        activeEngine = missing.engine;
+        const missingHandshake = {
+          generation: 0,
+          settle: (value: unknown) => missing.settlements.push(value),
+        };
+        await missing.harness.handleChallenge({
+          kind: "secure-auth-challenge", v: 4, suite: 1,
+          connectionId: stateModule.randomSecureRoomIdV4(16),
+          challenge: stateModule.randomSecureRoomIdV4(32),
+          roomInstance: null,
+        }, missingHandshake, {});
+        const missingResolved = missing.controller.pendingRecovery === null &&
+          (missing.settlements[0] as { reason?: string } | undefined)?.reason !== "recovery-required";
+
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+        const replaced = seed();
+        activeEngine = replaced.engine;
+        const replacedHandshake = {
+          generation: 0,
+          settle: (value: unknown) => replaced.settlements.push(value),
+        };
+        await replaced.harness.handleChallenge({
+          kind: "secure-auth-challenge", v: 4, suite: 1,
+          connectionId: stateModule.randomSecureRoomIdV4(16),
+          challenge: stateModule.randomSecureRoomIdV4(32),
+          roomInstance: replacementRoomInstance,
+        }, replacedHandshake, {});
+        const replacementResolved = replaced.controller.pendingRecovery === null &&
+          (replaced.settlements[0] as { reason?: string } | undefined)?.reason !== "recovery-required";
+        const pointerKeys = replaced.pointer ? Object.keys(replaced.pointer).sort().join(",") : "";
+
+        return {
+          originalRoomInstance,
+          pointerRoomInstance: replaced.pointer?.roomInstance ?? null,
+          pointerKeys,
+          missingResolved,
+          replacementResolved,
+          restoreInstances,
+          createJoinerCalls,
+          retireCalls,
+        };
+      } finally {
+        (engineModule.SecureRoomEngine as any).restore = originalRestore;
+        (engineModule.SecureRoomEngine as any).createJoiner = originalCreateJoiner;
+        sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
+      }
+    });
+
+    expect(result.pointerRoomInstance).toBe(result.originalRoomInstance);
+    expect(result.pointerKeys).toBe("displayName,mode,roomId,roomInstance,savedAt,v");
+    expect(result.missingResolved).toBe(true);
+    expect(result.replacementResolved).toBe(true);
+    expect(result.restoreInstances).toEqual([
+      result.pointerRoomInstance,
+      result.pointerRoomInstance,
+    ]);
+    expect(result.createJoinerCalls).toBe(0);
+    expect(result.retireCalls).toBe(2);
   });
 
   it("gates terminal relay errors before durable retirement can yield", async () => {

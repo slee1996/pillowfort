@@ -62,10 +62,13 @@ npm run deploy
 Run this against the deployed URL, not only local development:
 
 1. Open the home screen on desktop.
-2. Create a fort with the locked, generated `pf2_` room secret.
+2. Create one fort with the locked, generated `pf2_` room secret, then repeat
+   with an explicit 16+ character custom password.
 3. Copy the flag and secret from the intentional room controls; confirm the
    secret is masked unless revealed.
-4. Join from a second browser profile or device.
+4. Join from a second browser profile or device with each secret. Confirm a
+   wrong custom password is rejected before a host approval prompt and can be
+   corrected in the same browser.
 5. Approve the pending device from the host, compare the displayed safety
    fingerprints out of band, then send one styled message from each participant
    and confirm text and style arrive in order.
@@ -138,9 +141,15 @@ State expectations:
   opaque backlog, replay tombstones, throttles, and required deadlines survive
   Durable Object wake-up.
 - Each browser persists its complete wrapped MLS/application snapshot in
-  IndexedDB under an exclusive per-room Web Lock. Storage, lock, revision, or
-  decode failures stop delivery and sending instead of reverting to volatile
-  state.
+  IndexedDB under an exclusive per-room Web Lock. Credential-scoped state keys,
+  atomic legacy migration, and bounded unresolved-state metadata keep a
+  mistyped or pre-send-cancelled attempt from shadowing an established
+  identity while preserving exact recovery after a sent attempt. Storage, lock,
+  revision, or decode failures stop delivery and sending instead of reverting
+  to volatile state.
+- Cloudflare invocation logs are disabled; WebSocket edge/room paths emit no
+  custom provider logs. Do not save raw real-time tail output because request
+  URLs remain visible to authorized live observers.
 - Chat and drawing events remain live-only product data: they are protected in
   transit but are not restored as a user-visible transcript to late joiners.
 

@@ -44,6 +44,18 @@ strictly canonical. Unknown fields, wrong versions or suites, malformed
 encodings, mismatched room instances, duplicate identifiers, invalid routes,
 and oversized values fail closed.
 
+WebSocket upgrade URLs accept exactly one `room` and one `protocol=4` query
+parameter. Duplicate or unknown parameters—including secret/password-looking
+keys—are rejected at the local edge, production edge, and Durable Object
+boundary before room routing or upgrade.
+
+Cloudflare automatic invocation logs are disabled and the WebSocket edge/room
+path emits no custom console logs, preventing accepted room IDs or rejected
+secret-looking query values from being persisted through application logging.
+The hosting provider still necessarily processes request URLs and an authorized
+real-time trace can expose them, so clients never place credentials in a URL;
+the query rejection is defense in depth, not transport secrecy.
+
 Authenticated traffic has independent five-second budgets: 100 raw frames per
 socket, 256 raw frames across the room, and 30 client-initiated operations per
 socket. Only an `order-request` consumes the operation budget because every
@@ -53,10 +65,44 @@ still consume the raw budgets, but are not charged a second time as initiated
 operations. This bounds abuse without disconnecting passive recipients merely
 for completing mandatory protocol fanout.
 
-The invitation secret is a first-party-generated 32-byte value. It is not an
-MLS group key and cannot decrypt MLS traffic. PBKDF2-HMAC-SHA-256 with 600,000
-iterations derives a domain-separated Ed25519 invitation-authentication key.
-The relay stores its public key, not the invitation secret or private key.
+The first-party client defaults to a generated 32-byte invitation secret,
+encoded as canonical `pf2_` plus 43 unpadded base64url characters. A host may
+instead explicitly choose a custom password of 15–64 Unicode scalar values.
+Custom input is NFC-normalized; leading/trailing whitespace, control/default-
+ignorable/line-separator characters, lone surrogates, oversized UTF-8
+encodings, noncharacters/non-ASCII separators, and malformed values in the
+reserved `pf2_` namespace are rejected. New-room creation additionally rejects
+common, repeated, sequential, low-diversity, and room/name-derived choices.
+That strength policy is intentionally not applied while joining or deriving an
+existing room: changing a future creation blocklist must not lock out an
+already-compatible room. Custom-entry mode rejects syntactically canonical
+`pf2_` values so a hand-authored low-entropy string cannot masquerade as the
+generated option.
+
+Before any custom password reaches MLS, invitation authentication, or durable
+state, the browser derives a 32-byte canonical protocol secret using
+PBKDF2-HMAC-SHA-256 with 600,000 iterations. The salt is a canonical JSON tuple
+containing `pillowfort:custom-room-secret:v1`, the pinned KDF identifier, room
+ID, and random 128-bit room instance. Generated `pf2_` secrets pass through
+unchanged for compatibility, but execute and wipe one equivalent PBKDF2 result
+so challenge timing does not reveal which credential mode the host selected.
+The human password remains only in the mounted UI so an invite can reproduce
+it; the protocol and encrypted state use the resolved canonical secret. A
+non-secret, tab-scoped recovery pointer (mode, room ID, display name, and exact
+room instance) survives reload, but recovery still requires re-entering the exact
+copied password.
+
+The resolved invitation secret is not an MLS group key and cannot decrypt MLS
+traffic. A second, domain-separated PBKDF2-HMAC-SHA-256 derivation with 600,000
+iterations produces the Ed25519 invitation-authentication key. The relay stores
+its public key, not the invitation secret or private key.
+
+Custom passwords are a deliberate usability compromise, not equivalent to the
+generated 256-bit default. The invitation public key and a stolen local wrapped
+state are offline guess oracles. PBKDF2 raises the cost of each guess but cannot
+add entropy to a short or common phrase, so the UI recommends at least 16
+characters or four unrelated words and warns against password reuse. Explicit
+host approval of each device remains independently required.
 
 ## Setup, admission, and resume are different protocols
 
@@ -270,8 +316,25 @@ broadcast to an unknown or unauthenticated socket.
 ## Durable client state
 
 Each room/device has one revisioned IndexedDB record protected by a live
-per-room Web Lock. The IndexedDB adapter stores only an opaque blob and performs
-compare-and-swap writes with strict durability. The blob contains:
+per-room Web Lock. New opaque records use a domain-separated SHA-256 key bound
+to both the room instance and resolved canonical credential. Thus an abandoned
+wrong-password attempt cannot shadow the correct credential's durable state;
+the Web Lock remains room-scoped so two credentials cannot mutate the room
+concurrently. A successfully decrypted legacy room-only record is moved to its
+credential-scoped key with one strict, atomic IndexedDB transaction. Failed
+decryption never moves or deletes legacy state. Secret-bearing state remains an
+opaque blob, while non-secret record metadata exposes its hashed room scope and
+`provisional`/`authentication-ambiguous`/`established` lifecycle. Immediately
+before an authentication frame is sent, the browser atomically advances the
+record to `authentication-ambiguous`; a reload therefore cannot mistake a
+possibly committed identity for an unsent artifact. A bounded metadata
+registry tracks at most four unresolved identities per room and sixteen per
+origin. Definitive rejection erases only an artifact proven unsent or created
+by that exact rejected attempt. UI cancellation erases only before
+transmission; ambiguous or accepted-pending attempts remain locked to exact
+recovery. Saturation fails closed rather than evicting a possibly
+relay-accepted identity. The adapter
+performs compare-and-swap writes with strict durability. The blob contains:
 
 - the MLS snapshot and application snapshot;
 - local event sequence, current epoch, replay markers, and processed delivery
@@ -282,9 +345,9 @@ compare-and-swap writes with strict durability. The blob contains:
 - retained secrets required to finish an already-durable pending commit.
 
 Before storage, the complete durable state is wrapped with AES-256-GCM. A
-room-bound, versioned HKDF-SHA-256 derivation from the room secret and a fresh
-32-byte salt produces the wrapping key; a fresh 12-byte nonce is used and the
-canonical wrapper header is authenticated as AAD. The embedded raw MLS
+room-bound, versioned HKDF-SHA-256 derivation from the resolved canonical room
+secret and a fresh 32-byte salt produces the wrapping key; a fresh 12-byte nonce
+is used and the canonical wrapper header is authenticated as AAD. The embedded raw MLS
 snapshot has its own room-bound authenticated wrapper. Parsers require exact
 version, suite, room, instance, canonical JSON, and cross-state invariants.
 
@@ -304,8 +367,10 @@ wipe the caller's immutable JavaScript room-secret string, a `CryptoKey`'s
 engine-private representation, or copies made inside WebCrypto, the browser,
 the OS, or storage hardware.
 
-AES wrapping protects state at rest against an IndexedDB-only disclosure. It
-does not protect against code running in the trusted origin with the room
+AES wrapping protects secret state at rest against an IndexedDB-only
+disclosure. The disclosure can still correlate hashed record scopes and learn
+unresolved-versus-established lifecycle metadata. AES wrapping does not
+protect against code running in the trusted origin with the room
 secret, a compromised browser/OS, physical disk recovery, or rollback of the
 entire browser profile.
 

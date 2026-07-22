@@ -1,5 +1,9 @@
 # Secure room protocol v2
 
+> Historical protocol-v2 record. Production uses protocol v4; its generated-
+> by-default and explicitly custom password rules are documented in
+> `docs/SECURE_ROOM_PROTOCOL_V4.md`.
+
 This document freezes the authentication and encrypted-chat contract used by
 the browser, local Bun relay, and Cloudflare Durable Object relay.
 

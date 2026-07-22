@@ -1,6 +1,6 @@
 import { analyticsLogLine, readAnalyticsEvent } from "./analytics";
 import { constantTimeFortPassClaimHashEqual, customRoomCodeAvailability, fortPassClaimHash, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeRoomId, type FortPassEntitlement } from "./entitlements";
-import { checkoutPublicOrigin, isJsonRequest, isLoopbackHostname, isStrictSameOriginRequest } from "./httpBoundary";
+import { checkoutPublicOrigin, hasOnlyAllowedSearchParameters, isJsonRequest, isLoopbackHostname, isStrictSameOriginRequest } from "./httpBoundary";
 import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_REDEEM_PATH, FORT_PASS_STATUS_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_FORT_PASS_RESERVATION_PATH, ROOM_FORT_PASS_RESERVE_PATH, ROOM_FORT_PASS_REVOKE_PATH, ROOM_STATUS_PATH, ROOM_STRIPE_SESSION_LEDGER_PATH, ROOM_WS_OPEN_LIMIT_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
 import { readByteLimitedText } from "./requestBody";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./security";
@@ -828,23 +828,20 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
 
   if (url.pathname === "/ws") {
     if (!isStrictSameOriginRequest(request)) {
-      logRateLimitedOpsEvent("ws-edge", "ws_rejected", { reason: "bad_origin", surface: "edge", status: 403 });
       return new Response("forbidden", { status: 403 });
     }
     const roomParameters = url.searchParams.getAll("room");
     const protocolParameters = url.searchParams.getAll("protocol");
-    if (roomParameters.length > 1 || protocolParameters.length > 1) {
-      logRateLimitedOpsEvent("ws-edge", "ws_rejected", { reason: "ambiguous_parameters", surface: "edge", status: 400 });
+    if (!hasOnlyAllowedSearchParameters(url, ["room", "protocol"]) ||
+        roomParameters.length > 1 || protocolParameters.length > 1) {
       return new Response("invalid websocket parameters", { status: 400 });
     }
     const roomId = roomParameters[0];
     const normalizedRoomId = normalizeRoomId(roomId);
     if (!roomId || !normalizedRoomId || normalizedRoomId !== roomId) {
-      logRateLimitedOpsEvent("ws-edge", "ws_rejected", { reason: roomId ? "invalid_room" : "missing_room", surface: "edge", status: 400 });
       return new Response("invalid room", { status: 400 });
     }
     if (protocolParameters.length !== 1 || protocolParameters[0] !== "4") {
-      logRateLimitedOpsEvent("ws-edge", "ws_rejected", { reason: "protocol_required", surface: "edge", status: 426 });
       return new Response("protocol v4 required", {
         status: 426,
         headers: { "cache-control": "no-store" },
@@ -853,11 +850,6 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
     const openLimit = await takeWebSocketOpenRateLimitSlot(env, request, url);
     if (openLimit !== "allowed") {
       const limited = openLimit === "limited";
-      logRateLimitedOpsEvent("ws-edge", "ws_rejected", {
-        reason: limited ? "rate_limited" : "source_unavailable",
-        surface: "edge",
-        status: limited ? 429 : 503,
-      });
       return new Response(limited ? "websocket open rate limited" : "websocket source unavailable", {
         status: limited ? 429 : 503,
         headers: {
@@ -866,9 +858,6 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
         },
       });
     }
-    // Room identifiers are capability-adjacent metadata. Keep them out of
-    // provider logs even though the relay necessarily uses them for routing.
-    console.log("[ws] routing accepted websocket");
     const id = env.ROOM.idFromName(normalizedRoomId);
     return env.ROOM.get(id).fetch(request);
   }
