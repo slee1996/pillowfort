@@ -164,7 +164,7 @@ describe("V9 Quad View - 4-browser choreography", () => {
 
     // javi sees and accepts
     await javi.waitForSelector("#rps-overlay.open");
-    await javi.click("#rps-actions .xp-btn-primary");
+    await javi.click("#rps-actions .xp-btn-primary", { force: true });
 
     // Both see pick buttons
     await luna.waitForSelector(".rps-pick");

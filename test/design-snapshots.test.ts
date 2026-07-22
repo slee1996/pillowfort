@@ -141,7 +141,7 @@ describe("Design snapshots", () => {
 
     const javi = await joinRoom(activePort(), roomCode, "javi", "design");
     clients.push(javi);
-    chat(javi, "we made it in");
+    await chat(javi, "we made it in");
 
     await page.waitForFunction(() => {
       const count = document.getElementById("member-count");

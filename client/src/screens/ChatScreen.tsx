@@ -43,12 +43,12 @@ function describeQueueItem(item: GameQueueItem): string {
 
 function themeLabel(theme: string): string {
   switch (theme) {
-    case "retro-green":
-      return "Retro Green";
-    case "midnight":
-      return "Midnight";
+    case "campus-blue":
+      return "Campus Blue";
+    case "top-8":
+      return "Top 8";
     default:
-      return "Classic";
+      return "Away Message";
   }
 }
 
@@ -434,7 +434,7 @@ export function ChatScreen() {
                   {awayCount > 0 && (
                     <span className="status-strip-cell status-away">{awayCount} away</span>
                   )}
-                  <span className="status-strip-cell">theme: {activeThemeLabel}</span>
+                  <span className="status-strip-cell">skin: {activeThemeLabel}</span>
                   <span className="status-strip-cell">encrypted</span>
                   {fortPass?.themePack === "retro-plus" && (
                     <span className="status-strip-cell status-fort-pass">Fort Pass</span>

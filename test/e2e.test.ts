@@ -221,7 +221,7 @@ describe("Fort Pass webhook fulfillment", () => {
     blocked.send({ type: "set-up", name: "intruder", auth: await roomAuth("paid-1", "secret") });
     const blockedError = await blocked.waitFor("error");
     const created = await createRoomWithId("paid-1", "host", "secret", "cs_test_paid_1");
-    created.host.send({ type: "set-theme", theme: "retro-green" });
+    created.host.send({ type: "set-theme", theme: "campus-blue" });
     const theme = await created.host.waitFor("room-theme");
 
     expect(webhook.status).toBe(200);
@@ -229,7 +229,7 @@ describe("Fort Pass webhook fulfillment", () => {
     expect(await availability.json()).toEqual({ code: "paid-1", available: false, reason: "taken" });
     expect(blockedError.message).toBe("paid room redemption required");
     expect(created.roomId).toBe("paid-1");
-    expect(theme.theme).toBe("retro-green");
+    expect(theme.theme).toBe("campus-blue");
   });
 
   it("rejects unsigned Stripe webhooks", async () => {

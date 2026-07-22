@@ -6,6 +6,14 @@ import type { RoomTheme } from "../../services/protocol";
 
 type MenuClick = (e: React.MouseEvent<HTMLElement>) => void;
 
+function localSkinDemoEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "::1" ||
+    window.location.hostname === "[::1]";
+}
+
 function MenuItem({
   label,
   icon,
@@ -177,7 +185,9 @@ export function MenuBar() {
     send("set-theme", { theme });
   };
 
-  const premiumThemes = fortPass?.themePack === "retro-plus";
+  const localSkinDemo = localSkinDemoEnabled();
+  const premiumThemes = fortPass?.themePack === "retro-plus" || localSkinDemo;
+  const premiumSkinLabel = localSkinDemo && fortPass?.themePack !== "retro-plus" ? "Local" : "Fort Pass";
 
   return (
     <div className="xp-menu-bar" id="menu-bar">
@@ -247,30 +257,30 @@ export function MenuBar() {
           onClick={toggle("themes")}
           onMouseEnter={hover("themes")}
         >
-          Themes
+          Skins
           <div className="xp-menu-dropdown xp-theme-menu-dropdown" role="menu">
             <ThemeMenuItem
-              label="Classic"
-              theme="classic"
+              label="Away Message"
+              theme="away-message"
               current={roomTheme}
-              onClick={handleSetTheme("classic")}
+              onClick={handleSetTheme("away-message")}
             />
             {premiumThemes && (
               <>
                 <div className="xp-menu-dropdown-sep" />
                 <ThemeMenuItem
-                  label="Retro Green"
-                  theme="retro-green"
+                  label="Campus Blue"
+                  theme="campus-blue"
                   current={roomTheme}
-                  premiumLabel="Fort Pass"
-                  onClick={handleSetTheme("retro-green")}
+                  premiumLabel={premiumSkinLabel}
+                  onClick={handleSetTheme("campus-blue")}
                 />
                 <ThemeMenuItem
-                  label="Midnight"
-                  theme="midnight"
+                  label="Top 8"
+                  theme="top-8"
                   current={roomTheme}
-                  premiumLabel="Fort Pass"
-                  onClick={handleSetTheme("midnight")}
+                  premiumLabel={premiumSkinLabel}
+                  onClick={handleSetTheme("top-8")}
                 />
               </>
             )}
@@ -278,15 +288,15 @@ export function MenuBar() {
               <>
                 <div className="xp-menu-dropdown-sep" />
                 <ThemeMenuItem
-                  label="Retro Green"
-                  theme="retro-green"
+                  label="Campus Blue"
+                  theme="campus-blue"
                   current={roomTheme}
                   premiumLabel="Fort Pass"
                   locked
                 />
                 <ThemeMenuItem
-                  label="Midnight"
-                  theme="midnight"
+                  label="Top 8"
+                  theme="top-8"
                   current={roomTheme}
                   premiumLabel="Fort Pass"
                   locked

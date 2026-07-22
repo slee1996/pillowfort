@@ -35,7 +35,7 @@ export type OutgoingMessage =
 export type IncomingMessage =
   | { type: "room-created"; room: string; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "joined"; room: string; members: string[]; name: string; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
-  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
+  | { type: "rejoined"; room: string; members: string[]; name: string; isHost: boolean; presence?: Record<string, MemberPresence>; leaderboards?: RoomLeaderboards; gameQueue?: RoomGameQueue; gameState?: ActiveGameState; theme?: RoomTheme; fortPass?: FortPassRoomPerks }
   | { type: "leaderboards"; leaderboards: RoomLeaderboards }
   | { type: "game-queue"; gameQueue: RoomGameQueue }
   | { type: "room-theme"; theme: RoomTheme }
@@ -76,9 +76,9 @@ export type IncomingMessage =
   | { type: "sab-started"; starter: string }
   | { type: "sab-role"; role: "saboteur" | "defender"; canStrike?: boolean }
   | { type: "sab-vote-start"; accuser: string; suspect: string; duration: number; endsAt?: number }
-  | { type: "sab-vote-result"; accuser: string; accused: string; yes: number; no: number; passed: boolean; wasSaboteur: boolean; saboteur: string | null }
+  | { type: "sab-vote-result"; accuser: string; accused: string; yes: number; no: number; passed: boolean; wasSaboteur: boolean; saboteur: string | null; cancelled?: boolean }
   | { type: "sab-strike-ready"; reason: "wrong-accusation" }
-  | { type: "sab-strike"; saboteur: string; strikes: number }
+  | { type: "sab-strike"; saboteur?: string; strikes: number }
   | { type: "sab-bomb-start"; saboteur: string; seconds: number; durationMs?: number }
   // KOTH
   | { type: "koth-started"; challenger: string; host: string }
@@ -110,7 +110,11 @@ export interface RoomAuthPayload {
 
 export type RpsPick = "rock" | "paper" | "scissors";
 export type PresenceStatus = "available" | "away";
-export type RoomTheme = "classic" | "retro-green" | "midnight";
+export type RoomTheme = "away-message" | "campus-blue" | "top-8";
+
+export type ActiveGameState =
+  | { kind: "rps"; p1: string; p2: string; phase: "pending" | "playing"; koth?: boolean; myPick?: RpsPick }
+  | { kind: "ttt"; p1: string; p2: string; phase: "pending" | "playing"; board: string[]; turn: number };
 
 export interface FortPassRoomPerks {
   themePack?: "retro-plus";

@@ -2,9 +2,9 @@ import type { Env } from "./index";
 import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
 import { opsLogLine } from "./analytics";
 import { fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeFortPassEntitlement, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./entitlements";
-import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./game";
-import { ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH } from "./routes";
-import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS } from "./shared";
+import { isRpsPick, rpsWinner, tttWinner, voteHasMajority, type RpsPick } from "./game";
+import { ROOM_CREATE_LIMIT_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_FORT_PASS_RELEASE_PATH, ROOM_FORT_PASS_RESERVE_PATH, ROOM_STATUS_PATH } from "./routes";
+import { sanitizeDraw, sanitizeStyle, uniqueName, MAX_DRAW_EVENTS_PER_5S, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS } from "./shared";
 
 interface WSData {
   name: string;
@@ -14,13 +14,22 @@ interface WSData {
   status: "available" | "away";
   awayText: string | null;
   msgTimestamps: number[];
+  drawTimestamps?: number[];
+  ip?: string;
 }
+
+interface FortPassReservation { expiresAt: number }
+const FORT_PASS_RESERVATION_KEY = "fortPassReservation";
+const FORT_PASS_RESERVATION_MS = 30 * 60 * 1000;
+const CREATE_LIMIT_KEY = "roomCreationTimestamps";
+const RATE_ROOMS_PER_MIN = 5;
 
 const MAX_GUESTS = 20;
 const IDLE_MS = 10 * 60 * 1000;
 const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
 const CHALLENGE_TIMEOUT_MS = 30_000;
+const GAME_PLAY_TIMEOUT_MS = 60_000;
 const MAX_GAME_QUEUE = 10;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
@@ -141,15 +150,15 @@ export class Room implements DurableObject {
   private gameQueue: GameQueueItem[] = [];
   private leaderboards: RoomLeaderboards = createLeaderboards();
   private fortPassEntitlement: FortPassEntitlement | null = null;
-  private roomTheme: RoomTheme = "classic";
+  private roomTheme: RoomTheme = "away-message";
 
-  constructor(state: DurableObjectState, _env: Env) {
+  constructor(state: DurableObjectState, private env: Env) {
     this.state = state;
     state.blockConcurrencyWhile(async () => {
       this.authVerifier = (await state.storage.get("authVerifier")) as string || null;
       this.roomId = (await state.storage.get("roomId")) as string || "";
       this.fortPassEntitlement = normalizeFortPassEntitlement(await state.storage.get(FORT_PASS_ENTITLEMENT_KEY));
-      this.roomTheme = normalizeRoomTheme(await state.storage.get(ROOM_THEME_KEY)) || "classic";
+      this.roomTheme = normalizeRoomTheme(await state.storage.get(ROOM_THEME_KEY)) || "away-message";
     });
   }
 
@@ -165,9 +174,13 @@ export class Room implements DurableObject {
     const url = new URL(request.url);
 
     if (url.pathname === ROOM_STATUS_PATH) {
+      const reservation = await this.state.storage.get<FortPassReservation>(FORT_PASS_RESERVATION_KEY);
+      const reserved = !!reservation && reservation.expiresAt > Date.now();
+      if (reservation && !reserved) await this.state.storage.delete(FORT_PASS_RESERVATION_KEY);
       return new Response(JSON.stringify({
         exists: !!this.authVerifier ||
           (!!this.fortPassEntitlement && isFortPassActive(this.fortPassEntitlement)) ||
+          reserved ||
           this.state.getWebSockets().some(w => !!this.att(w).name),
       }), {
         headers: {
@@ -177,11 +190,42 @@ export class Room implements DurableObject {
       });
     }
 
+    if (url.pathname === ROOM_FORT_PASS_RESERVE_PATH) {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const reservation = await this.state.storage.get<FortPassReservation>(FORT_PASS_RESERVATION_KEY);
+      if (this.authVerifier || (!!this.fortPassEntitlement && isFortPassActive(this.fortPassEntitlement)) || (reservation && reservation.expiresAt > Date.now())) {
+        return new Response("room unavailable", { status: 409 });
+      }
+      await this.state.storage.put(FORT_PASS_RESERVATION_KEY, { expiresAt: Date.now() + FORT_PASS_RESERVATION_MS });
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.pathname === ROOM_FORT_PASS_RELEASE_PATH) {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      if (!this.authVerifier && (!this.fortPassEntitlement || !isFortPassActive(this.fortPassEntitlement))) await this.state.storage.delete(FORT_PASS_RESERVATION_KEY);
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.pathname === ROOM_CREATE_LIMIT_PATH) {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const now = Date.now();
+      const timestamps = ((await this.state.storage.get<number[]>(CREATE_LIMIT_KEY)) || []).filter(ts => now - ts < 60_000);
+      if (timestamps.length >= RATE_ROOMS_PER_MIN) return new Response("rate limited", { status: 429 });
+      timestamps.push(now);
+      await this.state.storage.put(CREATE_LIMIT_KEY, timestamps);
+      return new Response(null, { status: 204 });
+    }
+
     if (url.pathname === ROOM_FORT_PASS_FULFILL_PATH) {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
       const entitlement = normalizeFortPassEntitlement(await request.json().catch(() => null));
       if (!entitlement || (this.roomId && entitlement.roomId !== this.roomId)) {
         return new Response("bad entitlement", { status: 400 });
+      }
+      if (this.fortPassEntitlement?.providerRef === entitlement.providerRef) {
+        return new Response(JSON.stringify({ ok: true, replay: true }), {
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        });
       }
       if (this.authVerifier || this.state.getWebSockets().some(w => !!this.att(w).name)) {
         return new Response("room already active", { status: 409 });
@@ -190,6 +234,7 @@ export class Room implements DurableObject {
       this.fortPassEntitlement = entitlement;
       await this.state.storage.put("roomId", entitlement.roomId);
       await this.state.storage.put(FORT_PASS_ENTITLEMENT_KEY, entitlement);
+      await this.state.storage.delete(FORT_PASS_RESERVATION_KEY);
       return new Response(JSON.stringify({ ok: true }), {
         headers: {
           "content-type": "application/json",
@@ -214,7 +259,8 @@ export class Room implements DurableObject {
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
     const hash = Math.random().toString(16).slice(2, 6);
-    server.serializeAttachment({ name: "", hash, isHost: false, hostRejected: false, status: "available", awayText: null, msgTimestamps: [] } as WSData);
+    const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    server.serializeAttachment({ name: "", hash, isHost: false, hostRejected: false, status: "available", awayText: null, msgTimestamps: [], drawTimestamps: [], ip } as WSData);
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -305,7 +351,7 @@ export class Room implements DurableObject {
   private broadcast(type: string, payload: Record<string, unknown> = {}, exclude?: WebSocket) {
     const msg = JSON.stringify({ type, ...payload });
     for (const w of this.state.getWebSockets()) {
-      if (w !== exclude) try { w.send(msg); } catch {}
+      if (w !== exclude && !!this.att(w).name) try { w.send(msg); } catch {}
     }
   }
 
@@ -318,6 +364,16 @@ export class Room implements DurableObject {
       current: this.activeGame ? { ...this.activeGame } : null,
       queue: this.gameQueue.map((q) => ({ ...q })),
     };
+  }
+
+  private activeGameSnapshot(name: string) {
+    if (this.rpsGame && (this.rpsGame.p1 === name || this.rpsGame.p2 === name)) {
+      return { kind: "rps", p1: this.rpsGame.p1, p2: this.rpsGame.p2, phase: this.rpsGame.phase, koth: this.rpsGame.koth, myPick: this.rpsGame.p1 === name ? this.rpsGame.pick1 : this.rpsGame.pick2 };
+    }
+    if (this.tttGame && (this.tttGame.p1 === name || this.tttGame.p2 === name)) {
+      return { kind: "ttt", p1: this.tttGame.p1, p2: this.tttGame.p2, phase: this.tttGame.phase, board: [...this.tttGame.board], turn: this.tttGame.turn };
+    }
+    return undefined;
   }
 
   private fortPassSnapshot(): { themePack?: string } | undefined {
@@ -381,6 +437,12 @@ export class Room implements DurableObject {
       });
       this.activeVote = null;
       cancelled = true;
+    } else if (this.activeVote) {
+      this.activeVote.yes.delete(name);
+      this.activeVote.no.delete(name);
+      const eligible = this.getMembers().filter((member) => member !== this.activeVote!.target).length;
+      const total = this.activeVote.yes.size + this.activeVote.no.size;
+      if (total >= eligible) this.resolveVote();
     }
     if (this.rpsGame && (this.rpsGame.p1 === name || this.rpsGame.p2 === name)) {
       if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
@@ -415,10 +477,12 @@ export class Room implements DurableObject {
       cancelled = true;
     } else if (this.sabVote && (this.sabVote.accuser === name || this.sabVote.suspect === name)) {
       clearTimeout(this.sabVote.timer);
+      this.broadcast("sab-vote-result", { accuser: this.sabVote.accuser, accused: this.sabVote.suspect, yes: this.sabVote.yes.size, no: this.sabVote.no.size, passed: false, wasSaboteur: false, saboteur: null, cancelled: true });
       this.sabVote = null;
     } else if (this.sabVote) {
       this.sabVote.yes.delete(name);
       this.sabVote.no.delete(name);
+      if (this.sabVote.yes.size + this.sabVote.no.size >= this.getMembers().length) this.resolveSabVote();
     }
     if (cancelled) this.clearActiveGame();
   }
@@ -545,7 +609,7 @@ export class Room implements DurableObject {
     this.authVerifier = null;
     this.roomId = "";
     this.fortPassEntitlement = null;
-    this.roomTheme = "classic";
+    this.roomTheme = "away-message";
     this.tossPillowFrom = null;
     await this.state.storage.deleteAlarm();
     await this.state.storage.deleteAll();
@@ -561,6 +625,16 @@ export class Room implements DurableObject {
     if (this.authVerifier || this.getHost()) {
       this.metric("room_setup_failed", "exists");
       return this.send(ws, "error", { message: "fort already exists" });
+    }
+    if (this.env.ROOM) {
+      const source = this.att(ws);
+      const limiterId = this.env.ROOM.idFromName(`__create_limit__:${source.ip || "unknown"}`);
+      const limitUrl = new URL(ROOM_CREATE_LIMIT_PATH, "https://pillowfort.internal");
+      const limited = await this.env.ROOM.get(limiterId).fetch(new Request(limitUrl, { method: "POST" }));
+      if (limited.status === 429) {
+        this.metric("room_setup_failed", "rate_limited");
+        return this.send(ws, "error", { message: "slow down — too many forts" });
+      }
     }
     if (
       this.fortPassEntitlement &&
@@ -763,10 +837,15 @@ export class Room implements DurableObject {
 
   private onDraw(ws: WebSocket, msg: { color?: string; pts?: number[][]; s?: number }) {
     const a = this.att(ws);
-    if (!a.name || !msg.pts?.length) return;
-    const payload: Record<string, unknown> = { from: a.name, color: msg.color, pts: msg.pts };
-    if (msg.s) payload.s = 1;
-    this.broadcast("draw", payload, ws);
+    if (!a.name) return;
+    const now = Date.now();
+    a.drawTimestamps = (a.drawTimestamps || []).filter(t => now - t < 5_000);
+    if (a.drawTimestamps.length >= MAX_DRAW_EVENTS_PER_5S) return this.send(ws, "error", { message: "slow down" });
+    const draw = sanitizeDraw(msg);
+    if (!draw) return;
+    a.drawTimestamps.push(now);
+    ws.serializeAttachment(a);
+    this.broadcast("draw", { from: a.name, ...draw }, ws);
   }
 
   private startVote(
@@ -886,7 +965,16 @@ export class Room implements DurableObject {
     if (!hostName) return false;
 
     this.kothGame = { challenger, host: hostName };
-    this.rpsGame = { p1: challenger, p2: hostName, phase: "playing", koth: true };
+    this.rpsGame = {
+      p1: challenger, p2: hostName, phase: "playing", koth: true,
+      timer: setTimeout(() => {
+        if (!this.rpsGame?.koth) return;
+        this.broadcast("rps-declined", { from: "game timeout" });
+        this.rpsGame = null;
+        this.kothGame = null;
+        this.clearActiveGame();
+      }, GAME_PLAY_TIMEOUT_MS),
+    };
     this.setActiveGame({ kind: "koth", by: challenger, target: hostName });
     this.broadcast("koth-started", { challenger, host: hostName });
     this.broadcast("rps-started", { p1: challenger, p2: hostName, koth: true });
@@ -937,7 +1025,8 @@ export class Room implements DurableObject {
     if (!this.activeVote) return;
     clearTimeout(this.activeVote.timer);
     const { target, yes, no, starter, auto } = this.activeVote;
-    const ejected = yes.size > no.size;
+    const eligible = this.getMembers().filter((name) => name !== target).length;
+    const ejected = voteHasMajority(yes.size, no.size, eligible);
     this.broadcast("vote-result", { target, yes: yes.size, no: no.size, ejected });
     this.log(`vote result: ${target} ${ejected ? "ejected" : "stays"} (${yes.size}-${no.size})`);
     if (!auto) {
@@ -947,17 +1036,23 @@ export class Room implements DurableObject {
     }
 
     if (ejected) {
+      const currentHost = this.getHost();
+      const ejectedHost = !!currentHost && this.att(currentHost).name === target;
       // kick the target
       for (const w of this.state.getWebSockets()) {
         if (this.att(w).name === target) {
           this.send(w, "ejected", { reason: "You were voted out of the fort!" });
+          const d = this.att(w);
+          d.name = "";
+          d.isHost = false;
+          w.serializeAttachment(d);
           try { w.close(1000, "ejected"); } catch {}
-          const d = this.att(w); d.name = ""; w.serializeAttachment(d);
           break;
         }
       }
       this.broadcast("member-left", { name: target });
       this.pruneGameQueue();
+      if (ejectedHost) void this.offerHost(target);
     }
     this.activeVote = null;
     this.clearActiveGame();
@@ -995,6 +1090,13 @@ export class Room implements DurableObject {
     if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
     this.rpsGame.timer = undefined;
     this.rpsGame.phase = "playing";
+    this.rpsGame.timer = setTimeout(() => {
+      if (!this.rpsGame || this.rpsGame.phase !== "playing") return;
+      this.broadcast("rps-declined", { from: "game timeout" });
+      this.rpsGame = null;
+      this.kothGame = null;
+      this.clearActiveGame();
+    }, GAME_PLAY_TIMEOUT_MS);
     this.broadcast("rps-started", { p1: this.rpsGame.p1, p2: this.rpsGame.p2 });
   }
 
@@ -1014,14 +1116,20 @@ export class Room implements DurableObject {
     if (this.rpsGame.phase !== "playing") return;
     if (!isRpsPick(msg.pick)) return;
 
-    if (a.name === this.rpsGame.p1) this.rpsGame.pick1 = msg.pick;
-    else if (a.name === this.rpsGame.p2) this.rpsGame.pick2 = msg.pick;
+    if (a.name === this.rpsGame.p1) {
+      if (this.rpsGame.pick1) return;
+      this.rpsGame.pick1 = msg.pick;
+    } else if (a.name === this.rpsGame.p2) {
+      if (this.rpsGame.pick2) return;
+      this.rpsGame.pick2 = msg.pick;
+    }
     else return;
 
     this.send(ws, "rps-picked", {}); // confirm to sender
 
     if (this.rpsGame.pick1 && this.rpsGame.pick2) {
       const { p1, p2, pick1, pick2 } = this.rpsGame;
+      if (this.rpsGame.timer) clearTimeout(this.rpsGame.timer);
       const winner = rpsWinner(p1, p2, pick1, pick2);
       const isKoth = !!this.kothGame;
       this.broadcast("rps-result", { p1, p2, pick1, pick2, winner, koth: isKoth || undefined });
@@ -1066,6 +1174,12 @@ export class Room implements DurableObject {
     if (this.tttGame.timer) clearTimeout(this.tttGame.timer);
     this.tttGame.timer = undefined;
     this.tttGame.phase = "playing";
+    this.tttGame.timer = setTimeout(() => {
+      if (!this.tttGame || this.tttGame.phase !== "playing") return;
+      this.broadcast("ttt-declined", { from: "game timeout" });
+      this.tttGame = null;
+      this.clearActiveGame();
+    }, GAME_PLAY_TIMEOUT_MS);
     this.broadcast("ttt-started", { p1: this.tttGame.p1, p2: this.tttGame.p2, board: this.tttGame.board, turn: this.tttGame.turn });
   }
 
@@ -1089,6 +1203,13 @@ export class Room implements DurableObject {
 
     g.board[msg.cell] = g.turn % 2 === 0 ? "X" : "O";
     g.turn++;
+    if (g.timer) clearTimeout(g.timer);
+    g.timer = setTimeout(() => {
+      if (this.tttGame !== g) return;
+      this.broadcast("ttt-declined", { from: "game timeout" });
+      this.tttGame = null;
+      this.clearActiveGame();
+    }, GAME_PLAY_TIMEOUT_MS);
 
     // check win
     const mark = g.board[msg.cell];
@@ -1102,6 +1223,7 @@ export class Room implements DurableObject {
       this.emitLeaderboards();
     }
     if (winner || draw) {
+      if (g.timer) clearTimeout(g.timer);
       this.log(`TTT: ${g.p1} vs ${g.p2} → ${winner ? winner + " wins" : "draw"}`);
       this.tttGame = null;
       this.clearActiveGame();
@@ -1218,7 +1340,10 @@ export class Room implements DurableObject {
 
     this.sabCanStrike = false;
     this.sabStrikes++;
-    this.broadcast("sab-strike", { saboteur: a.name, strikes: this.sabStrikes });
+    this.broadcast("sab-strike", {
+      strikes: this.sabStrikes,
+      ...(this.sabStrikes >= 3 ? { saboteur: a.name } : {}),
+    });
     this.log(`saboteur ${a.name} struck! (${this.sabStrikes}/3)`);
 
     if (this.sabStrikes >= 3) {
@@ -1340,9 +1465,14 @@ export class Room implements DurableObject {
   private async onDisconnect(ws: WebSocket) {
     const a = this.att(ws);
     if (!a.name) return;
+    const leavingName = a.name;
+    const wasHost = a.isHost;
+    a.name = "";
+    a.isHost = false;
+    ws.serializeAttachment(a);
 
-    if (a.isHost) {
-      this.log(`host ${this.tag(a)} disconnected`);
+    if (wasHost) {
+      this.log(`host ${leavingName} disconnected`);
       try { ws.close(1000, "left"); } catch {}
 
       // find guests still connected
@@ -1356,14 +1486,14 @@ export class Room implements DurableObject {
         return;
       }
 
-      this.broadcast("member-left", { name: a.name });
-      this.cancelActiveGamesForMember(a.name);
+      this.broadcast("member-left", { name: leavingName });
+      this.cancelActiveGamesForMember(leavingName);
       this.pruneGameQueue();
-      await this.offerHost(a.name);
+      await this.offerHost(leavingName);
     } else {
-      this.log(`${this.tag(a)} left (${this.getMembers().length - 1} remaining)`);
-      this.broadcast("member-left", { name: a.name }, ws);
-      this.cancelActiveGamesForMember(a.name);
+      this.log(`${leavingName} left (${this.getMembers().length} remaining)`);
+      this.broadcast("member-left", { name: leavingName }, ws);
+      this.cancelActiveGamesForMember(leavingName);
       this.pruneGameQueue();
       try { ws.close(1000, "left"); } catch {}
     }
@@ -1443,6 +1573,7 @@ export class Room implements DurableObject {
         presence: this.getPresenceMap(),
         leaderboards: this.leaderboards,
         gameQueue: this.gameQueueSnapshot(),
+        gameState: this.activeGameSnapshot(name),
         theme: this.roomTheme,
         fortPass: this.fortPassSnapshot(),
       });

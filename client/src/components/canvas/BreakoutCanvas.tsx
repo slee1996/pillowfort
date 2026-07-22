@@ -90,7 +90,9 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     bootFrameRef.current = requestAnimationFrame(() => {
       bootFrameRef.current = 0;
       if (disposed) return;
-      if (!stateRef.current || stateRef.current.won || stateRef.current.lost) reset();
+      // Returning from chat creates a fresh canvas element. Reinitialize against
+      // its actual dimensions instead of reusing coordinates from the old canvas.
+      reset();
       if (!stateRef.current) return;
       stateRef.current.running = true;
 
@@ -218,12 +220,14 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
 
     // Input handlers
     const cv2 = cv;
+    const resizeObserver = new ResizeObserver(() => reset());
+    if (cv.parentElement) resizeObserver.observe(cv.parentElement);
     const setPaddleFromClientX = (clientX: number) => {
       if (!stateRef.current?.running) return;
       const rect = cv2.getBoundingClientRect();
       stateRef.current.paddle.x = Math.max(
         0,
-        Math.min(cv2.width - stateRef.current.paddle.w, clientX - rect.left - stateRef.current.paddle.w / 2)
+        Math.min(cv2.width - stateRef.current.paddle.w, (clientX - rect.left) * (cv2.width / rect.width) - stateRef.current.paddle.w / 2)
       );
     };
     const onMouse = (e: MouseEvent) => {
@@ -265,6 +269,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
       disposed = true;
       stopGameLoop();
       clearInterval(keyInterval);
+      resizeObserver.disconnect();
       cv.removeEventListener("mousemove", onMouse);
       cv.removeEventListener("touchstart", onTouchStart);
       cv.removeEventListener("touchmove", onTouchMove);
@@ -276,5 +281,5 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
 
   if (!active) return null;
 
-  return <canvas ref={canvasRef} className="breakout-canvas" />;
+  return <canvas id="breakout-canvas" ref={canvasRef} className="breakout-canvas" />;
 }

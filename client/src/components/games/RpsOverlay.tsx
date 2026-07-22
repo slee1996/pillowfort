@@ -43,7 +43,8 @@ export function RpsOverlay() {
             {!rps.myPick ? (
               <div id="rps-picks" className="rps-picks">
                 {(["rock", "paper", "scissors"] as RpsPick[]).map((pick) => (
-                  <span
+                  <button
+                    type="button"
                     key={pick}
                     className="rps-pick"
                     title={pick}
@@ -53,7 +54,7 @@ export function RpsOverlay() {
                     }}
                   >
                     {RPS_EMOJI[pick]}
-                  </span>
+                  </button>
                 ))}
               </div>
             ) : (

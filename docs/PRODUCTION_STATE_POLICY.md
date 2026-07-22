@@ -32,6 +32,8 @@ Current examples:
 - Room ID.
 - Room auth verifier.
 - Active Fort Pass entitlement for a paid custom room.
+- Short-lived Fort Pass checkout reservation for a custom room code.
+- Per-source room-creation timestamps used by the production limiter.
 - Production alarm schedule.
 - Saboteur bomb deadline while a bomb is active.
 - Per-socket member attachment:
@@ -137,7 +139,12 @@ As of this document:
   Class C.
 - The internal room-status check used for Fort Pass code availability returns
   only `{ exists: boolean }`; active Fort Pass entitlements count as existing
-  rooms for availability checks.
+  rooms for availability checks. Unexpired checkout reservations also count as
+  existing so two buyers cannot purchase the same custom code concurrently.
+- Stripe fulfillment is idempotent for repeated delivery of the same Checkout
+  Session while its entitlement is present.
+- Production room creation uses a Durable Object-backed five-per-minute source
+  limit; local development applies the equivalent in-memory limit.
 - Premium room themes are available only through active Fort Pass entitlements.
 
 This is acceptable for beta if the product copy does not promise persistent

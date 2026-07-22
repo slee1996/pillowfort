@@ -181,7 +181,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   password: null,
   roomSafetyCode: null,
   isHost: false,
-  roomTheme: "classic",
+  roomTheme: "away-message",
   fortPass: null,
 
   // Room
@@ -344,7 +344,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       password: null,
       roomSafetyCode: null,
       isHost: false,
-      roomTheme: "classic",
+      roomTheme: "away-message",
       fortPass: null,
       members: [],
       memberPresence: {},

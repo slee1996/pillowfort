@@ -147,19 +147,19 @@ describe("Game night: Arrival", () => {
     const kai = await wsJoinTracked(roomCode, "kai");
     await waitForMembers(page, 4);
 
-    chat(javi, "game night lets gooo 🎮");
+    await chat(javi, "game night lets gooo 🎮");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("game night");
     });
 
-    chat(priya, "finally!! who's ready to lose", { bold: true });
+    await chat(priya, "finally!! who's ready to lose", { bold: true });
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("ready to lose");
     });
 
-    chat(kai, "big talk from someone who lost last time 😏");
+    await chat(kai, "big talk from someone who lost last time 😏");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("big talk");
@@ -399,7 +399,7 @@ describe("Game night: Knock Down", () => {
     await sleep(500);
 
     // Farewell chat
-    chat(kai, "thanks everyone. this was perfect.");
+    await chat(kai, "thanks everyone. this was perfect.");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("this was perfect");
@@ -409,9 +409,9 @@ describe("Game night: Knock Down", () => {
     await page.click("#btn-send");
     await sleep(300);
 
-    chat(priya, "🌙✨");
+    await chat(priya, "🌙✨");
     await sleep(200);
-    chat(javi, "night night");
+    await chat(javi, "night night");
     await sleep(300);
 
     // kai (new host) knocks down

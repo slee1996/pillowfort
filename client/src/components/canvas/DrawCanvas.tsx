@@ -1,8 +1,6 @@
 import { useRef, useEffect } from "react";
 import { send, getWs } from "../../services/ws";
 
-const remoteDrawers: Record<string, [number, number]> = {};
-
 export function DrawCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -10,6 +8,7 @@ export function DrawCanvas() {
   const pendingPtsRef = useRef<[number, number][]>([]);
   const isNewStrokeRef = useRef(false);
   const rafRef = useRef<number | null>(null);
+  const remoteDrawersRef = useRef<Record<string, [number, number]>>({});
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -20,8 +19,14 @@ export function DrawCanvas() {
 
     const ro = new ResizeObserver(() => {
       const r = parent.getBoundingClientRect();
+      if (cv.width === r.width && cv.height === r.height) return;
+      const previous = document.createElement("canvas");
+      previous.width = cv.width;
+      previous.height = cv.height;
+      previous.getContext("2d")?.drawImage(cv, 0, 0);
       cv.width = r.width;
       cv.height = r.height;
+      if (previous.width && previous.height) ctx.drawImage(previous, 0, 0, previous.width, previous.height, 0, 0, cv.width, cv.height);
     });
     ro.observe(parent);
 
@@ -68,7 +73,8 @@ export function DrawCanvas() {
       if (!drawingRef.current) return;
       drawingRef.current = false;
       if (pendingPtsRef.current.length > 0 && getWs()?.readyState === WebSocket.OPEN) {
-        send("draw", { color: colorRef.current, pts: pendingPtsRef.current });
+        send("draw", { color: colorRef.current, pts: pendingPtsRef.current, ...(isNewStrokeRef.current ? { s: 1 } : {}) });
+        isNewStrokeRef.current = false;
       }
       pendingPtsRef.current = [];
       if (rafRef.current) {
@@ -87,7 +93,7 @@ export function DrawCanvas() {
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
-      const last = remoteDrawers[msg.from];
+      const last = remoteDrawersRef.current[msg.from];
       if (msg.s || !last) {
         ctx.moveTo(msg.pts[0][0] * w, msg.pts[0][1] * h);
       } else {
@@ -98,7 +104,7 @@ export function DrawCanvas() {
         ctx.lineTo(msg.pts[i][0] * w, msg.pts[i][1] * h);
       }
       ctx.stroke();
-      remoteDrawers[msg.from] = msg.pts[msg.pts.length - 1];
+      remoteDrawersRef.current[msg.from] = msg.pts[msg.pts.length - 1];
     };
 
     cv.addEventListener("pointerdown", onPointerDown);
@@ -114,11 +120,13 @@ export function DrawCanvas() {
       cv.removeEventListener("pointerup", stopDraw);
       cv.removeEventListener("pointerleave", stopDraw);
       window.removeEventListener("pf-draw", onRemoteDraw);
+      remoteDrawersRef.current = {};
     };
   }, []);
 
   return (
     <canvas
+      id="game-canvas"
       ref={canvasRef}
       className="fullscreen-canvas"
       style={{ cursor: "crosshair" }}

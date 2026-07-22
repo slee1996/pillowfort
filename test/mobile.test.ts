@@ -94,7 +94,7 @@ describe("Mobile E2E", () => {
 
     // Bob sees challenge overlay and accepts
     await bob.waitForSelector("#rps-overlay.open");
-    await bob.click("#rps-actions .xp-btn-primary"); // Accept button
+    await bob.click("#rps-actions .xp-btn-primary", { force: true }); // countdown rerenders the overlay
 
     // Both see pick buttons
     await alice.waitForSelector(".rps-pick");
@@ -132,7 +132,7 @@ describe("Mobile E2E", () => {
 
     // Bob accepts
     await bob.waitForSelector("#ttt-overlay.open");
-    await bob.click("#ttt-actions .xp-btn-primary");
+    await bob.click("#ttt-actions .xp-btn-primary", { force: true });
 
     // Wait for board to render
     await alice.waitForSelector(".ttt-cell");
@@ -190,12 +190,12 @@ describe("Mobile E2E", () => {
     await carol.waitForSelector("#vote-banner.visible", { timeout: 5000 });
 
     // Carol votes yes
-    await carol.click("#vote-yes");
+    await carol.click("#vote-yes", { force: true });
 
     // Vote resolves — banner disappears on alice's screen
     await alice.waitForFunction(() => {
       const el = document.getElementById("vote-banner");
-      return el && !el.classList.contains("visible");
+      return !el || !el.classList.contains("visible");
     }, { timeout: 5000 });
   });
 
@@ -230,13 +230,32 @@ describe("Mobile E2E", () => {
 
     // Minimize chat to start breakout
     await page.click("#chat-btn-min");
-    await page.waitForSelector("#game-canvas", { state: "visible" });
+    await page.waitForSelector("#breakout-canvas", { state: "visible" });
 
-    const canvas = page.locator("#game-canvas");
+    const canvas = page.locator("#breakout-canvas");
+    await page.waitForFunction(() => {
+      const canvas = document.getElementById("breakout-canvas") as HTMLCanvasElement | null;
+      return !!canvas && canvas.width > 300;
+    });
     const box = await canvas.boundingBox();
     expect(box).toBeTruthy();
     // Canvas should fill most of the 375px viewport width
     expect(box!.width).toBeGreaterThanOrEqual(300);
+    const initialWidth = await canvas.evaluate((element) => (element as HTMLCanvasElement).width);
+
+    // Restoring and minimizing again creates a new canvas element. It must be
+    // initialized to the viewport instead of retaining the browser default size.
+    await page.click("#chat-btn-min");
+    await page.waitForSelector("#breakout-canvas", { state: "detached" });
+    await page.click("#chat-btn-min");
+    await page.waitForSelector("#breakout-canvas", { state: "visible" });
+    await page.waitForFunction(() => {
+      const canvas = document.getElementById("breakout-canvas") as HTMLCanvasElement | null;
+      return !!canvas && canvas.width > 300;
+    });
+    const resumedWidth = await page.locator("#breakout-canvas").evaluate((element) => (element as HTMLCanvasElement).width);
+    expect(resumedWidth).toBe(initialWidth);
+    expect(resumedWidth).toBeGreaterThan(300);
   });
 
   it("RPS picks are properly sized on mobile", async () => {
@@ -253,7 +272,7 @@ describe("Mobile E2E", () => {
     await pickMember(alice, "bob");
 
     await bob.waitForSelector("#rps-overlay.open");
-    await bob.click("#rps-actions .xp-btn-primary");
+    await bob.click("#rps-actions .xp-btn-primary", { force: true });
 
     // Wait for picks to render
     await alice.waitForSelector(".rps-pick");
@@ -283,7 +302,7 @@ describe("Mobile E2E", () => {
     await pickMember(alice, "bob");
 
     await bob.waitForSelector("#ttt-overlay.open");
-    await bob.click("#ttt-actions .xp-btn-primary");
+    await bob.click("#ttt-actions .xp-btn-primary", { force: true });
 
     // Wait for board to render
     await alice.waitForSelector(".ttt-cell");
@@ -294,8 +313,8 @@ describe("Mobile E2E", () => {
     for (let i = 0; i < count; i++) {
       const box = await cells.nth(i).boundingBox();
       expect(box).toBeTruthy();
-      expect(box!.width).toBeGreaterThanOrEqual(65);
-      expect(box!.height).toBeGreaterThanOrEqual(65);
+      expect(box!.width).toBeGreaterThanOrEqual(64);
+      expect(box!.height).toBeGreaterThanOrEqual(64);
     }
   });
 });

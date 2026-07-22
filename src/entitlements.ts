@@ -7,7 +7,7 @@ export const FORT_PASS_MAX_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 export type FortPassStatus = "active" | "refunded" | "expired";
 export type FortPassProvider = "stripe" | "manual";
 export type FortPassThemePack = "retro-plus";
-export type RoomTheme = "classic" | "retro-green" | "midnight";
+export type RoomTheme = "away-message" | "campus-blue" | "top-8";
 
 export interface FortPassPerks {
   customRoomCode?: string;
@@ -68,7 +68,7 @@ const RESERVED_ROOM_CODES = new Set([
 
 const TOKEN_RE = /^[a-zA-Z0-9_:-]{1,128}$/;
 const ROOM_CODE_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-const RETRO_PLUS_THEMES = new Set<RoomTheme>(["retro-green", "midnight"]);
+const RETRO_PLUS_THEMES = new Set<RoomTheme>(["campus-blue", "top-8"]);
 
 function cleanToken(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -218,7 +218,10 @@ export function fortPassRedemptionMatches(
 }
 
 export function normalizeRoomTheme(input: unknown): RoomTheme | null {
-  if (input === "classic" || input === "retro-green" || input === "midnight") return input;
+  if (input === "away-message" || input === "campus-blue" || input === "top-8") return input;
+  if (input === "classic") return "away-message";
+  if (input === "retro-green") return "campus-blue";
+  if (input === "midnight") return "top-8";
   return null;
 }
 
@@ -229,7 +232,7 @@ export function fortPassAllowsRoomTheme(
 ): boolean {
   const normalized = normalizeRoomTheme(theme);
   if (!normalized) return false;
-  if (normalized === "classic") return true;
+  if (normalized === "away-message") return true;
   return !!entitlement &&
     isFortPassActive(entitlement, now) &&
     entitlement.perks.themePack === "retro-plus" &&

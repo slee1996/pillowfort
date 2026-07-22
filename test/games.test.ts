@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   startServer, stopServer, cleanupClients,
-  createRoom, joinRoom, TEST_GRACE_MS,
+  createRoom, joinRoom, connectClientToRoom, roomAuth, TEST_GRACE_MS,
 } from "./helpers";
 
 beforeAll(startServer);
@@ -43,6 +43,21 @@ describe("Rock Paper Scissors", () => {
 
     const result = await host.waitFor("rps-result");
     expect(result.winner).toBeNull();
+  });
+
+  it("locks each player's first accepted pick", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+    bob.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+    host.send({ type: "rps-pick", pick: "rock" });
+    host.send({ type: "rps-pick", pick: "paper" });
+    bob.send({ type: "rps-pick", pick: "scissors" });
+    const result = await host.waitFor("rps-result");
+    expect(result.pick1).toBe("rock");
+    expect(result.winner).toBe("alice");
   });
 
   it("challenge → decline → rps-declined", async () => {
@@ -123,6 +138,17 @@ describe("Rock Paper Scissors", () => {
     await host.waitFor("member-away");
     const declined = await host.waitFor("rps-declined", TEST_GRACE_MS + 1000);
     expect(declined.from).toBe("bob");
+  });
+
+  it("times out an accepted duel when a connected player never picks", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    host.send({ type: "rps-challenge", target: "bob" });
+    await bob.waitFor("rps-challenged");
+    bob.send({ type: "rps-accept" });
+    await host.waitFor("rps-started");
+    const ended = await host.waitFor("rps-declined", 2500);
+    expect(ended.from).toBe("game timeout");
   });
 });
 
@@ -254,6 +280,35 @@ describe("Tic-Tac-Toe", () => {
     const declined = await host.waitFor("ttt-declined", 1000);
     expect(declined.from).toBe("bob");
   });
+
+  it("times out a started game when the current player stalls", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    host.send({ type: "ttt-challenge", target: "bob" });
+    await bob.waitFor("ttt-challenged");
+    bob.send({ type: "ttt-accept" });
+    await host.waitFor("ttt-started");
+    const ended = await host.waitFor("ttt-declined", 2500);
+    expect(ended.from).toBe("game timeout");
+  });
+
+  it("restores the board and turn when a player rejoins", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    host.send({ type: "ttt-challenge", target: "bob" });
+    await bob.waitFor("ttt-challenged");
+    bob.send({ type: "ttt-accept" });
+    await host.waitFor("ttt-started");
+    host.send({ type: "ttt-move", cell: 0 });
+    await bob.waitFor("ttt-update");
+    await bob.close();
+    const restored = await connectClientToRoom(roomId);
+    restored.send({ type: "rejoin", name: "bob", room: roomId, auth: await roomAuth(roomId, "secret") });
+    const rejoined = await restored.waitFor("rejoined");
+    expect(rejoined.gameState.kind).toBe("ttt");
+    expect(rejoined.gameState.board[0]).toBe("X");
+    expect(rejoined.gameState.turn).toBe(1);
+  });
 });
 
 // ---- Pillow Fight (Vote to Eject) ----
@@ -275,6 +330,27 @@ describe("Pillow Fight (Vote)", () => {
     expect(result.target).toBe("bob");
     expect(result.ejected).toBe(true);
     expect(result.yes).toBe(2);
+  });
+
+  it("voting out the host offers host ownership to a remaining member", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+
+    bob.send({ type: "start-vote", target: "alice" });
+    await carol.waitFor("vote-started");
+    carol.send({ type: "cast-vote", vote: "yes" });
+    const result = await bob.waitFor("vote-result");
+    expect(result.ejected).toBe(true);
+
+    await Bun.sleep(50);
+    const offered = [bob, carol].find((client) => client.messages.some((msg) => msg.type === "host-offer"));
+    expect(offered).toBeDefined();
+    offered!.send({ type: "accept-host" });
+    const promoted = await offered!.waitFor("new-host");
+    expect(promoted.name).toBe(offered === bob ? "bob" : "carol");
+
+    await host.close();
   });
 
   it("start vote → no majority → target stays", async () => {
@@ -317,11 +393,48 @@ describe("Pillow Fight (Vote)", () => {
     expect(result.yes).toBe(2);
     expect(result.no).toBe(0);
   });
+
+  it("removes a departed member's vote before resolving", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+    host.send({ type: "start-vote", target: "bob" });
+    await dave.waitFor("vote-started");
+    carol.send({ type: "cast-vote", vote: "yes" });
+    await host.waitFor("vote-cast");
+    carol.send({ type: "leave" });
+    await host.waitFor("member-left");
+    dave.send({ type: "cast-vote", vote: "no" });
+    const result = await host.waitFor("vote-result");
+    expect(result.yes).toBe(1);
+    expect(result.no).toBe(1);
+    expect(result.ejected).toBe(false);
+  });
 });
 
 // ---- Secret Saboteur ----
 
 describe("Secret Saboteur", () => {
+  it("cancels an accusation for everyone when the accuser leaves", async () => {
+    const { roomId, host } = await createRoom("alice");
+    const bob = await joinRoom(roomId, "bob");
+    const carol = await joinRoom(roomId, "carol");
+    const dave = await joinRoom(roomId, "dave");
+    host.send({ type: "sab-start" });
+    const players = [{ name: "alice", client: host }, { name: "bob", client: bob }, { name: "carol", client: carol }, { name: "dave", client: dave }];
+    const roles = await Promise.all(players.map(async (player) => ({ ...player, role: (await player.client.waitFor("sab-role")).role })));
+    const defenders = roles.filter((player) => player.role === "defender");
+    const accuser = defenders[0];
+    const suspect = defenders[1];
+    const observer = roles.find((player) => player !== accuser && player !== suspect)!;
+    accuser.client.send({ type: "sab-accuse", suspect: suspect.name });
+    await observer.client.waitFor("sab-vote-start");
+    accuser.client.send({ type: "leave" });
+    const result = await observer.client.waitFor("sab-vote-result");
+    expect(result.cancelled).toBe(true);
+    expect(result.accused).toBe(suspect.name);
+  });
   it("start → roles assigned (1 saboteur, rest defenders)", async () => {
     const { roomId, host } = await createRoom("alice");
     const bob = await joinRoom(roomId, "bob");
@@ -386,6 +499,7 @@ describe("Secret Saboteur", () => {
     saboteur.client.send({ type: "sab-strike" });
     const s1 = await host.waitFor("sab-strike");
     expect(s1.strikes).toBe(1);
+    expect(s1.saboteur).toBeUndefined();
 
     await runWrongAccusation();
 
@@ -393,6 +507,7 @@ describe("Secret Saboteur", () => {
     saboteur.client.send({ type: "sab-strike" });
     const s2 = await host.waitFor("sab-strike");
     expect(s2.strikes).toBe(2);
+    expect(s2.saboteur).toBeUndefined();
 
     await runWrongAccusation();
 
@@ -400,6 +515,7 @@ describe("Secret Saboteur", () => {
     saboteur.client.send({ type: "sab-strike" });
     const s3 = await host.waitFor("sab-strike");
     expect(s3.strikes).toBe(3);
+    expect(s3.saboteur).toBe(saboteur.name);
     const bomb = await host.waitFor("sab-bomb-start");
     expect(bomb.seconds).toBeGreaterThan(0);
 

@@ -43,7 +43,11 @@ function normalizeGameQueue(src?: RoomGameQueue): RoomGameQueue {
 }
 
 function normalizeRoomTheme(theme: unknown): RoomTheme {
-  return theme === "retro-green" || theme === "midnight" ? theme : "classic";
+  if (theme === "away-message" || theme === "campus-blue" || theme === "top-8") return theme;
+  if (theme === "classic") return "away-message";
+  if (theme === "retro-green") return "campus-blue";
+  if (theme === "midnight") return "top-8";
+  return "away-message";
 }
 
 function normalizeFortPass(src: unknown): FortPassRoomPerks | null {
@@ -121,6 +125,7 @@ async function handleEncryptedChatMessage(
   if (now.mutedNames.has(msg.from)) return;
 
   now.addChatMessage(msg.from, text, decrypted?.style);
+  if (now.minimized) now.incrementUnread();
   playMsgSound();
 }
 
@@ -186,6 +191,16 @@ export function handleMessage(msg: IncomingMessage) {
       s.setGameQueue(normalizeGameQueue(msg.gameQueue));
       s.setRoomTheme(normalizeRoomTheme(msg.theme));
       s.setFortPass(normalizeFortPass(msg.fortPass));
+      s.setRpsState(null);
+      s.setTttState(null);
+      if (msg.gameState?.kind === "rps") {
+        const game = msg.gameState;
+        if (game.phase === "pending" && game.p2 === msg.name) s.setRpsState({ p1: game.p1, p2: game.p2, phase: "challenged", challengedBy: game.p1, koth: game.koth });
+        else if (game.phase === "playing") s.setRpsState({ p1: game.p1, p2: game.p2, phase: "picking", koth: game.koth, myPick: game.myPick });
+      } else if (msg.gameState?.kind === "ttt") {
+        const game = msg.gameState;
+        s.setTttState({ p1: game.p1, p2: game.p2, myMark: game.p1 === msg.name ? "X" : "O", board: game.board, turn: game.turn, winner: null, draw: false, phase: game.phase === "pending" && game.p2 === msg.name ? "challenged" : "playing", challengedBy: game.phase === "pending" ? game.p1 : undefined });
+      }
       updateRoomSafetyCode(msg.room, s.password);
       s.addSystemMessage("Reconnected!");
       requestWakeLock();
@@ -218,13 +233,14 @@ export function handleMessage(msg: IncomingMessage) {
           void handleEncryptedChatMessage(msg, s.roomId, s.password);
         } else if (!s.mutedNames.has(msg.from)) {
           s.addChatMessage(msg.from, "[encrypted message]", msg.style);
+          if (s.minimized) s.incrementUnread();
           playMsgSound();
         }
       } else if (ALLOW_LEGACY_PLAINTEXT && typeof msg.text === "string" && !s.mutedNames.has(msg.from)) {
         s.addChatMessage(msg.from, msg.text, msg.style);
+        if (s.minimized) s.incrementUnread();
         playMsgSound();
       }
-      if (s.minimized) s.incrementUnread();
       break;
     }
 
@@ -558,7 +574,9 @@ export function handleMessage(msg: IncomingMessage) {
 
     case "sab-vote-result": {
       s.setSabVote(null);
-      if (msg.wasSaboteur) {
+      if (msg.cancelled) {
+        s.addSystemMessage("The accusation was cancelled because a participant left.");
+      } else if (msg.wasSaboteur) {
         stopSabBombCountdown();
         s.setSabBombCountdown(0);
         s.setSabCanStrike(false);
@@ -589,7 +607,7 @@ export function handleMessage(msg: IncomingMessage) {
         s.setSabRole(null);
         s.setSabCanStrike(false);
       } else if (msg.strikes === 2) {
-        s.addSystemMessage(`💥💥 STRIKE ${msg.strikes}/3! ${msg.saboteur} struck again! The fort is crumbling!`);
+        s.addSystemMessage(`💥💥 STRIKE ${msg.strikes}/3! The saboteur struck again! The fort is crumbling!`);
       } else {
         s.addSystemMessage(`💥 STRIKE ${msg.strikes}/3! The fort trembles!`);
       }

@@ -16,3 +16,7 @@ export function rpsWinner(p1: string, p2: string, pick1: RpsPick, pick2: RpsPick
 export function tttWinner(board: string[], mark: string): boolean {
   return TTT_WINS.some((combo) => combo.every((i) => board[i] === mark));
 }
+
+export function voteHasMajority(yes: number, no: number, eligible: number): boolean {
+  return yes > no && yes > eligible / 2;
+}

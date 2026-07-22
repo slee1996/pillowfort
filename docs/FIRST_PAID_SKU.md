@@ -22,7 +22,7 @@ Initial perks:
 
 - Custom room code.
 - Longer room idle timeout.
-- Premium theme pack.
+- Premium social-skin pack.
 
 Do not include in the first SKU:
 
@@ -113,12 +113,15 @@ Current shared implementation primitives:
 - `GET /api/fort-pass/status` returns non-secret beta readiness data so the
   setup UI can keep checkout disabled unless Checkout and signed webhook
   fulfillment are both configured.
-- `POST /api/fort-pass/checkout` validates the requested custom code. If Stripe
-  config is present, it creates a hosted one-time Checkout Session. If Stripe is
-  not configured, it returns `checkout_not_configured`.
+- `POST /api/fort-pass/checkout` validates and atomically reserves the requested
+  custom code for a short checkout window. If Stripe config is present, it
+  creates a hosted one-time Checkout Session; failed provider creation releases
+  the reservation. If Stripe is not configured, it returns
+  `checkout_not_configured`.
 - `POST /api/stripe/webhook` verifies Stripe's raw-body signature before
   granting any entitlement. Only paid `checkout.session.completed` events with
-  Fort Pass metadata are fulfilled.
+  Fort Pass metadata are fulfilled, and replaying the same fulfilled Checkout
+  Session is treated as a successful idempotent delivery.
 - The local Bun runtime checks the in-memory room map.
 - The production Worker asks the target Durable Object for a minimal
   `{ exists: boolean }` status and returns only `available` / `reason`.
@@ -134,8 +137,8 @@ Current shared implementation primitives:
   flow.
 - The setup screen checks Fort Pass status before enabling the paid beta
   checkout button.
-- Paid rooms expose the `retro-plus` theme pack. The host can switch room theme
-  to `retro-green` or `midnight`, and the room broadcasts the selected theme to
+- Paid rooms expose the `retro-plus` skin pack. The host can switch room theme
+  to `campus-blue` or `top-8`, and the room broadcasts the selected theme to
   connected members.
 
 This does not add guest accounts. The current fulfillment path deliberately
@@ -164,7 +167,7 @@ Use direct host-focused copy:
 - "Upgrade this fort"
 - "Pick a custom room code"
 - "Keep this room open longer"
-- "Unlock retro themes for tonight"
+- "Unlock social skins for tonight"
 
 Avoid copy that implies permanence:
 
@@ -224,8 +227,8 @@ Support burden:
    Session ID from the success redirect.
 6. Add a host-only upgrade entry point in the frontend. Done as a compact Fort
    Pass custom-code checkout flow on setup.
-7. Add premium theme selection. Done for Fort Pass rooms with `retro-green` and
-   `midnight` room themes.
+7. Add premium skin selection. Done for Fort Pass rooms with `campus-blue` and
+   `top-8` room themes.
 8. Add refund/support notes to launch docs. Done in
    `docs/FORT_PASS_SUPPORT_RUNBOOK.md`.
 

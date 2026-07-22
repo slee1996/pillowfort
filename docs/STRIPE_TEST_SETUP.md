@@ -63,7 +63,7 @@ Completed against the deployed Worker:
   metadata for `smoke-2`.
 - `smoke-2` became unavailable after webhook fulfillment.
 - Deployed WebSocket setup redeemed `smoke-2` using the Checkout Session ID.
-- Paid room switched to `retro-green`.
+- Paid room switched to `campus-blue`.
 - Smoke room was knocked down and `smoke-2` became available again.
 
 ## Manual Test Purchase
@@ -76,7 +76,7 @@ For a browser purchase smoke:
 4. Choose `Upgrade`.
 5. Complete Stripe Checkout with a Stripe test card.
 6. Return to Pillowfort and create the room.
-7. Confirm the host can switch to `retro-green` or `midnight`.
+7. Confirm the host can switch to `campus-blue` or `top-8`.
 
 Use Stripe test card data from Stripe's dashboard/docs. Do not use a real card
 against the sandbox setup.

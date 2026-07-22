@@ -156,13 +156,13 @@ describe("Full tour: Sign On", () => {
     const kai = await wsJoinTracked(roomCode, "kai");
     await waitForMembers(page, 4);
 
-    chat(javi, "we're in! 🏰");
+    await chat(javi, "we're in! 🏰");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("we're in");
     });
 
-    chat(priya, "cozy fort ✨");
+    await chat(priya, "cozy fort ✨");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("cozy fort");
@@ -199,21 +199,21 @@ describe("Full tour: Chat Showcase", () => {
     expect(boldMsg.style?.bold).toBe(true);
 
     // kai sends colored text
-    chat(kai, "wait check this out", { color: "#FF0000" });
+    await chat(kai, "wait check this out", { color: "#FF0000" });
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("check this out");
     });
 
     // priya sends italic
-    chat(priya, "fancy", { italic: true });
+    await chat(priya, "fancy", { italic: true });
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("fancy");
     });
 
     // javi sends emojis
-    chat(javi, "😊🔥🎉");
+    await chat(javi, "😊🔥🎉");
     await sleep(300);
 
     // luna sends plain
@@ -401,13 +401,13 @@ describe("Full tour: Saboteur", () => {
     }, { timeout: 5000 });
     await sleep(500);
 
-    chat(kai, "who's the saboteur 👀");
+    await chat(kai, "who's the saboteur 👀");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("who's the saboteur");
     });
 
-    chat(javi, "definitely not me");
+    await chat(javi, "definitely not me");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("definitely not me");

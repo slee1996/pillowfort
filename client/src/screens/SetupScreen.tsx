@@ -9,7 +9,7 @@ import { createRoomAuthPayload } from "../services/chatCrypto";
 import { checkFortPassCode, getFortPassStatus, normalizeFortPassCode, startFortPassCheckout, type FortPassStatus } from "../services/fortPass";
 import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 
-type FortPassPreviewTheme = "retro-green" | "midnight";
+type FortPassPreviewTheme = "campus-blue" | "top-8";
 
 function generateRoomId(): string {
   const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
@@ -33,7 +33,7 @@ export function SetupScreen() {
   const [fortPassStatus, setFortPassStatus] = useState("");
   const [fortPassConfig, setFortPassConfig] = useState<FortPassStatus | null>(null);
   const [fortPassBusy, setFortPassBusy] = useState(false);
-  const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("retro-green");
+  const [previewTheme, setPreviewTheme] = useState<FortPassPreviewTheme>("campus-blue");
   const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export function SetupScreen() {
               <div className="fort-pass-perk-row">
                 <span>custom code</span>
                 <span>6-hour idle</span>
-                <span>retro themes</span>
+                <span>social skins</span>
               </div>
             </div>
           )}
@@ -174,7 +174,7 @@ export function SetupScreen() {
               <div className="fort-pass-heading">
                 <div>
                   <div className="fort-pass-title">Fort Pass</div>
-                <div className="fort-pass-subtitle">quiet beta · custom flag · 6-hour idle · retro themes</div>
+                <div className="fort-pass-subtitle">quiet beta · custom flag · 6-hour idle · social skins</div>
               </div>
                 <div className="fort-pass-price">{fortPassConfig?.priceLabel || "$5"}</div>
               </div>
@@ -195,23 +195,23 @@ export function SetupScreen() {
               <div className="fort-pass-theme-toggle" role="group" aria-label="Theme preview">
                 <button
                   type="button"
-                  className={previewTheme === "retro-green" ? "active" : ""}
-                  onClick={() => setPreviewTheme("retro-green")}
+                  className={previewTheme === "campus-blue" ? "active" : ""}
+                  onClick={() => setPreviewTheme("campus-blue")}
                 >
-                  Retro Green
+                  Campus Blue
                 </button>
                 <button
                   type="button"
-                  className={previewTheme === "midnight" ? "active" : ""}
-                  onClick={() => setPreviewTheme("midnight")}
+                  className={previewTheme === "top-8" ? "active" : ""}
+                  onClick={() => setPreviewTheme("top-8")}
                 >
-                  Midnight
+                  Top 8
                 </button>
               </div>
               <div className="fort-pass-perk-row">
                 <span>custom code</span>
                 <span>6-hour idle</span>
-                <span>theme pack</span>
+                <span>skin pack</span>
               </div>
               <div className="fort-pass-controls">
                 <Input

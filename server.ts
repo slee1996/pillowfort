@@ -1,9 +1,9 @@
-import { isRpsPick, rpsWinner, tttWinner, type RpsPick } from "./src/game";
+import { isRpsPick, rpsWinner, tttWinner, voteHasMajority, type RpsPick } from "./src/game";
 import { analyticsLogLine, opsLogLine, readAnalyticsEvent } from "./src/analytics";
 import { customRoomCodeAvailability, fortPassAllowsRoomTheme, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./src/entitlements";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./src/security";
 import { createFortPassStripeCheckoutSession, fortPassEntitlementFromStripeEvent, verifyStripeWebhookSignature } from "./src/stripe";
-import { sanitizeStyle, uniqueName, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS as DEFAULT_GRACE_MS } from "./src/shared";
+import { sanitizeDraw, sanitizeStyle, uniqueName, MAX_DRAW_EVENTS_PER_5S, MAX_NAME_LEN, MAX_MSG_LEN, GRACE_MS as DEFAULT_GRACE_MS } from "./src/shared";
 
 const PORT = parseInt(process.env.PORT || "3000");
 
@@ -19,6 +19,7 @@ interface WSData {
   hash: string;
   ip: string;
   msgTimestamps: number[];
+  drawTimestamps: number[];
 }
 
 interface Room {
@@ -87,6 +88,15 @@ interface RoomGameQueue {
 const rooms = new Map<string, Room>();
 const roomCreationByIP = new Map<string, number[]>();
 const pendingFortPassEntitlements = new Map<string, FortPassEntitlement>();
+const pendingFortPassReservations = new Map<string, number>();
+const FORT_PASS_RESERVATION_MS = 30 * 60 * 1000;
+
+function hasActiveFortPassReservation(roomId: string): boolean {
+  const expiresAt = pendingFortPassReservations.get(roomId) || 0;
+  if (expiresAt > Date.now()) return true;
+  pendingFortPassReservations.delete(roomId);
+  return false;
+}
 
 function hasActivePendingFortPass(roomId: string): boolean {
   const entitlement = pendingFortPassEntitlements.get(roomId);
@@ -107,6 +117,8 @@ const GRACE_MS = Number.isFinite(GRACE_MS_RAW) && GRACE_MS_RAW > 0 ? GRACE_MS_RA
 const VOTE_DURATION_MS = 30_000;
 const CHALLENGE_TIMEOUT_MS_RAW = parseInt(process.env.CHALLENGE_TIMEOUT_MS || "30000");
 const CHALLENGE_TIMEOUT_MS = Number.isFinite(CHALLENGE_TIMEOUT_MS_RAW) && CHALLENGE_TIMEOUT_MS_RAW > 0 ? CHALLENGE_TIMEOUT_MS_RAW : 30_000;
+const GAME_PLAY_TIMEOUT_MS_RAW = parseInt(process.env.GAME_PLAY_TIMEOUT_MS || (process.env.NODE_ENV === "test" ? "1000" : "60000"));
+const GAME_PLAY_TIMEOUT_MS = Number.isFinite(GAME_PLAY_TIMEOUT_MS_RAW) && GAME_PLAY_TIMEOUT_MS_RAW > 0 ? GAME_PLAY_TIMEOUT_MS_RAW : 60_000;
 const MAX_GAME_QUEUE = 10;
 const SABOTEUR_VOTE_MS = 30_000;
 const SABOTEUR_MIN_PLAYERS = 4;
@@ -276,6 +288,16 @@ function gameQueueSnapshot(room: Room): RoomGameQueue {
   };
 }
 
+function activeGameSnapshot(room: Room, name: string) {
+  if (room.rpsGame && (room.rpsGame.p1 === name || room.rpsGame.p2 === name)) {
+    return { kind: "rps", p1: room.rpsGame.p1, p2: room.rpsGame.p2, phase: room.rpsGame.phase, koth: room.rpsGame.koth, myPick: room.rpsGame.p1 === name ? room.rpsGame.pick1 : room.rpsGame.pick2 };
+  }
+  if (room.tttGame && (room.tttGame.p1 === name || room.tttGame.p2 === name)) {
+    return { kind: "ttt", p1: room.tttGame.p1, p2: room.tttGame.p2, phase: room.tttGame.phase, board: [...room.tttGame.board], turn: room.tttGame.turn };
+  }
+  return undefined;
+}
+
 function fortPassSnapshot(room: Room): { themePack?: string } | undefined {
   if (!room.fortPassEntitlement || !isFortPassActive(room.fortPassEntitlement)) return undefined;
   return room.fortPassEntitlement.perks.themePack
@@ -367,6 +389,12 @@ function cancelActiveGamesForMember(room: Room, name: string) {
     });
     room.activeVote = null;
     cancelled = true;
+  } else if (room.activeVote) {
+    room.activeVote.yes.delete(name);
+    room.activeVote.no.delete(name);
+    const eligible = members(room).filter((member) => member !== room.activeVote!.target).length;
+    const total = room.activeVote.yes.size + room.activeVote.no.size;
+    if (total >= eligible) resolveVote(room);
   }
   if (room.rpsGame && (room.rpsGame.p1 === name || room.rpsGame.p2 === name)) {
     if (room.rpsGame.timer) clearTimeout(room.rpsGame.timer);
@@ -401,10 +429,12 @@ function cancelActiveGamesForMember(room: Room, name: string) {
     cancelled = true;
   } else if (room.sabVote && (room.sabVote.accuser === name || room.sabVote.suspect === name)) {
     clearTimeout(room.sabVote.timer);
+    broadcast(room, "sab-vote-result", { accuser: room.sabVote.accuser, accused: room.sabVote.suspect, yes: room.sabVote.yes.size, no: room.sabVote.no.size, passed: false, wasSaboteur: false, saboteur: null, cancelled: true });
     room.sabVote = null;
   } else if (room.sabVote) {
     room.sabVote.yes.delete(name);
     room.sabVote.no.delete(name);
+    if (room.sabVote.yes.size + room.sabVote.no.size >= members(room).length) resolveSabVote(room);
   }
   if (cancelled) clearActiveGame(room);
 }
@@ -515,7 +545,7 @@ function onSetUp(ws: any, d: WSData, msg: any) {
     gameQueue: [],
     leaderboards: createLeaderboards(),
     fortPassEntitlement,
-    theme: "classic",
+    theme: "away-message",
   };
   pendingFortPassEntitlements.delete(id);
 
@@ -638,7 +668,13 @@ function onSetTheme(ws: any, d: WSData, msg: any) {
   if (!room) return;
   const theme = normalizeRoomTheme(msg.theme);
   if (!theme) return send(ws, "error", { message: "invalid theme" });
-  if (!fortPassAllowsRoomTheme(room.fortPassEntitlement, theme)) {
+  const localSkinDemo =
+    d.ip === "127.0.0.1" ||
+    d.ip === "::ffff:127.0.0.1" ||
+    d.ip === "::1" ||
+    d.ip === "0:0:0:0:0:0:0:1" ||
+    d.ip === "localhost";
+  if (!localSkinDemo && !fortPassAllowsRoomTheme(room.fortPassEntitlement, theme)) {
     return send(ws, "error", { message: "Fort Pass required" });
   }
   room.theme = theme;
@@ -749,6 +785,9 @@ function onLeave(_ws: any, d: WSData) {
   if (!room) { d.roomId = null; return; }
   removeMember(_ws, d, room);
   d.roomId = null;
+  d.name = "";
+  d.isHost = false;
+  try { _ws.close(1000, "left"); } catch {}
 }
 
 function removeMember(ws: any, d: WSData, room: Room) {
@@ -840,6 +879,7 @@ function onRejoin(ws: any, d: WSData, msg: any) {
       presence: roomPresence(room),
       leaderboards: room.leaderboards,
       gameQueue: gameQueueSnapshot(room),
+      gameState: activeGameSnapshot(room, d.name),
       theme: room.theme,
       fortPass: fortPassSnapshot(room),
     });
@@ -983,7 +1023,19 @@ function startKoth(room: Room, challenger: string): boolean {
   const hostName = room.host.name;
 
   room.kothGame = { challenger, host: hostName };
-  room.rpsGame = { p1: challenger, p2: hostName, phase: "playing", koth: true };
+  room.rpsGame = {
+    p1: challenger,
+    p2: hostName,
+    phase: "playing",
+    koth: true,
+    timer: setTimeout(() => {
+      if (!room.rpsGame?.koth) return;
+      broadcast(room, "rps-declined", { from: "game timeout" });
+      room.rpsGame = null;
+      room.kothGame = null;
+      clearActiveGame(room);
+    }, GAME_PLAY_TIMEOUT_MS),
+  };
   setActiveGame(room, { kind: "koth", by: challenger, target: hostName });
   broadcast(room, "koth-started", { challenger, host: hostName });
   broadcast(room, "rps-started", { p1: challenger, p2: hostName, koth: true });
@@ -1032,7 +1084,8 @@ function resolveVote(room: Room) {
   if (!room.activeVote) return;
   clearTimeout(room.activeVote.timer);
   const { target, yes, no, starter, auto } = room.activeVote;
-  const ejected = yes.size > no.size;
+  const eligible = members(room).filter((name) => name !== target).length;
+  const ejected = voteHasMajority(yes.size, no.size, eligible);
   broadcast(room, "vote-result", { target, yes: yes.size, no: no.size, ejected });
   if (!auto) {
     if (ejected) bumpLeaderboard(room, "pillowFight", starter);
@@ -1041,10 +1094,14 @@ function resolveVote(room: Room) {
   }
 
   if (ejected) {
+    const ejectedHost = room.host?.name === target;
     const tw = findWs(room, target);
     if (tw) {
       send(tw, "ejected", { reason: "You were voted out of the fort!" });
-      try { tw.close(1000, "ejected"); } catch {}
+      const td = tw.data as WSData;
+      td.roomId = null;
+      td.name = "";
+      td.isHost = false;
     }
     // remove from room
     if (room.host && room.host.name === target) {
@@ -1055,7 +1112,9 @@ function resolveVote(room: Room) {
       }
     }
     broadcast(room, "member-left", { name: target });
+    if (tw) try { tw.close(1000, "ejected"); } catch {}
     pruneGameQueue(room);
+    if (ejectedHost) offerHost(room, target);
   }
   room.activeVote = null;
   clearActiveGame(room);
@@ -1086,6 +1145,13 @@ function onRpsAccept(ws: any, d: WSData) {
   if (room.rpsGame.timer) clearTimeout(room.rpsGame.timer);
   room.rpsGame.timer = undefined;
   room.rpsGame.phase = "playing";
+  room.rpsGame.timer = setTimeout(() => {
+    if (!room.rpsGame || room.rpsGame.phase !== "playing") return;
+    broadcast(room, "rps-declined", { from: "game timeout" });
+    room.rpsGame = null;
+    room.kothGame = null;
+    clearActiveGame(room);
+  }, GAME_PLAY_TIMEOUT_MS);
   broadcast(room, "rps-started", { p1: room.rpsGame.p1, p2: room.rpsGame.p2 });
 }
 
@@ -1107,14 +1173,20 @@ function onRpsPick(ws: any, d: WSData, msg: any) {
   if (room.rpsGame.phase !== "playing") return;
   if (!isRpsPick(msg.pick)) return;
 
-  if (d.name === room.rpsGame.p1) room.rpsGame.pick1 = msg.pick;
-  else if (d.name === room.rpsGame.p2) room.rpsGame.pick2 = msg.pick;
+  if (d.name === room.rpsGame.p1) {
+    if (room.rpsGame.pick1) return;
+    room.rpsGame.pick1 = msg.pick;
+  } else if (d.name === room.rpsGame.p2) {
+    if (room.rpsGame.pick2) return;
+    room.rpsGame.pick2 = msg.pick;
+  }
   else return;
 
   send(ws, "rps-picked", {});
 
   if (room.rpsGame.pick1 && room.rpsGame.pick2) {
     const { p1, p2, pick1, pick2 } = room.rpsGame;
+    if (room.rpsGame.timer) clearTimeout(room.rpsGame.timer);
     const winner = rpsWinner(p1, p2, pick1, pick2);
     const isKoth = !!room.kothGame;
     broadcast(room, "rps-result", { p1, p2, pick1, pick2, winner, koth: isKoth || undefined });
@@ -1160,6 +1232,12 @@ function onTttAccept(ws: any, d: WSData) {
   if (room.tttGame.timer) clearTimeout(room.tttGame.timer);
   room.tttGame.timer = undefined;
   room.tttGame.phase = "playing";
+  room.tttGame.timer = setTimeout(() => {
+    if (!room.tttGame || room.tttGame.phase !== "playing") return;
+    broadcast(room, "ttt-declined", { from: "game timeout" });
+    room.tttGame = null;
+    clearActiveGame(room);
+  }, GAME_PLAY_TIMEOUT_MS);
   broadcast(room, "ttt-started", { p1: room.tttGame.p1, p2: room.tttGame.p2, board: room.tttGame.board, turn: room.tttGame.turn });
 }
 
@@ -1185,6 +1263,13 @@ function onTttMove(ws: any, d: WSData, msg: any) {
 
   g.board[msg.cell] = g.turn % 2 === 0 ? "X" : "O";
   g.turn++;
+  if (g.timer) clearTimeout(g.timer);
+  g.timer = setTimeout(() => {
+    if (room.tttGame !== g) return;
+    broadcast(room, "ttt-declined", { from: "game timeout" });
+    room.tttGame = null;
+    clearActiveGame(room);
+  }, GAME_PLAY_TIMEOUT_MS);
 
   const mark = g.board[msg.cell];
   let winner: string | null = null;
@@ -1197,6 +1282,7 @@ function onTttMove(ws: any, d: WSData, msg: any) {
     emitLeaderboards(room);
   }
   if (winner || draw) {
+    if (g.timer) clearTimeout(g.timer);
     room.tttGame = null;
     clearActiveGame(room);
   }
@@ -1311,7 +1397,10 @@ function onSabStrike(ws: any, d: WSData) {
 
   room.sabCanStrike = false;
   room.sabStrikes++;
-  broadcast(room, "sab-strike", { saboteur: d.name, strikes: room.sabStrikes });
+  broadcast(room, "sab-strike", {
+    strikes: room.sabStrikes,
+    ...(room.sabStrikes >= 3 ? { saboteur: d.name } : {}),
+  });
 
   if (room.sabStrikes >= 3) {
     // The saboteur plants a bomb. Let chat continue during countdown.
@@ -1384,12 +1473,16 @@ function resolveKoth(room: Room, winner: string) {
 // --- draw passthrough ---
 
 function onDraw(ws: any, d: WSData, msg: any) {
-  if (!d.roomId || !d.name || !msg.pts?.length) return;
+  if (!d.roomId || !d.name) return;
   const room = rooms.get(d.roomId);
   if (!room) return;
-  const payload: Record<string, unknown> = { from: d.name, color: msg.color, pts: msg.pts };
-  if (msg.s) payload.s = 1;
-  broadcast(room, "draw", payload, ws);
+  const now = Date.now();
+  d.drawTimestamps = d.drawTimestamps.filter(t => now - t < 5_000);
+  if (d.drawTimestamps.length >= MAX_DRAW_EVENTS_PER_5S) return send(ws, "error", { message: "slow down" });
+  const draw = sanitizeDraw(msg);
+  if (!draw) return;
+  d.drawTimestamps.push(now);
+  broadcast(room, "draw", { from: d.name, ...draw }, ws);
 }
 
 async function handleHttp(req: Request, server: any): Promise<Response | undefined> {
@@ -1439,11 +1532,16 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
     }
     const entitlement = fortPassEntitlementFromStripeEvent(event);
     if (!entitlement) return json({ received: true, ignored: true });
+    const existing = pendingFortPassEntitlements.get(entitlement.roomId) || rooms.get(entitlement.roomId)?.fortPassEntitlement;
+    if (existing?.providerRef === entitlement.providerRef) {
+      return json({ received: true, fulfilled: true, code: entitlement.roomId, replay: true });
+    }
     if (rooms.has(entitlement.roomId)) {
       console.log(opsLogLine("stripe_webhook_failed", { reason: "fulfillment_failed", status: 409 }));
       return json({ error: "entitlement_fulfillment_failed" }, 409);
     }
     pendingFortPassEntitlements.set(entitlement.roomId, entitlement);
+    pendingFortPassReservations.delete(entitlement.roomId);
     return json({ received: true, fulfilled: true, code: entitlement.roomId });
   }
 
@@ -1451,7 +1549,7 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
     if (req.method !== "GET") return new Response("method not allowed", { status: 405 });
     const code = normalizeCustomRoomCode(url.searchParams.get("code"));
     const availability = code
-      ? customRoomCodeAvailability(code, rooms.has(code) || hasActivePendingFortPass(code))
+      ? customRoomCodeAvailability(code, rooms.has(code) || hasActivePendingFortPass(code) || hasActiveFortPassReservation(code))
       : customRoomCodeAvailability(null, false);
     return json(availability);
   }
@@ -1470,12 +1568,13 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
     if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
     const checkout = normalizeFortPassCheckoutRequest(await readSmallJson(req));
     if (!checkout) return json({ error: "invalid_custom_room_code" }, 400);
-    if (rooms.has(checkout.customRoomCode) || hasActivePendingFortPass(checkout.customRoomCode)) {
+    if (rooms.has(checkout.customRoomCode) || hasActivePendingFortPass(checkout.customRoomCode) || hasActiveFortPassReservation(checkout.customRoomCode)) {
       return json({ error: "custom_room_code_taken", code: checkout.customRoomCode }, 409);
     }
     if (!process.env.STRIPE_SECRET_KEY || !process.env.FORT_PASS_PRICE_ID) {
       return json({ error: "checkout_not_configured", code: checkout.customRoomCode }, 501);
     }
+    pendingFortPassReservations.set(checkout.customRoomCode, Date.now() + FORT_PASS_RESERVATION_MS);
     try {
       const session = await createFortPassStripeCheckoutSession({
         secretKey: process.env.STRIPE_SECRET_KEY,
@@ -1485,6 +1584,7 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
       });
       return json({ code: checkout.customRoomCode, checkoutUrl: session.url, sessionId: session.id });
     } catch {
+      pendingFortPassReservations.delete(checkout.customRoomCode);
       return json({ error: "checkout_provider_error" }, 502);
     }
   }
@@ -1507,6 +1607,7 @@ async function handleHttp(req: Request, server: any): Promise<Response | undefin
         hash: Math.random().toString(16).slice(2, 6),
         ip,
         msgTimestamps: [],
+        drawTimestamps: [],
       } satisfies WSData,
     });
     return ok ? undefined : new Response("upgrade failed", { status: 400 });

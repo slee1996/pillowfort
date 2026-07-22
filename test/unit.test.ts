@@ -16,9 +16,9 @@ import {
   normalizeFortPassRedemptionToken,
   normalizeRoomTheme,
 } from "../src/entitlements";
-import { isRpsPick, rpsWinner, tttWinner } from "../src/game";
+import { isRpsPick, rpsWinner, tttWinner, voteHasMajority } from "../src/game";
 import { probeReasonForPath, withSecurityHeaders } from "../src/security";
-import { sanitizeStyle, uniqueName, STYLE_COLORS, MAX_NAME_LEN } from "../src/shared";
+import { sanitizeDraw, sanitizeStyle, uniqueName, STYLE_COLORS, MAX_DRAW_POINTS, MAX_NAME_LEN } from "../src/shared";
 import {
   computeStripeWebhookSignature,
   createFortPassStripeCheckoutSession,
@@ -73,6 +73,23 @@ describe("sanitizeStyle", () => {
   it("combines multiple valid fields", () => {
     expect(sanitizeStyle({ bold: true, italic: true, underline: true, color: "#FF0000" }))
       .toEqual({ bold: true, italic: true, underline: true, color: "#FF0000" });
+  });
+});
+
+describe("sanitizeDraw", () => {
+  it("accepts bounded normalized drawing points", () => {
+    expect(sanitizeDraw({ color: "hsl(359, 80%, 65%)", pts: [[0, 0.5], [1, 1]], s: 1 })).toEqual({
+      color: "hsl(359, 80%, 65%)",
+      pts: [[0, 0.5], [1, 1]],
+      s: 1,
+    });
+  });
+
+  it("rejects malformed, out-of-range, and oversized drawing payloads", () => {
+    expect(sanitizeDraw({ color: "red", pts: [[0, 0]] })).toBeNull();
+    expect(sanitizeDraw({ color: "#FF0000", pts: [[Number.NaN, 0]] })).toBeNull();
+    expect(sanitizeDraw({ color: "#FF0000", pts: [[1.1, 0]] })).toBeNull();
+    expect(sanitizeDraw({ color: "#FF0000", pts: Array.from({ length: MAX_DRAW_POINTS + 1 }, () => [0, 0]) })).toBeNull();
   });
 });
 
@@ -149,6 +166,13 @@ describe("game helpers", () => {
     expect(tttWinner(["X", "O", "X", "X", "O", "O", "O", "X", "X"], "X")).toBe(false);
     expect(tttWinner(["X", "O", "X", "X", "O", "O", "O", "X", "X"], "O")).toBe(false);
     expect(tttWinner(["", "", "", "", "", "", "", "", ""], "X")).toBe(false);
+  });
+
+  it("requires a majority of eligible voters before ejecting", () => {
+    expect(voteHasMajority(1, 0, 2)).toBe(false);
+    expect(voteHasMajority(2, 0, 3)).toBe(true);
+    expect(voteHasMajority(2, 1, 4)).toBe(false);
+    expect(voteHasMajority(3, 1, 4)).toBe(true);
   });
 });
 
@@ -367,13 +391,15 @@ describe("Fort Pass entitlements", () => {
     const active = normalizeFortPassEntitlement(rawEntitlement(), now);
     const refunded = normalizeFortPassEntitlement(rawEntitlement({ status: "refunded" }), now);
 
-    expect(normalizeRoomTheme("retro-green")).toBe("retro-green");
+    expect(normalizeRoomTheme("campus-blue")).toBe("campus-blue");
+    expect(normalizeRoomTheme("classic")).toBe("away-message");
+    expect(normalizeRoomTheme("retro-green")).toBe("campus-blue");
     expect(normalizeRoomTheme("bad-theme")).toBeNull();
-    expect(fortPassAllowsRoomTheme(null, "classic", now)).toBe(true);
-    expect(fortPassAllowsRoomTheme(active, "retro-green", now)).toBe(true);
-    expect(fortPassAllowsRoomTheme(active, "midnight", now)).toBe(true);
-    expect(fortPassAllowsRoomTheme(refunded, "retro-green", now)).toBe(false);
-    expect(fortPassAllowsRoomTheme(null, "retro-green", now)).toBe(false);
+    expect(fortPassAllowsRoomTheme(null, "away-message", now)).toBe(true);
+    expect(fortPassAllowsRoomTheme(active, "campus-blue", now)).toBe(true);
+    expect(fortPassAllowsRoomTheme(active, "top-8", now)).toBe(true);
+    expect(fortPassAllowsRoomTheme(refunded, "campus-blue", now)).toBe(false);
+    expect(fortPassAllowsRoomTheme(null, "campus-blue", now)).toBe(false);
   });
 });
 

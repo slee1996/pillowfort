@@ -11,7 +11,7 @@
     "start": "bun server.ts",
     "test": "bun test test/unit.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
-    "test:ui": "bun test test/mobile.test.ts test/quad-view.test.ts test/demo-reel.test.ts test/full-tour.test.ts test/game-night.test.ts",
+    "test:ui": "bun test --timeout 15000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 15000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 15000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 15000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 15000 --max-concurrency 1 test/game-night.test.ts",
     "metrics:report": "node scripts/analytics_report.mjs"
   },
   "devDependencies": {

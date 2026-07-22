@@ -1,6 +1,6 @@
 import { analyticsLogLine, opsLogLine, readAnalyticsEvent } from "./analytics";
 import { customRoomCodeAvailability, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, type FortPassEntitlement } from "./entitlements";
-import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_STATUS_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
+import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_STATUS_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_FORT_PASS_RELEASE_PATH, ROOM_FORT_PASS_RESERVE_PATH, ROOM_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./security";
 import { createFortPassStripeCheckoutSession, fortPassEntitlementFromStripeEvent, verifyStripeWebhookSignature } from "./stripe";
 
@@ -66,6 +66,13 @@ async function fulfillFortPass(env: Env, entitlement: FortPassEntitlement, reque
   return res.ok;
 }
 
+async function updateFortPassReservation(env: Env, roomId: string, request: Request, action: "reserve" | "release"): Promise<boolean> {
+  const id = env.ROOM.idFromName(roomId);
+  const path = action === "reserve" ? ROOM_FORT_PASS_RESERVE_PATH : ROOM_FORT_PASS_RELEASE_PATH;
+  const res = await env.ROOM.get(id).fetch(new Request(new URL(path, request.url), { method: "POST" }));
+  return res.ok;
+}
+
 async function handleFetch(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
@@ -110,6 +117,9 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
     if (!env.STRIPE_SECRET_KEY || !env.FORT_PASS_PRICE_ID) {
       return json({ error: "checkout_not_configured", code: checkout.customRoomCode }, 501);
     }
+    if (!await updateFortPassReservation(env, checkout.customRoomCode, request, "reserve")) {
+      return json({ error: "custom_room_code_taken", code: checkout.customRoomCode }, 409);
+    }
     try {
       const session = await createFortPassStripeCheckoutSession({
         secretKey: env.STRIPE_SECRET_KEY,
@@ -120,6 +130,7 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
       });
       return json({ code: checkout.customRoomCode, checkoutUrl: session.url, sessionId: session.id });
     } catch {
+      await updateFortPassReservation(env, checkout.customRoomCode, request, "release");
       return json({ error: "checkout_provider_error" }, 502);
     }
   }

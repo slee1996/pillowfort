@@ -2,10 +2,13 @@
  * WebSocket client helpers shared by end-to-end tests.
  * These mirror the local capture tooling without depending on ignored files.
  */
+import { encryptChatPayload } from "../client/src/services/chatCrypto";
 
 export type Client = {
   ws: WebSocket;
   name: string;
+  roomId?: string;
+  password?: string;
   messages: any[];
   send: (msg: any) => void;
   waitFor: (type: string, timeout?: number) => Promise<any>;
@@ -59,20 +62,28 @@ async function setupClient(ws: WebSocket): Promise<Client> {
   const messages: any[] = [];
   const queues = new Map<string, any[]>();
   const waiters = new Map<string, { resolve: (msg: any) => void; timer: ReturnType<typeof setTimeout> }[]>();
+  let client: Client;
+  let delivery = Promise.resolve();
 
   ws.addEventListener("message", (e) => {
-    const msg = JSON.parse(e.data as string);
-    messages.push(msg);
-    const list = waiters.get(msg.type);
-    if (list?.length) {
-      const { resolve, timer } = list.shift()!;
-      clearTimeout(timer);
-      resolve(msg);
-      return;
-    }
-    const queue = queues.get(msg.type) || [];
-    queue.push(msg);
-    queues.set(msg.type, queue);
+    delivery = delivery.then(async () => {
+      const msg = JSON.parse(e.data as string);
+      if (msg.type === "message" && msg.enc && client.roomId && client.password) {
+        const decrypted = await decryptForTest(client.roomId, client.password, msg.from, msg.enc);
+        if (decrypted) Object.assign(msg, decrypted);
+      }
+      messages.push(msg);
+      const list = waiters.get(msg.type);
+      if (list?.length) {
+        const { resolve, timer } = list.shift()!;
+        clearTimeout(timer);
+        resolve(msg);
+        return;
+      }
+      const queue = queues.get(msg.type) || [];
+      queue.push(msg);
+      queues.set(msg.type, queue);
+    });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -80,7 +91,7 @@ async function setupClient(ws: WebSocket): Promise<Client> {
     ws.addEventListener("error", () => reject(new Error("ws connect failed")));
   });
 
-  return {
+  client = {
     ws,
     name: "",
     messages,
@@ -116,6 +127,30 @@ async function setupClient(ws: WebSocket): Promise<Client> {
       }
     },
   };
+  return client;
+}
+
+async function decryptForTest(roomId: string, password: string, sender: string, payload: any) {
+  if (payload?.v !== 3 || typeof payload.sid !== "string" || !Number.isSafeInteger(payload.seq)) return null;
+  try {
+    const baseKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: new TextEncoder().encode(`pillowfort:chat-v3:${roomId}`), iterations: 600_000, hash: "SHA-256" },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"]
+    );
+    const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+    const iv = decode(payload.iv);
+    const ciphertext = decode(payload.ct);
+    const aad = new TextEncoder().encode(`pf-e2ee:v3:${roomId}:${sender}:${payload.sid}:${payload.seq}`);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad }, key, ciphertext);
+    const body = JSON.parse(new TextDecoder().decode(plain));
+    return { text: body.t, style: body.s };
+  } catch {
+    return null;
+  }
 }
 
 export async function createRoom(
@@ -129,6 +164,8 @@ export async function createRoom(
   client.ws.close();
   const roomClient = await connectUrl(`ws://localhost:${port}/ws?room=${roomId}`);
   roomClient.name = name;
+  roomClient.roomId = roomId;
+  roomClient.password = password;
   roomClient.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
   const created = await roomClient.waitFor("room-created");
   return { client: roomClient, roomId: created.room };
@@ -142,6 +179,8 @@ export async function joinRoom(
 ): Promise<Client> {
   const client = await connectUrl(`ws://localhost:${port}/ws?room=${roomId}`);
   client.name = name;
+  client.roomId = roomId;
+  client.password = password;
   client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
   await client.waitFor("joined");
   return client;
@@ -166,6 +205,8 @@ export async function createRoomUrl(
   const roomId = generateRoomId();
   const client = await connectUrl(`${wsBase}?room=${roomId}`);
   client.name = name;
+  client.roomId = roomId;
+  client.password = password;
   client.send({ type: "set-up", name, auth: await roomAuth(roomId, password) });
   const created = await client.waitFor("room-created");
   return { client, roomId: created.room };
@@ -179,17 +220,25 @@ export async function joinRoomUrl(
 ): Promise<Client> {
   const client = await connectUrl(`${wsBase}?room=${roomId}`);
   client.name = name;
+  client.roomId = roomId;
+  client.password = password;
   client.send({ type: "join", name, auth: await roomAuth(roomId, password), room: roomId });
   await client.waitFor("joined");
   return client;
 }
 
-export function chat(client: Client, text: string, style?: { color?: string; bold?: boolean; italic?: boolean }) {
-  client.send({ type: "chat", text, ...(style ? { style } : {}) });
+export async function chat(client: Client, text: string, style?: { color?: string; bold?: boolean; italic?: boolean }) {
+  if (!client.roomId || !client.password) throw new Error("chat client is missing room credentials");
+  const enc = await encryptChatPayload(client.roomId, client.password, client.name, text, style);
+  if (!enc) throw new Error("chat encryption unavailable");
+  client.send({ type: "chat", enc });
 }
 
 export function draw(client: Client, color: string, pts: number[][]) {
-  client.send({ type: "draw", color, pts });
+  // Reel fixtures historically describe points in their 1920×1080 capture
+  // viewport; the wire protocol now uses canvas-independent normalized points.
+  const normalized = pts.map(([x, y]) => [x > 1 ? x / 1920 : x, y > 1 ? y / 1080 : y]);
+  client.send({ type: "draw", color, pts: normalized });
 }
 
 export function startVote(client: Client, target: string) {

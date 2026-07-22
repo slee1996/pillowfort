@@ -68,16 +68,19 @@ export function TttOverlay() {
           <div>{ttt.p1} (X) vs {ttt.p2} (O)</div>
           <div id="ttt-board" className="ttt-board">
             {ttt.board.map((cell, i) => (
-              <div
+              <button
+                type="button"
                 key={i}
                 className={`ttt-cell ${cell === "X" ? "x" : cell === "O" ? "o" : ""} ${winCells.includes(i) ? "win" : ""}`}
                 onClick={() => {
                   if (!cell && myTurn && !isResult) send("ttt-move", { cell: i });
                 }}
                 style={{ cursor: !cell && myTurn && !isResult ? "pointer" : "default" }}
+                disabled={!!cell || !myTurn || isResult}
+                aria-label={cell ? `Cell ${i + 1}: ${cell}` : `Cell ${i + 1}: empty`}
               >
                 {cell}
-              </div>
+              </button>
             ))}
           </div>
           <div id="ttt-status" className="ttt-status" style={{ color: statusColor }}>{statusText}</div>

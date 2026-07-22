@@ -301,6 +301,8 @@ describe("Intentional leave", () => {
     bob.send({ type: "leave" });
     const left = await host.waitFor("member-left");
     expect(left.name).toBe("bob");
+    for (let i = 0; i < 20 && bob.ws.readyState !== WebSocket.CLOSED; i++) await Bun.sleep(10);
+    expect(bob.ws.readyState).toBe(WebSocket.CLOSED);
   });
 
   it("send knock-down as host → knocked-down broadcast", async () => {

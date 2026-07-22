@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { FORT_PASS_EXTENDED_IDLE_MS, FORT_PASS_MAX_LIFETIME_MS, type FortPassEntitlement } from "../src/entitlements";
 import worker, { Room, type Env } from "../src/index";
-import { ROOM_FORT_PASS_FULFILL_PATH, ROOM_STATUS_PATH } from "../src/routes";
+import { ROOM_CREATE_LIMIT_PATH, ROOM_FORT_PASS_FULFILL_PATH, ROOM_FORT_PASS_RELEASE_PATH, ROOM_FORT_PASS_RESERVE_PATH, ROOM_STATUS_PATH } from "../src/routes";
 import { computeStripeWebhookSignature } from "../src/stripe";
 
 class FakeStorage {
@@ -89,6 +89,7 @@ function createWorkerEnv() {
   const assetRequests: Request[] = [];
   const roomStatus = new Map<string, boolean>();
   const fulfilledEntitlements = new Map<string, FortPassEntitlement>();
+  const reservations = new Set<string>();
   const env = {
     ROOM: {
       idFromName(name: string) {
@@ -106,6 +107,15 @@ function createWorkerEnv() {
               roomStatus.set(id.name, true);
               return Response.json({ ok: true });
             }
+            if (new URL(request.url).pathname === ROOM_FORT_PASS_RESERVE_PATH) {
+              if (roomStatus.get(id.name) || reservations.has(id.name)) return new Response("taken", { status: 409 });
+              reservations.add(id.name);
+              return new Response(null, { status: 204 });
+            }
+            if (new URL(request.url).pathname === ROOM_FORT_PASS_RELEASE_PATH) {
+              reservations.delete(id.name);
+              return new Response(null, { status: 204 });
+            }
             return new Response(`room:${id.name}`, { status: 209 });
           },
         };
@@ -121,7 +131,7 @@ function createWorkerEnv() {
     },
   } as unknown as Env;
 
-  return { env, routed, assetRequests, roomStatus, fulfilledEntitlements };
+  return { env, routed, assetRequests, roomStatus, fulfilledEntitlements, reservations };
 }
 
 describe("Worker production entrypoint", () => {
@@ -350,6 +360,23 @@ describe("Worker production entrypoint", () => {
     expect(stripeBody?.get("success_url")).toBe("https://pillow.test/?fort_pass=success&code=party-1&session_id={CHECKOUT_SESSION_ID}");
   });
 
+  it("atomically reserves a custom code while checkout is in progress", async () => {
+    const { env } = createWorkerEnv();
+    const configuredEnv = {
+      ...env,
+      STRIPE_SECRET_KEY: "sk_test_secret",
+      FORT_PASS_PRICE_ID: "price_test",
+      STRIPE_FETCHER: async () => Response.json({ id: "cs_test_123", url: "https://checkout.stripe.com/test" }),
+    } as Env;
+    const request = () => worker.fetch(new Request("https://pillow.test/api/fort-pass/checkout", {
+      method: "POST",
+      body: JSON.stringify({ customRoomCode: "party-1" }),
+    }), configuredEnv);
+
+    const [first, second] = await Promise.all([request(), request()]);
+    expect([first.status, second.status].sort()).toEqual([200, 409]);
+  });
+
   it("fulfills Fort Pass entitlements from signed Stripe webhooks", async () => {
     const { env, fulfilledEntitlements } = createWorkerEnv();
     const configuredEnv = {
@@ -442,6 +469,106 @@ describe("Room Durable Object alarms", () => {
     expect((state.storage.values.get("fortPassEntitlement") as FortPassEntitlement).providerRef).toBe("cs_test_123");
   });
 
+  it("treats repeated fulfillment for the same Stripe session as success", async () => {
+    const state = new FakeDurableObjectState();
+    const room = new Room(state as unknown as DurableObjectState, {} as Env);
+    await state.ready;
+    const request = () => room.fetch(new Request("https://pillow.test/__pillowfort/fort-pass/fulfill", {
+      method: "POST",
+      body: JSON.stringify(entitlement("party-1")),
+    }));
+
+    expect((await request()).status).toBe(200);
+    expect((await request()).status).toBe(200);
+  });
+
+  it("does not broadcast room events to unauthenticated sockets", async () => {
+    const state = new FakeDurableObjectState();
+    const host = new FakeSocket();
+    const observer = new FakeSocket();
+    host.attachment = { ...(host.attachment as object), name: "alice", isHost: true };
+    state.sockets.push(host, observer);
+    const room = new Room(state as unknown as DurableObjectState, {} as Env);
+    await state.ready;
+
+    await room.webSocketMessage(host as unknown as WebSocket, JSON.stringify({ type: "typing" }));
+    expect(observer.sent).toHaveLength(0);
+  });
+
+  it("bounds and rate limits production drawing events", async () => {
+    const state = new FakeDurableObjectState();
+    const sender = new FakeSocket();
+    const receiver = new FakeSocket();
+    sender.attachment = { ...(sender.attachment as object), name: "alice" };
+    receiver.attachment = { ...(receiver.attachment as object), name: "bob" };
+    state.sockets.push(sender, receiver);
+    const room = new Room(state as unknown as DurableObjectState, {} as Env);
+    await state.ready;
+
+    await room.webSocketMessage(sender as unknown as WebSocket, JSON.stringify({
+      type: "draw", color: "url(javascript:bad)", pts: [[0, 0]],
+    }));
+    for (let i = 0; i < 41; i++) {
+      await room.webSocketMessage(sender as unknown as WebSocket, JSON.stringify({
+        type: "draw", color: "hsl(10, 80%, 65%)", pts: [[0.5, 0.5]],
+      }));
+    }
+
+    expect(receiver.sent).toHaveLength(40);
+    expect(sender.sent.map(JSON.parse).at(-1)).toEqual({ type: "error", message: "slow down" });
+  });
+
+  it("handles an explicit leave only once when the close callback follows", async () => {
+    const state = new FakeDurableObjectState();
+    const host = new FakeSocket();
+    const guest = new FakeSocket();
+    host.attachment = { ...(host.attachment as object), name: "alice", isHost: true };
+    guest.attachment = { ...(guest.attachment as object), name: "bob" };
+    state.sockets.push(host, guest);
+    const room = new Room(state as unknown as DurableObjectState, {} as Env);
+    await state.ready;
+
+    await room.webSocketMessage(host as unknown as WebSocket, JSON.stringify({ type: "leave" }));
+    await room.webSocketClose(host as unknown as WebSocket);
+    const events = guest.sent.map(JSON.parse);
+    expect(events.filter(event => event.type === "member-left")).toHaveLength(1);
+    expect(events.some(event => event.type === "member-away")).toBe(false);
+  });
+
+  it("rate limits production room creation per source identity", async () => {
+    const state = new FakeDurableObjectState();
+    const room = new Room(state as unknown as DurableObjectState, {} as Env);
+    await state.ready;
+    const request = () => room.fetch(new Request(`https://pillow.test${ROOM_CREATE_LIMIT_PATH}`, { method: "POST" }));
+
+    for (let i = 0; i < 5; i++) expect((await request()).status).toBe(204);
+    expect((await request()).status).toBe(429);
+  });
+
+  it("checks the production creation limiter before setting up a room", async () => {
+    const state = new FakeDurableObjectState();
+    const socket = new FakeSocket();
+    socket.attachment = { ...(socket.attachment as object), ip: "203.0.113.7" };
+    state.sockets.push(socket);
+    const env = {
+      ROOM: {
+        idFromName: (name: string) => ({ name }),
+        get: () => ({ fetch: async () => new Response("rate limited", { status: 429 }) }),
+      },
+    } as unknown as Env;
+    const room = new Room(state as unknown as DurableObjectState, env);
+    await state.ready;
+
+    await room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify({
+      type: "set-up",
+      name: "alice",
+      auth: { v: 1, kdf: "pbkdf2-sha256-600k-v1", verifier: "a".repeat(32) },
+    }));
+
+    expect(JSON.parse(socket.sent[0])).toEqual({ type: "error", message: "slow down — too many forts" });
+    expect(state.storage.values.get("authVerifier")).toBeUndefined();
+  });
+
   it("uses the Fort Pass idle timeout when a paid room is set up", async () => {
     const state = new FakeDurableObjectState();
     const socket = new FakeSocket();
@@ -480,14 +607,14 @@ describe("Room Durable Object alarms", () => {
     }));
     await room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify({
       type: "set-theme",
-      theme: "retro-green",
+      theme: "campus-blue",
     }));
 
     expect(JSON.parse(socket.sent[1])).toEqual({
       type: "room-theme",
-      theme: "retro-green",
+      theme: "campus-blue",
     });
-    expect(state.storage.values.get("roomTheme")).toBe("retro-green");
+    expect(state.storage.values.get("roomTheme")).toBe("campus-blue");
   });
 
   it("rejects premium room themes for free rooms", async () => {
@@ -505,7 +632,7 @@ describe("Room Durable Object alarms", () => {
     }));
     await room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify({
       type: "set-theme",
-      theme: "retro-green",
+      theme: "campus-blue",
     }));
 
     expect(JSON.parse(socket.sent[1])).toEqual({
@@ -574,6 +701,7 @@ describe("Room Durable Object alarms", () => {
   it("destroys the room when the idle alarm is due", async () => {
     const state = new FakeDurableObjectState();
     const socket = new FakeSocket();
+    socket.attachment = { ...(socket.attachment as object), name: "alice", isHost: true };
     state.sockets.push(socket);
     state.storage.values.set("roomId", "abc12345");
     state.storage.values.set("authVerifier", "verifier");
@@ -598,6 +726,7 @@ describe("Room Durable Object alarms", () => {
   it("prioritizes the saboteur bomb when multiple alarms are due", async () => {
     const state = new FakeDurableObjectState();
     const socket = new FakeSocket();
+    socket.attachment = { ...(socket.attachment as object), name: "alice", isHost: true };
     state.sockets.push(socket);
     state.storage.values.set("roomId", "abc12345");
     state.storage.values.set("alarmSchedule", {

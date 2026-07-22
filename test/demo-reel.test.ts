@@ -211,13 +211,13 @@ describe("Demo reel: Friends Join + Chat", () => {
     expect(msg.text).toBe("welcome to the sleepover 🌙");
 
     // WS chat appears in browser
-    chat(javi, "hey everyone!! 🏰");
+    await chat(javi, "hey everyone!! 🏰");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("hey everyone");
     });
 
-    chat(priya, "love the fort name!");
+    await chat(priya, "love the fort name!");
     await page.waitForFunction(() => {
       const msgs = document.getElementById("messages");
       return msgs && msgs.textContent && msgs.textContent.includes("love the fort");
@@ -285,7 +285,7 @@ describe("Demo reel: Tic-Tac-Toe", () => {
 
     await assertScreenshot(page, "06-ttt-board-empty");
 
-    // luna(4), javi(0), luna(2), javi(6), luna(5), javi(3), luna(8)
+    // luna(4), javi(0), luna(2), javi(1), luna(5), javi(6), luna(8)
     await cells.nth(4).click();
     await javi.waitFor("ttt-update");
     tttMove(javi, 0);
@@ -293,12 +293,12 @@ describe("Demo reel: Tic-Tac-Toe", () => {
 
     await cells.nth(2).click();
     await javi.waitFor("ttt-update");
-    tttMove(javi, 6);
+    tttMove(javi, 1);
     await page.waitForFunction(() => document.querySelectorAll(".ttt-cell.o").length === 2);
 
     await cells.nth(5).click();
     await javi.waitFor("ttt-update");
-    tttMove(javi, 3);
+    tttMove(javi, 6);
     await page.waitForFunction(() => document.querySelectorAll(".ttt-cell.o").length === 3);
 
     await cells.nth(8).click(); // luna wins!
