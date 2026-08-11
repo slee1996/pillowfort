@@ -147,6 +147,58 @@ async function pickMember(page: Page, name: string): Promise<void> {
 // --- tests ---
 
 describe("Mobile E2E", () => {
+  it("explains why a screen name is required before either route", async () => {
+    const page = await mobilePage();
+
+    await page.click("#btn-setup");
+
+    expect(await page.locator("#name-input").getAttribute("aria-invalid")).toBe("true");
+    expect(await page.getByRole("alert").innerText()).toBe("Choose a screen name before continuing.");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("name-input");
+    expect(await page.locator("#setup-password").count()).toBe(0);
+
+    await page.fill("#name-input", "luna");
+    expect(await page.getByRole("alert").count()).toBe(0);
+    await page.click("#btn-join");
+    await page.waitForSelector("#join-room");
+  });
+  it("keeps authentication and chat usable in phone landscape", async () => {
+    const page = await mobilePage();
+    await page.setViewportSize({ width: 812, height: 375 });
+
+    const fitsViewport = async (selector: string) => page.locator(selector).evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left >= 0
+        && rect.top >= 0
+        && rect.right <= window.innerWidth
+        && rect.bottom <= window.innerHeight
+        && document.documentElement.scrollWidth <= window.innerWidth;
+    });
+
+    expect(await fitsViewport(".home-window")).toBe(true);
+    expect(await page.locator("#name-input").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+
+    await page.fill("#name-input", "landscape-host");
+    await page.click("#btn-setup");
+    await page.waitForSelector("#setup-password");
+    expect(await fitsViewport(".auth-window")).toBe(true);
+    expect(await page.locator("#setup-password").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+
+    await page.check("#setup-secret-saved");
+    await page.click("#btn-create");
+    await page.waitForSelector("#room-code");
+    expect(await fitsViewport(".chat-window")).toBe(true);
+    expect(await page.locator(".chat-window").evaluate((windowElement) => ({
+      width: windowElement.getBoundingClientRect().width,
+      height: windowElement.getBoundingClientRect().height,
+    }))).toEqual({ width: 812, height: 375 });
+    expect(await page.locator(".member-panel").evaluate((panel) => getComputedStyle(panel).display)).toBe("none");
+    expect(await page.locator(".format-toolbar").evaluate((toolbar) => getComputedStyle(toolbar).display)).toBe("none");
+    expect(await page.locator("#messages").evaluate((messages) => messages.getBoundingClientRect().height)).toBeGreaterThanOrEqual(80);
+    expect(await page.locator("#msg-input").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+  });
+
+
   it("requires generated secrets to be saved and exposes the selected password mode", async () => {
     const page = await mobilePage();
     await page.fill("#name-input", "careful-host");

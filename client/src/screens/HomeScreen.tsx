@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
@@ -26,6 +26,7 @@ export function HomeScreen() {
   const setName = useGameStore((s) => s.setName);
   const setScreen = useGameStore((s) => s.setScreen);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [nameError, setNameError] = useState("");
 
   // Check for room link in URL on mount
   useEffect(() => {
@@ -167,26 +168,31 @@ export function HomeScreen() {
     return () => { cancelled = true; };
   }, []);
 
+  const readScreenName = () => {
+    const enteredName = inputRef.current?.value.trim();
+    if (!enteredName) {
+      setNameError("Choose a screen name before continuing.");
+      inputRef.current?.focus();
+      return null;
+    }
+    setNameError("");
+    return enteredName;
+  };
+
   const handleSetup = () => {
     ensureAudio();
-    const n = inputRef.current?.value.trim();
-    if (!n) {
-      inputRef.current?.focus();
-      return;
-    }
-    setName(n);
+    const enteredName = readScreenName();
+    if (!enteredName) return;
+    setName(enteredName);
     useGameStore.getState().setPendingRoom(null);
     setScreen("setup");
   };
 
   const handleJoin = () => {
     ensureAudio();
-    const n = inputRef.current?.value.trim();
-    if (!n) {
-      inputRef.current?.focus();
-      return;
-    }
-    setName(n);
+    const enteredName = readScreenName();
+    if (!enteredName) return;
+    setName(enteredName);
     setScreen("join");
   };
 
@@ -194,68 +200,94 @@ export function HomeScreen() {
     <div className="screen">
       <BackgroundCanvas />
       <Window
-        title="pillowfort Sign On"
+        title="Welcome to pillowfort"
         className="auth-window home-window"
-        buttons={[
-          { label: "─", onClick: () => {} },
-          { label: "✕", close: true, onClick: () => {} },
-        ]}
       >
         <div className="xp-window-body">
-          <div className="home-brand">
+          <header className="home-brand">
             <div className="home-logo-wrap">
-              <LogoIcon size={72} />
+              <LogoIcon size={68} />
             </div>
-            <div className="home-title">
-              pillowfort
+            <div className="home-brand-copy">
+              <div className="home-eyebrow">Private hangouts, no accounts</div>
+              <h1 className="home-title">pillowfort</h1>
+              <p className="home-tagline">set up &middot; hang out &middot; knock down</p>
             </div>
-            <div className="home-tagline">
-              set up &middot; hang out &middot; knock down
+          </header>
+
+          <div className="home-content">
+            {activitySource && (
+              <div className="home-activity-note" role="status">
+                Discord Activity preview — shared launch linking is not enabled yet.
+              </div>
+            )}
+
+            <section className="home-identity" aria-labelledby="home-identity-title">
+              <h2 id="home-identity-title">What should your friends call you?</h2>
+              <p>This name only follows you into the fort you enter.</p>
+              <Input
+                id="name-input"
+                label="Screen name"
+                placeholder="e.g. luna"
+                maxLength={24}
+                autoComplete="off"
+                autoCapitalize="off"
+                defaultValue={name}
+                ref={inputRef}
+                aria-invalid={!!nameError}
+                aria-describedby={nameError ? "name-input-help name-input-error" : "name-input-help"}
+                onChange={() => {
+                  if (nameError) setNameError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleSetup();
+                }}
+              />
+              <div id="name-input-help" className="home-name-help">
+                No profile, email, or password needed.
+              </div>
+              {nameError && (
+                <div id="name-input-error" className="home-name-error" role="alert">
+                  {nameError}
+                </div>
+              )}
+            </section>
+
+            <div className="home-actions" aria-label="Choose how to enter Pillowfort">
+              <Button id="btn-setup" primary className="home-action home-action-primary" onClick={handleSetup}>
+                <span className="home-action-copy">
+                  <span className="home-action-name">Start a new fort</span>
+                  <span className="home-action-description">Open a temporary room and invite your people.</span>
+                </span>
+                <span className="home-action-arrow" aria-hidden="true">→</span>
+              </Button>
+              <Button id="btn-join" className="home-action home-action-secondary" onClick={handleJoin}>
+                <span className="home-action-copy">
+                  <span className="home-action-name">Join a friend&apos;s fort</span>
+                  <span className="home-action-description">Use the fort flag and secret they sent you.</span>
+                </span>
+                <span className="home-action-arrow" aria-hidden="true">→</span>
+              </Button>
             </div>
-          </div>
 
-          <div className="home-divider" />
+            <ul className="home-trust-strip" aria-label="Pillowfort room promises">
+              <li><strong>Invite-only</strong><small>The host approves each device</small></li>
+              <li><strong>Encrypted</strong><small>Chat and games stay private</small></li>
+              <li><strong>Temporary</strong><small>End the room when you&apos;re done</small></li>
+            </ul>
 
-          <div className="home-trust-strip" aria-label="Beta trust notes">
-            <span>invite-only</span>
-            <span>no accounts</span>
-            <span>temporary rooms</span>
-          </div>
+            <details className="home-privacy-note">
+              <summary>Privacy at a glance</summary>
+              <p>
+                Messages and game state are end-to-end encrypted. The relay can still see the room ID,
+                connection timing, size buckets, and connected-device count. As with any web app, the code
+                served to your browser must be trusted.
+              </p>
+            </details>
 
-          {activitySource && (
-            <div className="home-activity-note" role="status">
-              Discord Activity preview — shared launch linking is not enabled yet.
+            <div className="home-version">
+              Public beta &middot; 2026
             </div>
-          )}
-
-          <Input
-            id="name-input"
-            label="Screen Name"
-            placeholder="Enter a screen name"
-            maxLength={24}
-            autoComplete="off"
-            autoCapitalize="off"
-            defaultValue={name}
-            ref={inputRef}
-            onKeyDown={(e) => e.key === "Enter" && handleSetup()}
-          />
-
-          <div className="auth-actions">
-            <Button id="btn-setup" primary onClick={handleSetup}>
-              Start Hangout
-            </Button>
-            <Button id="btn-join" onClick={handleJoin}>
-              Join Fort
-            </Button>
-          </div>
-
-          <div className="home-privacy-note">
-            Messages and game state are end-to-end encrypted. The relay can still see the room ID, connection timing,
-            size buckets, and connected-device count. As with any web app, the code served to your browser must be trusted.
-          </div>
-
-          <div className="home-version">
-            Public beta &middot; 2026
           </div>
         </div>
       </Window>
