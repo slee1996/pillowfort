@@ -82,6 +82,7 @@ test("forged Sites identity cannot open the editor desk, read drafts, or mutate 
   assert.equal(desk.headers.get("x-frame-options"), "DENY");
   assert.match(desk.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
   assert.equal(desk.headers.get("cache-control"), "no-store");
+  assert.equal(desk.headers.get("referrer-policy"), "same-origin");
   const html = await desk.text();
   assert.doesNotMatch(html, /action="\/api\/cms"|name="bodyHtml"|name="frontpageMarkup"/);
 

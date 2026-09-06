@@ -52,7 +52,8 @@ const worker = {
     headers.set("x-content-type-options", "nosniff");
     headers.set("x-frame-options", "DENY");
     headers.set("content-security-policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
-    headers.set("referrer-policy", "no-referrer");
+    // Preserve same-origin form Origin headers while withholding cross-origin referrers.
+    headers.set("referrer-policy", "same-origin");
     if (url.protocol === "https:") headers.set("strict-transport-security", "max-age=31536000");
     if (url.pathname === "/admin" || url.pathname.startsWith("/api/")) headers.set("cache-control", "no-store");
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
