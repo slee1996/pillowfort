@@ -20,12 +20,16 @@ Set up a fort, share one private invitation link, hang out in real time, then kn
 The core product idea is simple:
 
 1. Pick a screen name and save the generated room password.
-2. Create a fort and copy its invitation link.
+2. Create a fort, open **Invite**, and choose **Copy invite link**.
 3. Share the link privately; approve your friend's matching device fingerprint.
 4. Chat, doodle, and play small games together.
 5. Knock the fort down, or let it expire.
 
 When the fort is gone, the room is gone.
+
+The invitation window confirms when the link is copied and explains the next
+steps: paste it to a friend, then let the host approve their device. Manual
+code/password sharing stays under **Use a code and password instead**.
 
 ## Current Feature Set
 

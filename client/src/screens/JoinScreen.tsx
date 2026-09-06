@@ -3,6 +3,7 @@ import { useGameStore } from "../stores/gameStore";
 import { LogoIcon } from "../components/xp/Logo";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
+import { PeriodIcon } from "../components/xp/PeriodIcon";
 import { cancelSecureRoomConnection, getSecureRoomRecovery, joinSecureRoom } from "../services/ws";
 import { validateRoomSecret } from "../services/roomSecret";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
@@ -227,17 +228,18 @@ export function JoinScreen() {
     <main className="screen entry-screen">
       <section className="entry-card entry-card-join" aria-labelledby="join-title">
         <header className="entry-brand"><LogoIcon size={40} /><span>pillowfort</span></header>
-        <h1 id="join-title" className="entry-title">{recoveryRequired ? "Return to your fort" : "Join your friends"}</h1>
+        <h1 id="join-title" className="entry-title">{recoveryRequired ? "Return to your fort" : linkMode ? "You’re invited." : "Join your friends"}</h1>
         <p className="entry-description">
           {linkMode
-            ? "Your invite includes the fort code and password. Choose your screen name, then request admission. The host still approves you."
+            ? "Your link has everything you need. Choose a name, then join—no password to type."
             : "Use the fort code and password they sent you. The host approves you before you enter."}
         </p>
+        {linkMode && !pendingJoinFingerprint && <p className="join-link-ready"><PeriodIcon kind="check" size={18} /> Password included. Host approval comes next.</p>}
         <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void handleJoin(); }}>
           {pendingJoinFingerprint && (
             <div className="auth-note" role="status" aria-live="polite">
               <strong>Waiting for the host to approve this device.</strong>
-              <br />Confirm this fingerprint with them outside Pillowfort: <code>{pendingJoinFingerprint}</code>
+              <br />Compare this device fingerprint with your host in your other chat or over a call: <code>{pendingJoinFingerprint}</code>
             </div>
           )}
           <Input
@@ -262,7 +264,7 @@ export function JoinScreen() {
               if (linkMode) setDetailsOpen(event.currentTarget.open);
             }}
           >
-            <summary hidden={!linkMode}>Edit fort code or password</summary>
+            <summary hidden={!linkMode}>Use a different code or password</summary>
           <Input
             id="join-room"
             label="Fort code"

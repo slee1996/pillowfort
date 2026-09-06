@@ -1,6 +1,9 @@
 /** Call only from an explicit copy action: the fallback reveals the requested text. */
 export async function copyTextWithFallback(text: string, signal?: AbortSignal): Promise<boolean> {
   if (signal?.aborted) return false;
+  // Capture the triggering control before an asynchronous clipboard request
+  // lets the caller disable it and move focus to the document body.
+  const previousFocus = typeof document === "undefined" ? null : document.activeElement;
   try {
     if (typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function") {
       await navigator.clipboard.writeText(text);
@@ -11,7 +14,6 @@ export async function copyTextWithFallback(text: string, signal?: AbortSignal): 
   }
   if (signal?.aborted) return false;
 
-  const previousFocus = document.activeElement;
   const dialog = document.createElement("dialog");
   dialog.className = "xp-window dialog-window";
   dialog.setAttribute("aria-label", "Copy manually");

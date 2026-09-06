@@ -692,6 +692,31 @@ describe("Mobile E2E", () => {
     );
   });
 
+  it("restores the invite action after a denied clipboard without losing the complete link", async () => {
+    const host = await mobilePage();
+    const code = await createFort(host, "copy-host");
+    await host.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async () => { throw new DOMException("Clipboard denied", "NotAllowedError"); },
+      });
+    });
+    await host.click("#btn-invite");
+    expect(await host.locator("#invite-link").isVisible()).toBe(false);
+    await host.click("#btn-copy-invite");
+    const fallback = host.getByRole("dialog", { name: "Copy manually", exact: true });
+    await fallback.waitFor();
+    const link = new URL(await fallback.getByRole("textbox").inputValue());
+    expect(link.pathname).toBe(`/${code}`);
+    expect(new URLSearchParams(link.hash.slice(1)).get("invite")).toBe(roomPasswords.get(code));
+    await fallback.getByRole("button", { name: "Close", exact: true }).click();
+    await fallback.waitFor({ state: "detached" });
+    expect(await host.locator("#btn-copy-invite").evaluate((element) => document.activeElement === element)).toBe(true);
+    await host.press("#btn-copy-invite", "Enter");
+    await fallback.waitFor();
+    expect(new URL(await fallback.getByRole("textbox").inputValue()).href).toBe(link.href);
+  });
+
   it("scrubs a one-link invitation and waits for explicit join and matching host approval", async () => {
     const host = await mobilePage();
     const code = await createFort(host, "link-host");
