@@ -2079,6 +2079,14 @@ export class Room implements DurableObject {
       const attachment = this.att(socket);
       if (!attachment.secureAuthenticated || attachment.protocol !== "v4"
         || attachment.secureDeviceId !== deviceId) continue;
+      // Retirement has already cleared the persisted connection id, so the
+      // normal broadcast cannot reach this device's authenticated socket.
+      if (this.secureRelayState?.members.some((member) => member.deviceId === deviceId && member.status === "retired")) {
+        this.sendSecure(socket, {
+          kind: "secure-server", v: 4, suite: 1, type: "member-lifecycle",
+          deviceId, status: "retired",
+        });
+      }
       // Prevent the close callback from attempting a second relay transition
       // for an identity that the committed state has already retired.
       attachment.secureAuthenticated = false;

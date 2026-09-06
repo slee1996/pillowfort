@@ -5,8 +5,7 @@ export function ChatMessage({ msg }: { msg: ChatMsg }) {
   if (msg.kind === "system") {
     return (
       <div className="chat-message chat-message-system">
-        <span className="chat-system-label">pillowtalk</span>
-        <span className="chat-system-text">: {msg.text}</span>
+        <span className="chat-system-text">{msg.text}</span>
       </div>
     );
   }
@@ -25,10 +24,12 @@ export function ChatMessage({ msg }: { msg: ChatMsg }) {
 
   return (
     <div className="chat-message">
-      <span className="chat-sender" style={{ color: nameColor(msg.from!) }}>
-        {msg.from}
+      <span className="chat-message-meta">
+        <span className="chat-sender" style={{ color: nameColor(msg.from!) }}>
+          {msg.from}
+        </span>
+        <time className="chat-timestamp"> ({msg.timestamp})</time>
       </span>
-      <span className="chat-timestamp"> ({msg.timestamp})</span>
       {": "}
       <span className="chat-content">{textContent}</span>
     </div>

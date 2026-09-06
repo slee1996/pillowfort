@@ -1,11 +1,12 @@
 import { useRef, useEffect, useState } from "react";
 import { useGameStore } from "../stores/gameStore";
-import { Window } from "../components/xp/Window";
+import { LogoIcon } from "../components/xp/Logo";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { cancelSecureRoomConnection, getSecureRoomRecovery, joinSecureRoom } from "../services/ws";
-import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 import { validateRoomSecret } from "../services/roomSecret";
+import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
+import { normalizeRoomId } from "../../../src/entitlements";
 
 export function JoinScreen() {
   const name = useGameStore((s) => s.name);
@@ -21,6 +22,9 @@ export function JoinScreen() {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [secretError, setSecretError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [roomError, setRoomError] = useState("");
+  const [connectionError, setConnectionError] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [recoveryRequired, setRecoveryRequired] = useState(!!joinRecovery);
   const [recoveryCredentialLocked, setRecoveryCredentialLocked] = useState(false);
@@ -46,15 +50,20 @@ export function JoinScreen() {
 
   const handleJoin = async () => {
     if (connecting) return;
-    const enteredName = nameRef.current?.value.trim() || name.trim();
-    const room = roomRef.current?.value.trim().toLowerCase();
+    const enteredName = (nameRef.current?.value ?? name).normalize("NFC").trim();
+    const room = normalizeRoomId(roomRef.current?.value);
     const enteredSecret = passwordRef.current?.value || "";
-    if (!enteredName) {
-      nameRef.current?.focus();
-      return;
-    }
-    if (!room) {
-      roomRef.current?.focus();
+    const invalidName = !isSecureDisplayNameV4(enteredName);
+    setNameError(invalidName
+      ? "Use 1–24 visible characters. Remove hidden/control characters and choose a non-reserved name (not constructor, prototype, or __proto__)."
+      : "");
+    setRoomError(!room
+      ? "Copy the complete fort flag from your invite: f- followed by 10 letters (a–z) or digits (2–7), or a custom flag of 4–10 letters, digits, and single inner hyphens."
+      : "");
+    setConnectionError("");
+    if (invalidName || !room) {
+      if (invalidName) nameRef.current?.focus();
+      else roomRef.current?.focus();
       return;
     }
     const validation = validateRoomSecret(enteredSecret);
@@ -85,7 +94,11 @@ export function JoinScreen() {
         setRecoveryRequired(mustRecover);
         if (credentialMismatch) setRecoveryCredentialLocked(false);
         else if (mustRecover) setRecoveryCredentialLocked(true);
-        setSecretError(credentialMismatch
+        const reportError = credentialMismatch ||
+          (!mustRecover && result.status === "failed" && result.reason === "authentication-failed")
+          ? setSecretError
+          : setConnectionError;
+        reportError(credentialMismatch
           ? "No saved join matched that password. Re-enter the exact password you copied."
           : mustRecover
           ? "This join may already be pending. Retry with these exact details to resolve it."
@@ -95,11 +108,33 @@ export function JoinScreen() {
             ? "Could not join. Check the fort flag and password."
             : result.status === "failed" && result.reason === "rate-limited"
               ? "Too many attempts. Wait a minute, then try again."
-              : "Secure browser cryptography, storage, and tab locking are required to join.");
+              : result.status === "unsupported"
+                ? result.reason === "takeover-channel-unavailable"
+                  ? "This browser cannot move a fort between tabs. Return to the original tab."
+                  : "This browser does not support the secure tab locking required to join. Use a supported browser."
+                : result.status === "failed" && result.reason === "invalid-input"
+                  ? "Check your screen name, fort flag, and password before trying again."
+                  : result.status === "failed" && result.reason === "socket-failed"
+                    ? "Could not connect to the fort. Check your internet connection and try again."
+                    : result.status === "failed" && result.reason === "unavailable"
+                      ? "The fort service is unavailable. Wait a moment and try again."
+                      : result.status === "failed" && result.reason === "takeover-timeout"
+                        ? "The other tab did not release this fort in time. Return to it or close it, then retry."
+                        : result.status === "failed" && result.reason === "request-failed"
+                          ? "Could not lock this fort to your tab. Close other fort tabs and try again."
+                          : "The join attempt was interrupted. Try again.");
       } else {
         setRecoveryRequired(false);
         setPassword(pw);
       }
+    } catch {
+      setPassword(null);
+      const mustRecover = recoveryRequired || getSecureRoomRecovery()?.mode === "join";
+      setRecoveryRequired(mustRecover);
+      if (mustRecover) setRecoveryCredentialLocked(true);
+      setConnectionError(mustRecover
+        ? "This join may already be pending. Retry with these exact details to resolve it."
+        : "Could not complete the join. Check your connection and try again.");
     } finally {
       setConnecting(false);
     }
@@ -111,24 +146,21 @@ export function JoinScreen() {
     setConnecting(false);
     if (!canLeave) {
       setRecoveryRequired(true);
-      setSecretError("This join may already be pending. Retry with the same password to resolve it before leaving.");
+      setConnectionError("This join may already be pending. Retry with the same password to resolve it before leaving.");
       return;
     }
     setScreen("home");
   };
 
   return (
-    <div className="screen">
-      <BackgroundCanvas />
-      <Window
-        title="Join a Fort"
-        className="auth-window"
-        buttons={[{ label: "✕", close: true, onClick: () => void handleCancel() }]}
-      >
-        <div className="xp-window-body">
-          <p className="auth-note">
-            Enter the fort flag and exact generated secret or custom password from your invite.
-          </p>
+    <main className="screen entry-screen">
+      <section className="entry-card entry-card-join" aria-labelledby="join-title">
+        <header className="entry-brand"><LogoIcon size={40} /><span>pillowfort</span></header>
+        <h1 id="join-title" className="entry-title">{recoveryRequired ? "Return to your fort" : "Join your friends"}</h1>
+        <p className="entry-description">
+          Use the fort code and password they sent you. The host approves you before you enter.
+        </p>
+        <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void handleJoin(); }}>
           {pendingJoinFingerprint && (
             <div className="auth-note" role="status" aria-live="polite">
               <strong>Waiting for the host to approve this device.</strong>
@@ -137,7 +169,7 @@ export function JoinScreen() {
           )}
           <Input
             id="join-name"
-            label="Screen Name"
+            label="Your screen name"
             placeholder="Enter a screen name"
             maxLength={24}
             autoComplete="off"
@@ -145,10 +177,14 @@ export function JoinScreen() {
             defaultValue={name}
             disabled={!!pendingJoinFingerprint || connecting || recoveryRequired}
             ref={nameRef}
+            aria-invalid={!!nameError}
+            aria-describedby={nameError ? "join-name-error" : undefined}
+            onChange={() => setNameError("")}
           />
+          {nameError && <div id="join-name-error" className="secret-error" role="alert">{nameError}</div>}
           <Input
             id="join-room"
-            label="Fort Flag"
+            label="Fort code"
             placeholder="f-… or custom flag"
             maxLength={12}
             autoComplete="off"
@@ -156,12 +192,16 @@ export function JoinScreen() {
             autoCorrect="off"
             ref={roomRef}
             disabled={!!pendingJoinFingerprint || connecting || recoveryRequired}
+            aria-invalid={!!roomError}
+            aria-describedby={roomError ? "join-room-error" : undefined}
+            onChange={() => setRoomError("")}
           />
+          {roomError && <div id="join-room-error" className="secret-error" role="alert">{roomError}</div>}
           <Input
             id="join-password"
-            label="Secret Password"
+            label="Password"
             type={showSecret ? "text" : "password"}
-            placeholder="The secret password"
+            placeholder="The password your friend sent"
             maxLength={128}
             autoComplete="off"
             autoCapitalize="none"
@@ -172,13 +212,12 @@ export function JoinScreen() {
               if (secretError) setSecretError("");
             }}
             aria-describedby="join-secret-help join-secret-error"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleJoin();
-            }}
+            aria-invalid={!!secretError}
           />
           <div className="secret-controls">
             <Button
               id="btn-toggle-join-secret"
+              type="button"
               onClick={() => setShowSecret((shown) => !shown)}
               aria-controls="join-password"
               aria-pressed={showSecret}
@@ -190,17 +229,18 @@ export function JoinScreen() {
           <div id="join-secret-help" className="secret-help">
             {recoveryRequired
               ? "Recovery mode: re-enter the exact copied password; the fort flag and name stay locked."
-              : "Custom room passwords are 6–64 characters and are case-sensitive."}
+              : "Passwords are case-sensitive. Enter yours exactly as shared."}
           </div>
           {secretError && <div id="join-secret-error" className="secret-error" role="alert">{secretError}</div>}
-          <div className="auth-actions">
-            <Button id="btn-enter" primary disabled={!!pendingJoinFingerprint || connecting} onClick={() => void handleJoin()}>
-              {pendingJoinFingerprint ? "Waiting for Host..." : connecting ? "Checking..." : "Join Fort"}
+          {connectionError && <div className="secret-error" role="alert">{connectionError}</div>}
+          <div className="entry-actions">
+            <Button id="btn-enter" type="submit" primary disabled={!!pendingJoinFingerprint || connecting}>
+              {pendingJoinFingerprint ? "Waiting for host…" : connecting ? "Joining…" : recoveryRequired ? "Retry join" : "Join fort"}
             </Button>
-            <Button onClick={() => void handleCancel()}>Cancel</Button>
+            <Button type="button" onClick={() => void handleCancel()}>Back</Button>
           </div>
-        </div>
-      </Window>
-    </div>
+        </form>
+      </section>
+    </main>
   );
 }

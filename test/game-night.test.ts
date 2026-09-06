@@ -44,7 +44,10 @@ afterAll(async () => {
 });
 
 async function newPage(): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   contexts.push(ctx);
   const page = await ctx.newPage();
   const diagnostics: string[] = [];
@@ -129,24 +132,18 @@ async function waitForMessage(page: Page, text: string): Promise<void> {
 }
 
 async function drawStroke(page: Page, points: [number, number][]): Promise<void> {
-  await page.locator("#game-canvas").evaluate((canvas, normalizedPoints) => {
-    const element = canvas as HTMLCanvasElement;
-    const rect = element.getBoundingClientRect();
-    const dispatch = (type: string, point: [number, number], buttons: number) => {
-      element.dispatchEvent(new PointerEvent(type, {
-        bubbles: true,
-        pointerId: 1,
-        pointerType: "mouse",
-        isPrimary: true,
-        buttons,
-        clientX: rect.left + point[0] * rect.width,
-        clientY: rect.top + point[1] * rect.height,
-      }));
-    };
-    dispatch("pointerdown", normalizedPoints[0], 1);
-    for (const point of normalizedPoints.slice(1)) dispatch("pointermove", point, 1);
-    dispatch("pointerup", normalizedPoints[normalizedPoints.length - 1], 0);
-  }, points);
+  await page.click("#btn-open-games");
+  await page.click("#btn-start-drawing");
+  const canvas = await page.locator("#game-canvas").boundingBox();
+  if (!canvas) throw new Error("Drawing canvas is not visible");
+  await page.mouse.move(canvas.x + points[0][0] * canvas.width, canvas.y + points[0][1] * canvas.height);
+  await page.mouse.down();
+  for (const [x, y] of points.slice(1)) {
+    await page.mouse.move(canvas.x + x * canvas.width, canvas.y + y * canvas.height, { steps: 4 });
+  }
+  await page.mouse.up();
+  await page.click("#btn-return-room");
+  await page.waitForSelector(".room-shell", { state: "visible" });
 }
 
 async function observeRemoteDraws(page: Page): Promise<void> {
@@ -165,28 +162,14 @@ async function waitForRemoteDraw(page: Page, count: number): Promise<void> {
   count, { timeout: 15_000 });
 }
 
-async function maskDynamic(page: Page) {
-  await page.evaluate(() => {
-    const rc = document.getElementById("room-code");
-    if (rc) rc.textContent = "abc12345";
-    // The room flag is also rendered in system chat and the buddy panel.
-    // Normalize text nodes in place so their surrounding markup/styles remain intact.
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let textNode: Node | null;
-    while ((textNode = walker.nextNode())) {
-      textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
-    }
-    document.querySelectorAll(".msg-time").forEach((el) => {
-      (el as HTMLElement).textContent = "12:00";
-    });
-  });
-}
 
 async function assertScreenshot(page: Page, name: string) {
-  await maskDynamic(page);
   await sleep(100);
 
-  const screenshotBuf = await page.screenshot({ type: "png" });
+  const screenshotBuf = await page.screenshot({
+    type: "png",
+    mask: [page.locator("#room-code"), page.locator(".chat-timestamp")],
+  });
   const path = `${SNAPSHOT_DIR}/${name}.png`;
   const file = Bun.file(path);
 
@@ -235,7 +218,6 @@ async function setupRoom(page: Page): Promise<string> {
   await page.fill("#name-input", "luna");
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
-  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
@@ -288,7 +270,7 @@ describe("Game night: Arrival", () => {
     await waitForMessage(page, "first challenge: RPS");
     await waitForMessage(kai, "first challenge: RPS");
     expect(await kai.locator("#messages .chat-message", { hasText: "first challenge: RPS" }).locator("b").count()).toBe(1);
-    await page.locator("#fmt-bold").click({ force: true });
+    await page.locator("#fmt-bold").click();
 
     await assertScreenshot(page, "01-arrival-chat");
 
@@ -315,8 +297,9 @@ describe("Game night: RPS Duels", () => {
     await waitForMembers(page, 4);
 
     // Duel 1: luna challenges kai
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-rps");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "kai" }).click();
 
     await kai.waitForSelector("#rps-overlay.open");
@@ -345,8 +328,9 @@ describe("Game night: RPS Duels", () => {
     await sleep(300);
 
     // Duel 2: luna challenges priya
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-rps");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "priya" }).click();
 
     await priya.waitForSelector("#rps-overlay.open");
@@ -377,7 +361,7 @@ describe("Game night: RPS Duels", () => {
 // --- Phase 3: Canvas + Breakout ---
 
 describe("Game night: Canvas + Breakout", () => {
-  it("draw strokes appear, chat minimize/maximize works", async () => {
+  it("friends doodle together, play Breakout, and return to chat", async () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
@@ -406,23 +390,21 @@ describe("Game night: Canvas + Breakout", () => {
     ]);
     await waitForRemoteDraw(page, 3);
 
+    await page.click("#btn-open-games");
+    await page.click("#btn-start-drawing");
     await assertScreenshot(page, "04-canvas-drawing");
+    await page.click("#btn-return-room");
 
-    // Minimize chat → auto-starts breakout
+    await page.click("#btn-open-games");
     await page.click("#chat-btn-min");
     await sleep(500);
 
     await assertScreenshot(page, "05-breakout-started");
 
-    // Restore chat (click minimize again to toggle)
-    await page.click("#chat-btn-min");
-    await sleep(300);
-
-    // Verify chat window is no longer minimized
-    await page.waitForFunction(() => {
-      const win = document.querySelector('.chat-window');
-      return win && !win.classList.contains('minimized');
-    });
+    await page.click("#btn-return-room");
+    await page.waitForSelector(".room-shell", { state: "visible" });
+    await sendChat(page, "back from Breakout");
+    await waitForMessage(kai, "back from Breakout");
   });
 });
 
@@ -439,6 +421,7 @@ describe("Game night: King of the Hill", () => {
     await waitForMembers(page, 4);
 
     // kai sends KOTH challenge
+    await kai.click("#btn-open-games");
     await kai.click("#aim-btn-koth");
 
     // luna's browser shows RPS overlay for KOTH
@@ -466,8 +449,11 @@ describe("Game night: King of the Hill", () => {
     // separate result-dismiss action on this branch.
     await kai.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
     await kai.click("#btn-catch");
+    await kai.click("#btn-room-menu");
     await kai.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
+    await page.click("#btn-room-menu");
     await page.waitForSelector("#btn-leave-room", { state: "visible", timeout: 15_000 });
+    await javi.click("#btn-room-menu");
     expect(await javi.locator("#btn-leave-room").isVisible()).toBe(true);
   });
 });
@@ -485,6 +471,7 @@ describe("Game night: Knock Down", () => {
     await waitForMembers(page, 4);
 
     // kai challenges and wins KOTH to become host
+    await kai.click("#btn-open-games");
     await kai.click("#aim-btn-koth");
     await page.waitForSelector("#rps-overlay.open", { timeout: 5000 });
     await page.waitForSelector(".rps-pick");
@@ -498,7 +485,9 @@ describe("Game night: Knock Down", () => {
     // that overlay, so do not make the transfer depend on local animation timing.
     await kai.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
     await kai.click("#btn-catch");
+    await kai.click("#btn-room-menu");
     await kai.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
+    await kai.click("#btn-room-menu");
 
     // Farewell chat
     await sendChat(kai, "thanks everyone. this was perfect.");
@@ -513,7 +502,9 @@ describe("Game night: Knock Down", () => {
     await waitForMessage(page, "night night");
 
     // kai (new host) knocks down
+    await kai.click("#btn-room-menu");
     await kai.click("#btn-knock-down");
+    await kai.click("#btn-confirm-room-exit");
 
     try {
       await page.waitForSelector("#btn-home", { state: "visible", timeout: 15_000 });

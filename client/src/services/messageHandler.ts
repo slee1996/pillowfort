@@ -114,6 +114,7 @@ function startSabBombCountdown(seconds: number, durationMs?: number) {
         now.setScreen("knocked");
         playDoorClose();
         now.cleanup();
+        useGameStore.getState().setTerminalPresentation("room-destroyed");
         useGameStore.getState().addSystemMessage("the saboteur's bomb exploded!");
       }, SABOTEUR_EXPLOSION_MS + 220);
     }
@@ -366,6 +367,7 @@ export function handleMessage(msg: IncomingMessage) {
         state.setScreen("knocked");
         playDoorClose();
         state.cleanup();
+        useGameStore.getState().setTerminalPresentation("room-destroyed");
         // We need to set the reason after cleanup — store it on the knocked screen via a message
         useGameStore.getState().addSystemMessage(msg.reason);
       };
@@ -401,6 +403,7 @@ export function handleMessage(msg: IncomingMessage) {
       s.setScreen("knocked");
       playDoorClose();
       s.cleanup();
+      useGameStore.getState().setTerminalPresentation("connection-ended");
       useGameStore.getState().addSystemMessage(msg.reason || "You were voted out!");
       break;
     }

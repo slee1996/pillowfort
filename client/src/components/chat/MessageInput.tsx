@@ -1,76 +1,58 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { useFormatStore } from "../../stores/formatStore";
 import { send } from "../../services/ws";
-import { track, trackOnce } from "../../services/analytics";
+import { trackOnce } from "../../services/analytics";
 import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
+import { FormatToolbar } from "./FormatToolbar";
 
 let lastTypingSent = 0;
-const MOBILE_KEYBOARD_OPEN_PX = 120;
 
-export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) => void }) {
+export function MessageInput({
+  onPickerOpen,
+  onDraw,
+  onTakeBreak,
+}: {
+  onPickerOpen: (type: string) => void;
+  onDraw: () => void;
+  onTakeBreak: () => void;
+}) {
   const name = useGameStore((s) => s.name);
   const isHost = useGameStore((s) => s.isHost);
+  const roomId = useGameStore((s) => s.roomId);
   const members = useGameStore((s) => s.members);
   const sabRole = useGameStore((s) => s.sabRole);
   const sabCanStrike = useGameStore((s) => s.sabCanStrike);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
-  const mobileViewportBaseRef = useRef(0);
-  const disableRoomAction = mobileKeyboardOpen;
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const gameDialogRef = useRef<HTMLDialogElement>(null);
+  const gamesButtonRef = useRef<HTMLButtonElement>(null);
+  const [gamesOpen, setGamesOpen] = useState(false);
+  const hostAvailable = members.length >= 2 && !!members[0] && members[0] !== name;
+
+  useLayoutEffect(() => {
+    if (!gamesOpen) return;
+    const dialog = gameDialogRef.current!;
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>("#btn-close-games")!.focus();
+    return () => dialog.close();
+  }, [gamesOpen]);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 600px)");
-    const getVisibleViewport = () => {
-      const vv = window.visualViewport;
-      if (!vv) return window.innerHeight;
-      return vv.height + vv.offsetTop;
-    };
-    const detectKeyboard = () => {
-      if (!media.matches) {
-        setMobileKeyboardOpen(false);
-        mobileViewportBaseRef.current = getVisibleViewport();
-        return;
-      }
-      const visible = getVisibleViewport();
-      if (!mobileViewportBaseRef.current) mobileViewportBaseRef.current = visible;
-      if (visible > mobileViewportBaseRef.current) mobileViewportBaseRef.current = visible;
-      const delta = Math.max(0, mobileViewportBaseRef.current - visible);
-      setMobileKeyboardOpen(delta > MOBILE_KEYBOARD_OPEN_PX);
-      if (delta < 8) mobileViewportBaseRef.current = visible;
-    };
-    const onOrientation = () => {
-      mobileViewportBaseRef.current = 0;
-      detectKeyboard();
-    };
-    detectKeyboard();
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", detectKeyboard);
-    vv?.addEventListener("scroll", detectKeyboard);
-    window.addEventListener("resize", detectKeyboard);
-    window.addEventListener("orientationchange", onOrientation);
-    try {
-      media.addEventListener("change", detectKeyboard);
-      return () => {
-        media.removeEventListener("change", detectKeyboard);
-        vv?.removeEventListener("resize", detectKeyboard);
-        vv?.removeEventListener("scroll", detectKeyboard);
-        window.removeEventListener("resize", detectKeyboard);
-        window.removeEventListener("orientationchange", onOrientation);
-      };
-    } catch {
-      media.addListener(detectKeyboard);
-      return () => {
-        media.removeListener(detectKeyboard);
-        vv?.removeEventListener("resize", detectKeyboard);
-        vv?.removeEventListener("scroll", detectKeyboard);
-        window.removeEventListener("resize", detectKeyboard);
-        window.removeEventListener("orientationchange", onOrientation);
-      };
-    }
-  }, []);
+    setGamesOpen(false);
+  }, [roomId, isHost]);
+
+  const closeGames = () => {
+    gameDialogRef.current?.close();
+    gamesButtonRef.current?.focus();
+    setGamesOpen(false);
+  };
+
+  const pickGame = (type: string) => {
+    closeGames();
+    onPickerOpen(type);
+  };
 
   const handleSend = () => {
     const text = inputRef.current?.value.trim();
@@ -102,88 +84,198 @@ export function MessageInput({ onPickerOpen }: { onPickerOpen: (type: string) =>
     }
   };
 
-  const handleKnockDown = () => {
-    if (disableRoomAction) return;
-    useGameStore.getState().setIntentionalLeave(true);
-    send("knock-down");
+  const handleInsertEmoji = (emoji: string) => {
+    const input = inputRef.current;
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    if (input.value.length - (end - start) + emoji.length > input.maxLength) return;
+    input.setRangeText(emoji, start, end, "end");
+    input.focus();
+    handleInput();
   };
-
-  const handleLeave = () => {
-    if (disableRoomAction) return;
-    useGameStore.getState().setIntentionalLeave(true);
-    send("leave");
-  };
-
-  const handleSabStrike = () => {
-    send("sab-strike");
-  };
-
-  // Expose inputRef for emoji insert
-  (window as any).__pfMsgInput = inputRef;
 
   return (
     <div className="message-input-wrap">
-      <input
-        type="text"
-        id="msg-input"
-        ref={inputRef}
-        placeholder="Type a message..."
-        maxLength={2000}
-        autoComplete="off"
-        enterKeyHint="send"
-        className="xp-input message-input-field"
-        onKeyDown={(e) => e.key === "Enter" && handleSend()}
-        onInput={handleInput}
-      />
-      <div className="message-input-controls">
-        <Button id="btn-send" primary onClick={handleSend} className="message-btn message-btn-send">
-          Send
-        </Button>
-        <div className="message-game-controls">
-          <span className="message-game-label">Games</span>
-          <button id="aim-btn-vote" className="game-shortcut-btn" title="Pillow Fight" onClick={() => {
-            if (members.length < 3) return showToast("Need at least 3 people");
-            onPickerOpen("vote");
-          }}>⚔</button>
-          <button id="aim-btn-rps" className="game-shortcut-btn" title="Rock Paper Scissors" onClick={() => onPickerOpen("rps")}>✊</button>
-          <button id="aim-btn-ttt" className="game-shortcut-btn" title="Tic-Tac-Toe" onClick={() => onPickerOpen("ttt")}>⬜</button>
-          <button id="aim-btn-sab" className="game-shortcut-btn" title="Secret Saboteur" onClick={() => {
-            if (members.length < 4) return showToast("Need at least 4 people");
-            send("sab-start");
-          }}>🕵</button>
-          {sabRole === "defender" && (
-            <button className="game-shortcut-btn" title="Accuse Saboteur" onClick={() => onPickerOpen("sab-accuse")}>🗳</button>
-          )}
-          <button id="aim-btn-koth" className="game-shortcut-btn" title="Dethrone" onClick={() => {
-            if (isHost) return showToast("You're already the host!");
-            send("koth-challenge");
-            useGameStore.getState().addSystemMessage("👑 You challenged the host for the crown!");
-          }}>👑</button>
-          {sabRole === "saboteur" && sabCanStrike && (
-            <button className="sab-strike-btn" onClick={handleSabStrike}>💣 Strike!</button>
-          )}
+      <form
+        className="message-input-form"
+        aria-label="Send a message"
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSend();
+        }}
+      >
+        <div id="message-formatting">
+          <FormatToolbar onInsertEmoji={handleInsertEmoji} />
         </div>
-        <div className="message-controls-spacer" />
-        {isHost ? (
-          <Button
-            id="btn-knock-down"
-            onClick={handleKnockDown}
-            className="message-btn message-btn-leave"
-            disabled={disableRoomAction}
-          >
-            Knock Down
+        <textarea
+          id="msg-input"
+          ref={inputRef}
+          rows={3}
+          aria-label="Message"
+          aria-describedby="compose-keyboard-help"
+          placeholder="Say something…"
+          maxLength={2000}
+          autoComplete="off"
+          enterKeyHint="send"
+          className="xp-input message-input-field"
+          onKeyDown={(event) => {
+            if (
+              event.key !== "Enter" ||
+              event.shiftKey ||
+              event.nativeEvent.isComposing ||
+              event.nativeEvent.keyCode === 229
+            ) return;
+            event.preventDefault();
+            if (!event.repeat) handleSend();
+          }}
+          onInput={handleInput}
+        />
+        <div className="message-compose-actions">
+          <div className="message-input-controls">
+            <button
+              id="btn-open-games"
+              ref={gamesButtonRef}
+              type="button"
+              className="xp-btn message-btn message-btn-games"
+              aria-haspopup="dialog"
+              aria-expanded={gamesOpen}
+              aria-controls="game-picker-dialog"
+              onClick={() => setGamesOpen(true)}
+            >
+              Play
+            </button>
+            {sabRole === "defender" && (
+              <button type="button" className="xp-btn" title="Accuse Saboteur" onClick={() => onPickerOpen("sab-accuse")}>
+                Accuse Saboteur
+              </button>
+            )}
+            {sabRole === "saboteur" && sabCanStrike && (
+              <button type="button" className="sab-strike-btn" onClick={() => send("sab-strike")}>Strike!</button>
+            )}
+          </div>
+          <span id="compose-keyboard-help">Enter to send · Shift+Enter for a new line</span>
+          <Button id="btn-send" type="submit" className="message-btn message-btn-send">
+            Send
           </Button>
-        ) : (
-          <Button
-            id="btn-leave-room"
-            onClick={handleLeave}
-            className="message-btn message-btn-leave"
-            disabled={disableRoomAction}
-          >
-            Leave Fort
-          </Button>
-        )}
-      </div>
+        </div>
+      </form>
+      <dialog
+        id="game-picker-dialog"
+        ref={gameDialogRef}
+        className="product-dialog game-picker-dialog"
+        aria-labelledby="game-picker-title"
+        aria-describedby="game-picker-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          closeGames();
+        }}
+      >
+        <div className="product-dialog-header">
+          <h2 id="game-picker-title">Games</h2>
+        </div>
+        <div className="product-dialog-body">
+          <p id="game-picker-description">Pick something to do. {members.length} {members.length === 1 ? "person" : "people"} in this fort.</p>
+          <div className="message-game-controls game-choice-grid">
+            <button
+              type="button"
+              id="btn-start-drawing"
+              className="game-choice"
+              onClick={() => {
+                closeGames();
+                onDraw();
+              }}
+            >
+              <span className="game-choice-name">Doodle</span>
+              <span className="game-choice-hint">Draw on the fort’s shared canvas.</span>
+            </button>
+            <button
+              type="button"
+              id="aim-btn-rps"
+              title="Rock Paper Scissors"
+              className="game-choice"
+              disabled={members.length < 2}
+              onClick={() => pickGame("rps")}
+            >
+              <span className="game-choice-name">Rock Paper Scissors</span>
+              <span className="game-choice-hint">Challenge a buddy. Needs 2 people.</span>
+            </button>
+            <button
+              type="button"
+              id="aim-btn-ttt"
+              title="Tic-Tac-Toe"
+              className="game-choice"
+              disabled={members.length < 2}
+              onClick={() => pickGame("ttt")}
+            >
+              <span className="game-choice-name">Tic-Tac-Toe</span>
+              <span className="game-choice-hint">Get three in a row. Needs 2 people.</span>
+            </button>
+            <button
+              type="button"
+              id="aim-btn-vote"
+              title="Pillow Fight"
+              className="game-choice"
+              disabled={members.length < 3}
+              onClick={() => pickGame("vote")}
+            >
+              <span className="game-choice-name">Pillow Fight</span>
+              <span className="game-choice-hint">Vote a buddy out of the fort. Needs 3 people.</span>
+            </button>
+            <button
+              type="button"
+              id="aim-btn-sab"
+              title="Secret Saboteur"
+              className="game-choice"
+              disabled={members.length < 4}
+              onClick={() => {
+                closeGames();
+                send("sab-start");
+              }}
+            >
+              <span className="game-choice-name">Secret Saboteur</span>
+              <span className="game-choice-hint">Find the secret saboteur. Needs 4 people.</span>
+            </button>
+            <button
+              type="button"
+              id="aim-btn-koth"
+              title="Dethrone"
+              className="game-choice"
+              disabled={isHost || !hostAvailable}
+              onClick={() => {
+                closeGames();
+                send("koth-challenge");
+                useGameStore.getState().addSystemMessage("You challenged the host for the crown!");
+              }}
+            >
+              <span className="game-choice-name">Dethrone</span>
+              <span className="game-choice-hint">
+                {isHost
+                  ? "Guests challenge the host. You're already the host."
+                  : hostAvailable
+                    ? "Challenge the host for the crown. Guests only."
+                    : "Guests challenge the host. Needs a host in the fort."}
+              </span>
+            </button>
+            <button
+              type="button"
+              id="chat-btn-min"
+              title="Take a break"
+              className="game-choice"
+              onClick={() => {
+                closeGames();
+                onTakeBreak();
+              }}
+            >
+              <span className="game-choice-name">Breakout</span>
+              <span className="game-choice-hint">Play solo while you wait for friends. Your fort stays open.</span>
+            </button>
+          </div>
+        </div>
+        <div className="product-dialog-actions game-picker-actions">
+          <Button id="btn-close-games" type="button" onClick={closeGames}>Cancel</Button>
+        </div>
+      </dialog>
     </div>
   );
 }

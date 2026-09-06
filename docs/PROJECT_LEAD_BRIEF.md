@@ -4,6 +4,66 @@ Analysis date: 2026-05-02
 
 Security-state refresh: 2026-07-22
 
+## Current Launch Decision
+
+The release priority is the free, accountless game-night loop: create a fort,
+invite friends, approve their devices, play, and end the room. Preserve the
+retro identity; do not add accounts, more games, or Discord integration to
+compensate for entry and sharing failures.
+
+Consumer readiness requires actionable entry errors, keyboard-operable host
+approval and room controls, manual invitation copying when clipboard access
+fails, and accurate admission-versus-room-closure messages. Rejected guests
+must receive their authoritative retirement notice before their socket closes,
+so they can make a fresh admission rather than reconnect a retired identity.
+
+The interface is product-first, with the sourced AIM 4.7/4.8 comps as its
+structural baseline: gray utility chrome, white transcript and compose panes,
+restrained navy title caps, and colored screen names. Use readable modern
+sizes rather than copying nine-pixel text or proprietary AOL artwork.
+The room-scoped buddy roster shows actual Available/Away states on desktop
+and a bounded presence strip on phones; it is not a persistent account graph.
+Formatting sits between the transcript and multiline editor. Enter sends,
+Shift+Enter adds a line, and IME composition must never send prematurely.
+Keep drafts through failed sends and play-mode changes.
+On cramped phone keyboard viewports, prioritize the transcript and editor:
+temporarily collapse the brand/roster while keeping People, Invite, Room,
+formatting, and Send usable. Restore presence when space returns.
+Prioritize the copy-and-create action that saves the password and builds a
+free fort. Clipboard denial must not silently create a room: expose manual
+copying and require an explicit saved-password confirmation before continuing.
+Fort Pass remains an optional, initially collapsed disclosure after the primary
+action.
+
+The logo is an open cushion: a soft pillow silhouette, transparent doorway,
+and small pennant. It signals a welcoming temporary shelter, not a security
+shield or a generic chat bubble. The compact UI uses the mark with readable
+native labels; larger branding uses the original outlined lowercase wordmark.
+The vector family lives in `client/public/` and is mirrored byte-for-byte in
+`marketing/public/`: `logo-mark.svg`, `logo-mono.svg`, `logo-lockup.svg`,
+`icon.svg`, and `icon-maskable.svg`. Keep the dedicated maskable icon's safe
+area rather than reusing the tight favicon. See
+`docs/branding/logo-sheet.svg` for the approved sizes, colors, and variants.
+
+Use the canonical room surfaces Invite, People, Room, and Play rather than
+simulated desktop navigation. Invite owns sharing, People owns membership and
+host approval, Room owns room settings and exit, and Play owns the labeled
+game chooser with visible player requirements. Opponent selection works by
+keyboard, and every explicit room-exit control requires confirmation.
+Cancel is the safe default. Host confirmation ends the room for everyone;
+guest confirmation leaves everyone else's room running.
+
+Use `npm run check` as the required source release gate. The guarded deploy
+command and pull-request workflow consume that same gate. A green local gate
+and Wrangler dry-run are not evidence that the revision is deployed or that
+real mobile devices and production Durable Object behavior have been verified.
+
+Promote Fort Pass only after a monitored customer support destination and
+refund policy are published and a live same-tab purchase, redemption, and
+refund have been observed. `checkoutConfigured: true` is configuration
+presence, not commercial readiness. Keep privacy claims scoped to encrypted
+room content and live-state deletion; payment-integrity records are retained.
+
 This document is the product, technical, and business brief for taking over
 Pillowfort as project lead. It complements `ARCHITECTURE.md`, which covers the
 system design and WebSocket protocol in more detail.
@@ -11,9 +71,9 @@ system design and WebSocket protocol in more detail.
 ## Executive Summary
 
 Pillowfort is a small, private, disposable hangout room for friends. A host
-creates a fort, shares a generated `f-` room flag plus a 256-bit room
-secret, people join in real time, chat, doodle, play small games, and then knock
-the room down.
+creates a fort, shares a generated `f-` room flag plus a 26-character `pf3_`
+password with 128 bits of random entropy, people join in real time, chat,
+doodle, play small games, and then knock the room down.
 
 The product is not just "chat." Its strongest shape is:
 
@@ -59,15 +119,30 @@ Primary runtime pieces:
 Core user flow:
 
 1. User picks a screen name.
-2. The app generates and locks a `pf2_` 256-bit room secret by default; the
-   host can explicitly switch to a 6–64 character custom password with
-   creation-time strength checks and an offline-guessing warning.
+2. The app generates and locks a 26-character `pf3_` password by default
+   (16 CSPRNG bytes encoded as 22 canonical unpadded base64url characters
+   after the prefix, giving 128 bits of entropy); the host can explicitly switch
+   to a 6–64 character custom password with creation-time strength checks and
+   an offline-guessing warning.
 3. App generates `f-` plus ten lowercase base32 symbols (50 random bits) for a
    free-room flag; human 4–10 character flags are Fort Pass-only.
 4. Host shares the code/link and room secret out of band.
 5. Guests join with screen name, code, and room secret.
 6. Members chat, draw, and play games.
 7. Host knocks the fort down, or the room expires after idle time.
+
+New `pf3_` and custom passwords resolve to canonical 32-byte `pf2_` protocol
+secrets through the unchanged room-bound PBKDF2-HMAC-SHA-256 derivation
+(600,000 rounds, with the existing domain, KDF identifier, and salt construction).
+The 256-bit derived width does not turn 128 bits of random input into 256 bits
+of entropy. Old canonical `pf2_` invitations and recovery passwords retain their
+exact protocol secret and room identity; they still perform and wipe an
+equivalent derivation to preserve the credential-mode timing policy. Internal
+MLS/state key validation and custom-password outputs remain unchanged, and
+temporary byte arrays are wiped. Both generated namespaces are reserved:
+malformed `pf2_`/`pf3_` input fails closed, and neither namespace is available
+in custom-entry mode. Creation-only custom strength checks do not apply to
+existing-room joins or recovery.
 
 The product intentionally avoids durable social infrastructure:
 
@@ -97,19 +172,19 @@ Core room behavior:
 
 Chat and UX:
 
-- AIM / Windows XP inspired UI.
+- Retro AIM / Windows XP flavor in a product-first interface, not OS simulation.
 - Desktop and mobile layouts.
 - MLS-encrypted protocol-v4 application events for chat, formatting, drawing,
   presence, room controls, and games.
 - Message formatting.
 - Emoji insertion.
 - Save-chat export from the local UI.
-- Intentional invite-copy flow with room link and room secret.
+- Invite, People, Room, and Play surfaces with intentional invitation copying.
 
 Games and social mechanics:
 
 - Shared drawing canvas.
-- Breakout when the chat window is minimized.
+- Solo Breakout from Play, with an explicit return to the fort.
 - Pillow Fight vote-to-kick.
 - Rock Paper Scissors.
 - Tic-Tac-Toe.
@@ -133,7 +208,7 @@ The strongest attributes are:
 
 - Fast setup: room code plus generated room secret is enough.
 - Clear privacy posture: no public discovery and no durable chat history.
-- Differentiated identity: the XP/AIM interface is memorable.
+- Differentiated identity: retro AIM / Windows XP flavor without desktop friction.
 - Small-group play: games are part of the room, not bolted on as external links.
 - Social continuity: host handoff avoids killing a room just because the first
   host disconnects.

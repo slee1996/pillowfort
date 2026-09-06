@@ -32,6 +32,7 @@ import {
  */
 import type {
   PendingAdmission,
+  TerminalPresentation,
 } from "../stores/gameStore";
 import {
   parseSecureAuthChallengeFrameV4,
@@ -1263,7 +1264,9 @@ export class SecureRoomController {
         await this.handleRoomStateSnapshot(frame);
         return;
       case "fresh-admission-required":
-        if (frame.deviceId === this.requireEngine().deviceId) await this.finishTerminal("A fresh secure admission is required.");
+        if (frame.deviceId === this.requireEngine().deviceId) {
+          await this.finishTerminal("admission-required", "This admission ended. A fresh secure admission is required.");
+        }
         return;
       case "zombie-removal-required":
         this.handleZombieRemovalRequired(frame.deviceId, frame.admissionCommitMessageId);
@@ -1508,7 +1511,7 @@ export class SecureRoomController {
           const stillExact = this.pendingHostAdmissions.get(admissionId);
           if (stillExact !== exact || !stillExact.inFlight || stillExact.status !== "approving") {
             await engine.rejectOutbound(result.messageId);
-            await this.finishTerminal("Secure admission approval changed during commit. Recreate the fort.", false);
+            await this.finishTerminal("connection-ended", "Secure admission approval changed during commit. Recreate the fort.", false);
             return null;
           }
           this.removePendingHostAdmission(admissionId);
@@ -1666,7 +1669,7 @@ export class SecureRoomController {
         // member-leave event above. Receiving an MLS Remove for this device is
         // therefore an externally initiated retirement (vote, host cleanup,
         // or zombie removal) and must not masquerade as an intentional exit.
-        await this.finishTerminal("You were removed from the secure fort.", false);
+        await this.finishTerminal("connection-ended", "You were removed from the secure fort.", false);
         return;
       }
       this.ackDurableDelivery(envelope.messageId);
@@ -1821,7 +1824,7 @@ export class SecureRoomController {
       const outcome = await engine.rejectOutbound(messageId);
       this.releaseMessageIntent(messageId);
       if (outcome === "retired") {
-        await this.finishTerminal("Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
+        await this.finishTerminal("connection-ended", "Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
         return;
       }
       applySecureRoomUiV4(engine.state, [], engine.deviceId);
@@ -1863,6 +1866,7 @@ export class SecureRoomController {
       this.releaseMessageIntent(entry.messageId);
       if (outcome === "retired") {
         await this.finishTerminal(
+          "connection-ended",
           "Secure membership changed but the relay cancelled it. Rejoin with a fresh invitation.",
           false,
         );
@@ -1969,7 +1973,7 @@ export class SecureRoomController {
       this.releaseMessageIntent(result.messageId);
       if (content.type === "member-leave") {
         await engine.retire();
-        await this.finishTerminal("You left the secure fort.", false);
+        await this.finishTerminal("left", "You left the secure fort.", false);
         return;
       }
       await this.afterAppliedState(recoveredUi.state, recoveredUi.effects);
@@ -1998,7 +2002,7 @@ export class SecureRoomController {
     this.outboundUi.delete(messageId);
     this.releaseMessageIntent(messageId);
     if (outcome === "retired") {
-      await this.finishTerminal("Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
+      await this.finishTerminal("connection-ended", "Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
       return;
     }
     applySecureRoomUiV4(engine.state, [], engine.deviceId);
@@ -2047,7 +2051,7 @@ export class SecureRoomController {
     const ownRelayStatus = relayMembers.get(engine.deviceId);
     if (ownRelayStatus === undefined) {
       await engine.retire();
-      await this.finishTerminal("This secure device was retired. Rejoin with a fresh invitation.", false);
+      await this.finishTerminal("connection-ended", "This secure device was retired. Rejoin with a fresh invitation.", false);
       return;
     }
     if (ownRelayStatus !== "active") {
@@ -2371,8 +2375,13 @@ export class SecureRoomController {
   ): Promise<void> {
     const engine = this.requireEngine();
     if (status === "retired" && deviceId === engine.deviceId) {
-      await engine.retire();
-      await this.finishTerminal("This secure device was retired. Rejoin with a fresh invitation.", false);
+      const admissionPending = this.unresolvedAuthentication;
+      await this.finishTerminal(
+        admissionPending ? "admission-required" : "connection-ended",
+        admissionPending
+          ? "This admission ended. A fresh secure admission is required."
+          : "This secure device was retired. Rejoin with a fresh invitation.",
+      );
       return;
     }
     if (status === "active" &&
@@ -2429,7 +2438,7 @@ export class SecureRoomController {
     const close = engine.pendingRelayControls.some((control) => control.kind === "close-room");
     if (close) await engine.completeRelayControl({ kind: "room-retired" });
     else await engine.retire();
-    await this.finishTerminal("The secure fort was knocked down.", false);
+    await this.finishTerminal("room-destroyed", "The secure fort was knocked down.", false);
   }
 
   private enqueueGrantIntent(intent: GrantIntent, priority = false): void {
@@ -3575,7 +3584,7 @@ export class SecureRoomController {
     this.resetUiSession();
   }
 
-  private async finishTerminal(message: string, erase = true): Promise<void> {
+  private async finishTerminal(presentation: TerminalPresentation, message: string, erase = true): Promise<void> {
     const engine = this.engine;
     const config = this.config;
     const handshake = this.pendingHandshake;
@@ -3619,10 +3628,10 @@ export class SecureRoomController {
     if (this.engine === engine) this.engine = null;
     this.releaseLease();
     this.resetUiSession();
-    const left = message.startsWith("You left");
     const store = useGameStore.getState();
     store.cleanup();
-    useGameStore.getState().setScreen(left ? "home" : "knocked");
+    useGameStore.getState().setTerminalPresentation(presentation);
+    useGameStore.getState().setScreen(presentation === "left" ? "home" : "knocked");
     useGameStore.getState().addSystemMessage(message);
   }
 
@@ -3725,8 +3734,12 @@ export class SecureRoomController {
       useGameStore.getState().showError(failure.message);
       return;
     }
-    if (frame.code === "room-retired" || frame.code === "fresh-admission-required") {
-      await this.finishTerminal("This secure fort is no longer available.");
+    if (frame.code === "room-retired") {
+      await this.finishTerminal("room-destroyed", "This secure fort is no longer available.");
+      return;
+    }
+    if (frame.code === "fresh-admission-required") {
+      await this.finishTerminal("admission-required", "This admission ended. A fresh secure admission is required.");
       return;
     }
     if (frame.code === "delivery-pending" || frame.code === "removal-pending" ||

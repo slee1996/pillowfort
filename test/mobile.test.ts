@@ -105,10 +105,9 @@ async function createFort(page: Page, name: string, customPassword?: string): Pr
   await page.fill("#name-input", name);
   await page.click("#btn-setup");
   if (customPassword !== undefined) {
+    await page.click("#password-options > summary");
     await page.click("#btn-custom-secret");
     await page.fill("#setup-password", customPassword);
-  } else {
-    await page.check("#setup-secret-saved");
   }
   const password = await page.inputValue("#setup-password");
   await page.click("#btn-create");
@@ -153,7 +152,6 @@ describe("Mobile E2E", () => {
     await page.click("#btn-setup");
 
     expect(await page.locator("#name-input").getAttribute("aria-invalid")).toBe("true");
-    expect(await page.getByRole("alert").innerText()).toBe("Choose a screen name before continuing.");
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("name-input");
     expect(await page.locator("#setup-password").count()).toBe(0);
 
@@ -175,55 +173,326 @@ describe("Mobile E2E", () => {
         && document.documentElement.scrollWidth <= window.innerWidth;
     });
 
-    expect(await fitsViewport(".home-window")).toBe(true);
-    expect(await page.locator("#name-input").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+    expect(await fitsViewport(".entry-card")).toBe(true);
+    expect(await page.locator("#name-input").evaluate((input) => Number.parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16);
 
     await page.fill("#name-input", "landscape-host");
     await page.click("#btn-setup");
     await page.waitForSelector("#setup-password");
-    expect(await fitsViewport(".auth-window")).toBe(true);
-    expect(await page.locator("#setup-password").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+    expect(await fitsViewport(".entry-card")).toBe(true);
+    expect(await page.locator("#setup-password").evaluate((input) => Number.parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16);
 
-    await page.check("#setup-secret-saved");
     await page.click("#btn-create");
     await page.waitForSelector("#room-code");
-    expect(await fitsViewport(".chat-window")).toBe(true);
-    expect(await page.locator(".chat-window").evaluate((windowElement) => ({
-      width: windowElement.getBoundingClientRect().width,
-      height: windowElement.getBoundingClientRect().height,
-    }))).toEqual({ width: 812, height: 375 });
-    expect(await page.locator(".member-panel").evaluate((panel) => getComputedStyle(panel).display)).toBe("none");
-    expect(await page.locator(".format-toolbar").evaluate((toolbar) => getComputedStyle(toolbar).display)).toBe("none");
+    expect(await fitsViewport(".room-shell")).toBe(true);
+    expect(await page.locator("#btn-people").isVisible()).toBe(true);
+    expect(await page.locator(".format-toolbar").isVisible()).toBe(true);
+    expect(await fitsViewport(".format-toolbar")).toBe(true);
+    await page.click("#fmt-bold");
+    await page.fill("#msg-input", "landscape formatting works");
+    await page.press("#msg-input", "Enter");
+    await page.locator("#messages .chat-message", { hasText: "landscape formatting works" }).waitFor();
+    expect(await page.locator("#messages .chat-message", { hasText: "landscape formatting works" }).locator("b").textContent()).toBe("landscape formatting works");
     expect(await page.locator("#messages").evaluate((messages) => messages.getBoundingClientRect().height)).toBeGreaterThanOrEqual(80);
-    expect(await page.locator("#msg-input").evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+    expect(await page.locator("#msg-input").evaluate((input) => Number.parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16);
   });
 
-
-  it("requires generated secrets to be saved and exposes the selected password mode", async () => {
+  it("keeps the composer and People usable when the phone keyboard shrinks only the visual viewport", async () => {
     const page = await mobilePage();
-    await page.fill("#name-input", "careful-host");
-    await page.click("#btn-setup");
+    await createFort(page, "keyboard-host");
+    const draft = "keep the first line\nand the second line";
+    await page.fill("#msg-input", draft);
+    const roster = page.locator("#room-roster .roster-mobile");
+    expect(await roster.isVisible()).toBe(true);
+    const originalHeight = await page.evaluateHandle(() => {
+      if (!window.visualViewport) throw new Error("Visual viewport is unavailable");
+      return Object.getOwnPropertyDescriptor(window.visualViewport, "height");
+    });
 
-    const controls = page.getByRole("group", { name: "Room password controls" });
-    expect(await controls.count()).toBe(1);
-    expect(await page.locator("#btn-custom-secret").getAttribute("aria-pressed")).toBe("false");
-    expect(await page.locator("#btn-regenerate-secret").getAttribute("aria-pressed")).toBe("true");
-    expect(await page.locator("#btn-create").isDisabled()).toBe(true);
+    try {
+      // A software keyboard need not change the layout viewport or media
+      // queries. Override only the visual height and notify the real listener.
+      await page.evaluate(() => {
+        const viewport = window.visualViewport!;
+        Object.defineProperty(viewport, "height", { configurable: true, value: 320 });
+        viewport.dispatchEvent(new Event("resize"));
+      });
+      await page.waitForFunction(() => {
+        const messages = document.getElementById("messages")?.getBoundingClientRect();
+        const input = document.getElementById("msg-input")?.getBoundingClientRect();
+        const send = document.getElementById("btn-send")?.getBoundingClientRect();
+        return !!messages && !!input && !!send &&
+          messages.height >= 80 && input.bottom <= 320 && send.bottom <= 320;
+      });
+      expect(await page.locator("#messages").evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(80);
+      for (const selector of ["#msg-input", "#btn-send", ".format-toolbar", "#btn-people"]) {
+        const control = page.locator(selector);
+        expect(await control.isVisible()).toBe(true);
+        expect(await control.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= 320 &&
+            rect.left >= 0 && rect.right <= window.innerWidth;
+        })).toBe(true);
+      }
+      for (const selector of ["#fmt-bold", "#btn-send", "#btn-people"]) {
+        expect(await page.locator(selector).evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+      }
+      await page.click("#fmt-bold");
+      expect(await page.locator("#fmt-bold").getAttribute("aria-pressed")).toBe("true");
+      await page.click("#btn-people");
+      const people = page.locator(".people-dialog");
+      await people.waitFor({ state: "visible" });
+      expect(await people.getByRole("tabpanel", { name: "People", exact: true }).getByText("keyboard-host", { exact: true }).isVisible()).toBe(true);
+      await page.keyboard.press("Escape");
+      await people.waitFor({ state: "hidden" });
+      expect(await page.inputValue("#msg-input")).toBe(draft);
+    } finally {
+      await page.evaluate((descriptor) => {
+        const viewport = window.visualViewport!;
+        if (descriptor) Object.defineProperty(viewport, "height", descriptor);
+        else Reflect.deleteProperty(viewport, "height");
+        viewport.dispatchEvent(new Event("resize"));
+      }, originalHeight);
+      await originalHeight.dispose();
+    }
 
-    await page.click("#btn-copy-secret");
-    await page.waitForFunction(() =>
-      (document.getElementById("setup-secret-saved") as HTMLInputElement | null)?.checked === true,
+    await roster.waitFor({ state: "visible" });
+    expect(await page.inputValue("#msg-input")).toBe(draft);
+  });
+
+  it("keeps multiline and composing drafts local until Enter sends exactly once to another browser", async () => {
+    const sender = await mobilePage();
+    const code = await createFort(sender, "writer");
+    const recipient = await mobilePage();
+    await joinFort(sender, recipient, code, "reader");
+    const draft = sender.locator("#msg-input");
+    const sentMessages = sender.locator("#messages .chat-content");
+    const receivedMessages = recipient.locator("#messages .chat-content");
+
+    await draft.fill("first line");
+    await draft.press("Shift+Enter");
+    expect(await draft.inputValue()).toBe("first line\n");
+    expect(await sentMessages.count()).toBe(0);
+    expect(await receivedMessages.count()).toBe(0);
+
+    // Playwright cannot drive the OS IME, so deliver its browser composition
+    // events to the real composer without replacing the send/crypto path.
+    await draft.dispatchEvent("compositionstart", { data: "" });
+    await draft.fill("first line\nこんにちは");
+    await draft.dispatchEvent("compositionupdate", { data: "こんにちは" });
+    await draft.dispatchEvent("keydown", {
+      key: "Enter", code: "Enter", keyCode: 229, isComposing: true,
+    });
+    await draft.dispatchEvent("keyup", {
+      key: "Enter", code: "Enter", keyCode: 229, isComposing: true,
+    });
+    await draft.dispatchEvent("compositionend", { data: "こんにちは" });
+    const message = "first line\nこんにちは";
+    expect(await draft.inputValue()).toBe(message);
+    expect(await sentMessages.count()).toBe(0);
+    expect(await receivedMessages.count()).toBe(0);
+
+    await draft.press("Enter");
+    await recipient.waitForFunction((text) =>
+      Array.from(document.querySelectorAll("#messages .chat-content"))
+        .some((content) => content.textContent === text),
+      message,
     );
-    expect(await page.locator("#btn-create").isEnabled()).toBe(true);
+    await sender.waitForFunction(() =>
+      (document.getElementById("msg-input") as HTMLTextAreaElement | null)?.value === "",
+    );
+    expect(await draft.inputValue()).toBe("");
+    expect(await receivedMessages.allTextContents()).toEqual([message]);
+    expect(await receivedMessages.innerText()).toBe(message);
 
-    await page.click("#btn-regenerate-secret");
-    expect(await page.locator("#setup-secret-saved").isChecked()).toBe(false);
-    expect(await page.locator("#btn-create").isDisabled()).toBe(true);
+    // A reply traverses the real connection before checking both transcripts:
+    // neither Shift+Enter nor the IME commit may have leaked an extra message.
+    await recipient.fill("#msg-input", "both lines arrived");
+    await recipient.press("#msg-input", "Enter");
+    await sender.waitForFunction(() =>
+      Array.from(document.querySelectorAll("#messages .chat-content"))
+        .some((content) => content.textContent === "both lines arrived"),
+    );
+    expect(await sentMessages.allTextContents()).toEqual([message, "both lines arrived"]);
+    expect(await receivedMessages.allTextContents()).toEqual([message, "both lines arrived"]);
+  }, 60_000);
 
-    await page.click("#btn-custom-secret");
-    expect(await page.locator("#btn-custom-secret").getAttribute("aria-pressed")).toBe("true");
-    expect(await page.locator("#btn-regenerate-secret").getAttribute("aria-pressed")).toBe("false");
-    expect(await page.locator("#setup-secret-saved").count()).toBe(0);
+
+  it("does not create or authenticate when default password copying is denied until manual saving is confirmed", async () => {
+    const host = await mobilePage();
+    const connections: string[] = [];
+    host.on("websocket", (socket) => connections.push(socket.url()));
+    await host.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async () => { throw new DOMException("Clipboard denied", "NotAllowedError"); },
+      });
+    });
+    await host.fill("#name-input", "careful-host");
+    await host.click("#btn-setup");
+    const password = await host.inputValue("#setup-password");
+    await host.click("#btn-create");
+
+    const manualCopy = host.getByRole("dialog", { name: "Copy manually", exact: true });
+    await manualCopy.waitFor();
+    expect(await manualCopy.getByRole("textbox").inputValue()).toBe(password);
+    expect(connections).toEqual([]);
+    expect(await host.locator("#room-code").count()).toBe(0);
+    await manualCopy.getByRole("button", { name: "Close", exact: true }).click();
+    await manualCopy.waitFor({ state: "detached" });
+    expect(await host.locator("#btn-create").isDisabled()).toBe(true);
+    expect(await host.locator("#setup-secret-saved").isChecked()).toBe(false);
+    expect(connections).toEqual([]);
+
+    await host.check("#setup-secret-saved");
+    await host.click("#btn-create");
+    await host.waitForSelector("#room-code", { timeout: 30_000 });
+    const code = await host.locator("#room-code").innerText();
+    expect(connections).toHaveLength(1);
+    roomPasswords.set(code, password);
+    const guest = await mobilePage();
+    await joinFort(host, guest, code, "trusted-friend");
+    await guest.fill("#msg-input", "the manually saved password works");
+    await guest.click("#btn-send");
+    await host.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("the manually saved password works"),
+    );
+  }, 60_000);
+
+  it("serializes rapid create clicks and discards a password copy that finishes after cancellation", async () => {
+    const page = await mobilePage();
+    const connections: string[] = [];
+    page.on("websocket", (socket) => connections.push(socket.url()));
+    let copyAttempts = 0;
+    let releaseCopy!: () => void;
+    let markCopyStarted!: () => void;
+    const pendingCopy = new Promise<void>((resolve) => { releaseCopy = resolve; });
+    const copyStarted = new Promise<void>((resolve) => { markCopyStarted = resolve; });
+    await page.exposeFunction("__waitForPasswordCopy", async () => {
+      copyAttempts++;
+      markCopyStarted();
+      await pendingCopy;
+    });
+    await page.evaluate(() => {
+      const writeText = navigator.clipboard.writeText.bind(navigator.clipboard);
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async (text: string) => {
+          if (!("__waitForPasswordCopy" in window) || typeof window.__waitForPasswordCopy !== "function") {
+            throw new Error("Password copy timing hook is unavailable");
+          }
+          await window.__waitForPasswordCopy();
+          await writeText(text);
+        },
+      });
+    });
+    try {
+      await page.fill("#name-input", "cancelled-host");
+      await page.click("#btn-setup");
+      // Dispatch both activation events in one task, before a React render can
+      // disable the button. Only the platform clipboard timing is controlled.
+      await page.locator("#btn-create").evaluate((element) => {
+        (element as HTMLButtonElement).click();
+        (element as HTMLButtonElement).click();
+      });
+      await copyStarted;
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.waitForSelector("#name-input");
+      expect(copyAttempts).toBe(1);
+      expect(connections).toEqual([]);
+    } finally {
+      releaseCopy();
+    }
+
+    // A new setup may proceed while the cancelled clipboard task unwinds.
+    // The eventual room must use this setup's password, not the stale one.
+    const code = await createFort(page, "next-host");
+    expect(copyAttempts).toBe(2);
+    expect(connections).toHaveLength(1);
+    const guest = await mobilePage();
+    await joinFort(page, guest, code, "friend");
+    expect(await guest.locator("#room-code").innerText()).toBe(code);
+  }, 60_000);
+
+  it("preserves older-message reading position and follows new messages only at the bottom", async () => {
+    const reader = await mobilePage();
+    const code = await createFort(reader, "reader");
+    const friend = await mobilePage();
+    await joinFort(reader, friend, code, "storyteller");
+    for (let chapter = 1; chapter <= 4; chapter++) {
+      const text = `chapter ${chapter}: ${"lantern meadow ".repeat(90)}`.trim();
+      await friend.fill("#msg-input", text);
+      await friend.click("#btn-send");
+      await reader.waitForFunction(
+        (text) => document.getElementById("messages")?.textContent?.includes(text),
+        text,
+      );
+    }
+    const messages = reader.locator("#messages");
+    expect(await messages.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(200);
+    await messages.hover();
+    await reader.mouse.wheel(0, -10_000);
+    await reader.waitForFunction(() => document.getElementById("messages")?.scrollTop === 0);
+
+    await friend.fill("#msg-input", "a new ending arrived while you were reading");
+    await friend.click("#btn-send");
+    await reader.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("a new ending arrived while you were reading"),
+    );
+    await reader.evaluate(() => new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    ));
+    expect(await messages.evaluate((element) => element.scrollTop)).toBeLessThanOrEqual(1);
+
+    await messages.hover();
+    await reader.mouse.wheel(0, 100_000);
+    await reader.waitForFunction(() => {
+      const element = document.getElementById("messages");
+      return !!element && element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+    });
+    await friend.fill("#msg-input", "one more message at the bottom");
+    await friend.click("#btn-send");
+    await reader.waitForFunction(() => {
+      const element = document.getElementById("messages");
+      return !!element?.textContent?.includes("one more message at the bottom") &&
+        element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+    });
+  }, 60_000);
+
+  it("keeps the original purchase when setup opens before return verification finishes", async () => {
+    const purchase = { code: "party-1", sessionId: "cs_test_pending_return", claimSecret: "a".repeat(64) };
+    const page = await mobilePage(undefined, purchase);
+    let releaseFirst!: () => void;
+    const firstResponse = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let first = true;
+    await page.route("**/api/fort-pass/redeem", async (route) => {
+      if (first) { first = false; await firstResponse; }
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "pending", code: purchase.code }),
+      });
+    });
+    const pendingRequest = page.waitForRequest("**/api/fort-pass/redeem");
+    try {
+      await page.goto(`http://localhost:${getPort()}/?fort_pass=success&code=${purchase.code}&session_id=${purchase.sessionId}`);
+      await pendingRequest;
+      await page.click("#btn-setup");
+      expect(await page.locator(".fort-pass-redeemed-code").count()).toBe(1);
+      expect(await page.locator(".fort-pass-redeemed-code").innerText()).toContain(purchase.code);
+      expect(await page.locator("#btn-fort-pass-checkout").count()).toBe(0);
+      releaseFirst();
+      const retry = page.waitForRequest((request) =>
+        request.url().endsWith("/api/fort-pass/redeem")
+        && request.postDataJSON().sessionId === purchase.sessionId);
+      await page.click("#btn-verify-fort-pass");
+      const retriedRequest = await retry;
+      const response = await retriedRequest.response();
+      await response?.finished();
+      expect(await page.locator("#btn-fort-pass-checkout").count()).toBe(0);
+    } finally {
+      releaseFirst();
+    }
   });
 
   it("hydrates only the exact recovered setup's pending Fort Pass claim", async () => {
@@ -240,7 +509,7 @@ describe("Mobile E2E", () => {
     };
     const matching = await mobilePage(recovery, matchingClaim);
     await matching.waitForSelector("#setup-password");
-    expect(await matching.locator(".fort-pass-redeemed-code").innerText()).toBe("flag: party-1");
+    expect(await matching.locator(".fort-pass-redeemed-code").innerText()).toContain(recovery.roomId);
 
     const unrelatedClaim = {
       code: "other-1",
@@ -263,6 +532,7 @@ describe("Mobile E2E", () => {
     const page = await mobilePage();
     await page.fill("#name-input", "recovery-host");
     await page.click("#btn-setup");
+    await page.click("#password-options > summary");
     await page.click("#btn-custom-secret");
     const correctSecret = "violet lantern meadow";
     await page.fill("#setup-password", correctSecret);
@@ -316,13 +586,14 @@ describe("Mobile E2E", () => {
     const wrongSecret = "wrong lantern meadow";
     await page.fill("#setup-password", wrongSecret);
     await page.click("#btn-create");
-    await page.waitForFunction(() =>
-      document.getElementById("setup-secret-error")?.textContent?.includes("No saved setup matched"),
-      undefined,
-      { timeout: 30_000 },
-    );
-    expect(await page.locator("#setup-password").isEnabled()).toBe(true);
-    expect(await page.inputValue("#setup-password")).toBe(wrongSecret);
+    const recoveryPassword = page.locator("#setup-password");
+    await recoveryPassword.and(page.locator('[aria-invalid="true"]')).waitFor({ timeout: 30_000 });
+    expect(await recoveryPassword.evaluate((field) =>
+      (field.getAttribute("aria-describedby") ?? "").split(/\s+/).some((id) =>
+        document.getElementById(id)?.getAttribute("role") === "alert"),
+    )).toBe(true);
+    expect(await recoveryPassword.isEnabled()).toBe(true);
+    expect(await recoveryPassword.inputValue()).toBe(wrongSecret);
 
     await page.fill("#setup-password", correctSecret);
     await page.click("#btn-create");
@@ -370,9 +641,9 @@ describe("Mobile E2E", () => {
     });
     await join.fill("#join-password", "lantern meadow orbit");
     await join.click("#btn-enter");
-    await join.getByRole("button", { name: "Cancel" }).click();
+    await join.getByRole("button", { name: "Back", exact: true }).click();
     await join.waitForFunction(() =>
-      document.getElementById("btn-enter")?.textContent?.includes("Join Fort") &&
+      (document.getElementById("btn-enter") as HTMLButtonElement | null)?.disabled === false &&
       (document.getElementById("join-password") as HTMLInputElement | null)?.disabled === true,
     );
     expect(await join.locator("#join-password").isDisabled()).toBe(true);
@@ -385,10 +656,11 @@ describe("Mobile E2E", () => {
     const host = await mobilePage();
     const code = await createFort(host, "alice", customPassword);
 
-    await host.getByTitle("Copy Invite").click();
+    await host.click("#btn-invite");
+    await host.click("#btn-copy-invite");
     const copiedInvite = await host.evaluate(() => navigator.clipboard.readText());
     expect(copiedInvite).toContain(`password: ${customPassword}`);
-    expect(copiedInvite).not.toContain("password: pf2_");
+    await host.click("#btn-close-invite");
 
     const wrongGuest = await mobilePage();
     await wrongGuest.fill("#name-input", "mallory");
@@ -396,10 +668,14 @@ describe("Mobile E2E", () => {
     await wrongGuest.fill("#join-room", code);
     await wrongGuest.fill("#join-password", "wrong blanket orbit");
     await wrongGuest.click("#btn-enter");
-    await wrongGuest.waitForSelector("#join-secret-error", { timeout: 30_000 });
-    expect(await wrongGuest.locator("#join-secret-error").innerText()).toContain("Could not join");
+    const rejectedPassword = wrongGuest.locator("#join-password");
+    await rejectedPassword.and(wrongGuest.locator('[aria-invalid="true"]')).waitFor({ timeout: 30_000 });
+    expect(await rejectedPassword.evaluate((field) =>
+      (field.getAttribute("aria-describedby") ?? "").split(/\s+/).some((id) =>
+        document.getElementById(id)?.getAttribute("role") === "alert"),
+    )).toBe(true);
     expect(await host.locator("#admission-approval-overlay").count()).toBe(0);
-    await wrongGuest.getByRole("button", { name: "Cancel" }).click();
+    await wrongGuest.getByRole("button", { name: "Back", exact: true }).click();
     await wrongGuest.waitForSelector("#name-input", { timeout: 30_000 });
 
     await joinFort(host, wrongGuest, code, "bob");
@@ -412,17 +688,113 @@ describe("Mobile E2E", () => {
     );
   });
 
-  it("game shortcuts visible and tappable", async () => {
-    const page = await mobilePage();
-    await createFort(page, "alice");
+  it("discovers games by player availability and returns to the draft on cancel", async () => {
+    const alice = await mobilePage();
+    const code = await createFort(alice, "alice");
+    await alice.fill("#msg-input", "saving this for later");
+    await alice.click("#btn-open-games");
+    await alice.waitForSelector("#game-picker-dialog[open]");
 
-    const ids = ["#aim-btn-vote", "#aim-btn-rps", "#aim-btn-ttt", "#aim-btn-sab", "#aim-btn-koth"];
-    for (const id of ids) {
-      expect(await page.locator(id).isVisible()).toBe(true);
-      const box = await page.locator(id).boundingBox();
-      expect(box).toBeTruthy();
-      expect(box!.height).toBeGreaterThanOrEqual(30);
+    for (const id of ["#aim-btn-vote", "#aim-btn-rps", "#aim-btn-ttt", "#aim-btn-sab", "#aim-btn-koth"]) {
+      const choice = alice.locator(id);
+      expect(await choice.isVisible()).toBe(true);
+      expect(await choice.isDisabled()).toBe(true);
+      expect(await choice.locator(".game-choice-name").isVisible()).toBe(true);
+      expect(await choice.locator(".game-choice-hint").isVisible()).toBe(true);
+      const box = await choice.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
     }
+
+    await alice.keyboard.press("Escape");
+    await alice.waitForSelector("#game-picker-dialog[open]", { state: "hidden" });
+    expect(await alice.evaluate(() => document.activeElement?.id)).toBe("btn-open-games");
+    expect(await alice.inputValue("#msg-input")).toBe("saving this for later");
+
+    const bob = await mobilePage();
+    await joinFort(alice, bob, code, "bob");
+    await alice.waitForFunction(() => Number.parseInt(document.getElementById("member-count")?.textContent ?? "", 10) === 2);
+    await alice.click("#btn-open-games");
+    expect(await alice.locator("#aim-btn-rps").isEnabled()).toBe(true);
+    expect(await alice.locator("#aim-btn-ttt").isEnabled()).toBe(true);
+    expect(await alice.locator("#aim-btn-vote").isDisabled()).toBe(true);
+    expect(await alice.locator("#aim-btn-sab").isDisabled()).toBe(true);
+    expect(await alice.locator("#aim-btn-koth").isDisabled()).toBe(true);
+    await alice.locator("#aim-btn-rps").focus();
+    await alice.keyboard.press("Enter");
+    await alice.waitForSelector("#member-picker-overlay.open");
+    expect(await alice.locator("button.member-picker-item:focus", { hasText: "bob" }).isVisible()).toBe(true);
+    expect(await alice.locator("#game-picker-dialog").isVisible()).toBe(false);
+    await alice.keyboard.press("Escape");
+    await alice.waitForSelector("#member-picker-overlay.open", { state: "hidden" });
+    expect(await alice.evaluate(() => document.activeElement?.id)).toBe("btn-open-games");
+    expect(await alice.inputValue("#msg-input")).toBe("saving this for later");
+
+    await bob.click("#btn-open-games");
+    expect(await bob.locator("#aim-btn-koth").isEnabled()).toBe(true);
+    await bob.click("#btn-close-games");
+
+    const carol = await mobilePage();
+    await joinFort(alice, carol, code, "carol");
+    await alice.waitForFunction(() => Number.parseInt(document.getElementById("member-count")?.textContent ?? "", 10) === 3);
+    await alice.click("#btn-open-games");
+    expect(await alice.locator("#aim-btn-vote").isEnabled()).toBe(true);
+    expect(await alice.locator("#aim-btn-sab").isDisabled()).toBe(true);
+    await alice.click("#btn-close-games");
+
+    const dave = await mobilePage();
+    await joinFort(alice, dave, code, "dave");
+    await alice.waitForFunction(() => Number.parseInt(document.getElementById("member-count")?.textContent ?? "", 10) === 4);
+    await alice.click("#btn-open-games");
+    expect(await alice.locator("#aim-btn-sab").isEnabled()).toBe(true);
+    await alice.click("#btn-close-games");
+    await alice.click("#btn-send");
+    await bob.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("saving this for later"),
+    );
+
+    await alice.locator("#btn-open-games").focus();
+    await alice.keyboard.press("Enter");
+    await alice.locator("#aim-btn-rps").focus();
+    await alice.keyboard.press("Enter");
+    await alice.waitForSelector("#member-picker-overlay.open");
+    await alice.locator("button.member-picker-item", { hasText: "bob" }).focus();
+    await alice.keyboard.press("Enter");
+    await alice.waitForSelector("#member-picker-overlay.open", { state: "hidden" });
+    await bob.waitForSelector("#rps-overlay.open");
+  });
+
+  it("cancels an accidental guest exit without losing the room or draft", async () => {
+    const alice = await mobilePage();
+    const code = await createFort(alice, "alice");
+    const bob = await mobilePage();
+    await joinFort(alice, bob, code, "bob");
+    await bob.fill("#msg-input", "still here");
+
+    await bob.click("#btn-room-menu");
+    expect(await bob.locator("#btn-knock-down").count()).toBe(0);
+    expect(await bob.locator("#aim-btn-toss").count()).toBe(0);
+    await bob.click("#btn-leave-room");
+    await bob.waitForSelector("#room-exit-dialog[open]");
+    expect(await bob.evaluate(() => document.activeElement?.id)).toBe("btn-cancel-room-exit");
+    await bob.keyboard.press("Escape");
+    await bob.waitForSelector("#room-exit-dialog[open]", { state: "hidden" });
+    expect(await bob.evaluate(() => document.activeElement?.id)).toBe("btn-room-menu");
+    expect(await bob.inputValue("#msg-input")).toBe("still here");
+    expect(await bob.locator("#room-code").innerText()).toBe(code);
+    await bob.click("#btn-send");
+    await alice.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("still here"),
+    );
+
+    await bob.click("#btn-room-menu");
+    await bob.click("#btn-leave-room");
+    await bob.click("#btn-confirm-room-exit");
+    await bob.waitForSelector("#name-input");
+    await alice.waitForFunction(() => Number.parseInt(document.getElementById("member-count")?.textContent ?? "", 10) === 1);
+    expect(await alice.locator("#room-code").innerText()).toBe(code);
+    await alice.click("#btn-room-menu");
+    expect(await alice.locator("#btn-knock-down").isVisible()).toBe(true);
+    expect(await alice.locator("#btn-leave-room").count()).toBe(0);
   });
 
   it("RPS full flow on mobile", async () => {
@@ -437,7 +809,9 @@ describe("Mobile E2E", () => {
     });
 
     // Alice challenges Bob to RPS
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-rps");
+    await alice.waitForSelector("#game-picker-dialog[open]", { state: "hidden" });
     await pickMember(alice, "bob");
 
     // Bob sees challenge overlay and accepts
@@ -475,6 +849,7 @@ describe("Mobile E2E", () => {
     });
 
     // Alice challenges Bob to TTT
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-ttt");
     await pickMember(alice, "bob");
 
@@ -531,6 +906,7 @@ describe("Mobile E2E", () => {
     });
 
     // Alice starts vote to kick Bob
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-vote");
     await pickMember(alice, "bob");
 
@@ -570,6 +946,7 @@ describe("Mobile E2E", () => {
     });
 
     // Open member picker via RPS
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-rps");
     await alice.waitForSelector("#member-picker-overlay.open");
 
@@ -584,38 +961,86 @@ describe("Mobile E2E", () => {
     }
   });
 
-  it("breakout starts on mobile", async () => {
+  it("returns from Breakout without losing the draft or canvas dimensions", async () => {
     const page = await mobilePage();
     await createFort(page, "alice");
+    await page.fill("#msg-input", "back in a moment");
 
-    // Minimize chat to start breakout
+    await page.click("#btn-open-games");
     await page.click("#chat-btn-min");
     await page.waitForSelector("#breakout-canvas", { state: "visible" });
-
+    expect(await page.locator(".room-shell").isVisible()).toBe(false);
     const canvas = page.locator("#breakout-canvas");
     await page.waitForFunction(() => {
       const canvas = document.getElementById("breakout-canvas") as HTMLCanvasElement | null;
       return !!canvas && canvas.width > 300;
     });
-    const box = await canvas.boundingBox();
-    expect(box).toBeTruthy();
-    // Canvas should fill most of the 375px viewport width
-    expect(box!.width).toBeGreaterThanOrEqual(300);
-    const initialWidth = await canvas.evaluate((element) => (element as HTMLCanvasElement).width);
+    const initialSize = await canvas.evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      return { width: canvas.width, height: canvas.height };
+    });
+    expect((await canvas.boundingBox())!.width).toBeGreaterThanOrEqual(300);
 
-    // Restoring and minimizing again creates a new canvas element. It must be
-    // initialized to the viewport instead of retaining the browser default size.
+    await page.click("#btn-return-room");
+    await page.waitForSelector(".room-shell", { state: "visible" });
+    expect(await page.inputValue("#msg-input")).toBe("back in a moment");
+    await page.click("#btn-open-games");
     await page.click("#chat-btn-min");
-    await page.waitForSelector("#breakout-canvas", { state: "detached" });
+    await canvas.waitFor({ state: "visible" });
+    await page.waitForFunction((size) => {
+      const canvas = document.getElementById("breakout-canvas") as HTMLCanvasElement | null;
+      return !!canvas && canvas.width === size.width && canvas.height === size.height;
+    }, initialSize);
+    expect(await canvas.evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      return { width: canvas.width, height: canvas.height };
+    })).toEqual(initialSize);
+    await page.click("#btn-return-room");
+    await page.click("#btn-send");
+    await page.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("back in a moment"),
+    );
+  });
+
+  it("keeps a real doodle across room and Breakout transitions", async () => {
+    const page = await mobilePage();
+    await createFort(page, "artist");
+    await page.click("#btn-open-games");
+    await page.click("#btn-start-drawing");
+    await page.waitForSelector("#btn-return-room");
+    expect(await page.locator(".room-shell").isVisible()).toBe(false);
+    const canvas = page.locator("#game-canvas");
+    const before = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.6, { steps: 8 });
+    await page.mouse.up();
+    const inkAtStrokePoints = () => canvas.evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      const context = canvas.getContext("2d")!;
+      return [[0.4, 0.525], [0.5, 0.55], [0.6, 0.575]].map(([x, y]) => {
+        const pixels = context.getImageData(Math.floor(canvas.width * x) - 2, Math.floor(canvas.height * y) - 2, 5, 5).data;
+        return pixels.some((value, index) => index % 4 === 3 && value > 0);
+      });
+    });
+    expect(await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())).not.toBe(before);
+    expect(await inkAtStrokePoints()).toEqual([true, true, true]);
+
+    await page.click("#btn-return-room");
+    await page.click("#btn-open-games");
     await page.click("#chat-btn-min");
     await page.waitForSelector("#breakout-canvas", { state: "visible" });
-    await page.waitForFunction(() => {
-      const canvas = document.getElementById("breakout-canvas") as HTMLCanvasElement | null;
-      return !!canvas && canvas.width > 300;
-    });
-    const resumedWidth = await page.locator("#breakout-canvas").evaluate((element) => (element as HTMLCanvasElement).width);
-    expect(resumedWidth).toBe(initialWidth);
-    expect(resumedWidth).toBeGreaterThan(300);
+    await page.click("#btn-return-room");
+    await page.click("#btn-open-games");
+    await page.click("#btn-start-drawing");
+    expect(await inkAtStrokePoints()).toEqual([true, true, true]);
+    await page.click("#btn-return-room");
+    await page.fill("#msg-input", "saved my sketch");
+    await page.click("#btn-send");
+    await page.waitForFunction(() =>
+      document.getElementById("messages")?.textContent?.includes("saved my sketch"),
+    );
   });
 
   it("RPS picks are properly sized on mobile", async () => {
@@ -628,6 +1053,7 @@ describe("Mobile E2E", () => {
       return el && el.textContent && el.textContent.includes("2");
     });
 
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-rps");
     await pickMember(alice, "bob");
 
@@ -658,6 +1084,7 @@ describe("Mobile E2E", () => {
       return el && el.textContent && el.textContent.includes("2");
     });
 
+    await alice.click("#btn-open-games");
     await alice.click("#aim-btn-ttt");
     await pickMember(alice, "bob");
 

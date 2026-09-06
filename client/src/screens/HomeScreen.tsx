@@ -1,16 +1,15 @@
 import { useRef, useEffect, useState } from "react";
 import { useGameStore } from "../stores/gameStore";
-import { Window } from "../components/xp/Window";
 import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { LogoIcon } from "../components/xp/Logo";
 import { ensureAudio } from "../hooks/useSound";
-import { BackgroundCanvas } from "../components/canvas/BackgroundCanvas";
 import { track } from "../services/analytics";
 import { getDiscordActivityContext } from "../services/discordActivity";
 import {
   getFortPassClaimSecret,
   getPendingFortPassRedemption,
+  fortPassRedemptionErrorMessage,
   fortPassReturnCleanupPath,
   normalizeFortPassCode,
   normalizeFortPassSessionId,
@@ -19,6 +18,7 @@ import {
 } from "../services/fortPass";
 import { normalizeRoomId } from "../../../src/entitlements";
 import { getSecureRoomRecovery } from "../services/ws";
+import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 
 export function HomeScreen() {
   const name = useGameStore((s) => s.name);
@@ -27,6 +27,7 @@ export function HomeScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const inputRef = useRef<HTMLInputElement>(null);
   const [nameError, setNameError] = useState("");
+  const [fortPassNotice, setFortPassNotice] = useState("");
 
   // Check for room link in URL on mount
   useEffect(() => {
@@ -53,6 +54,35 @@ export function HomeScreen() {
     }
 
     let cancelled = false;
+    const params = new URLSearchParams(location.search);
+    const fortPassCode = normalizeFortPassCode(params.get("code"));
+    const fortPassSessionId = normalizeFortPassSessionId(params.get("session_id"));
+    const fortPassClaimSecret = fortPassSessionId ? getFortPassClaimSecret(fortPassSessionId) : null;
+    const isFortPassReturn = params.get("fort_pass") === "success";
+    const isFortPassCancel = params.get("fort_pass") === "cancel";
+    // A same-tab checkout reference is recovery context, never payment proof.
+    // Restore it before any asynchronous work so setup cannot lose the purchase.
+    if (isFortPassReturn && fortPassCode && fortPassSessionId && fortPassClaimSecret) {
+      rememberPendingFortPassRedemption(fortPassCode, fortPassSessionId, fortPassClaimSecret);
+      useGameStore.getState().setPendingFortPass({
+        code: fortPassCode,
+        sessionId: fortPassSessionId,
+        claimSecret: fortPassClaimSecret,
+      });
+      setFortPassNotice("Your original checkout is saved in this tab. Verifying payment…");
+    } else {
+      const recovery = getPendingFortPassRedemption();
+      if (recovery) useGameStore.getState().setPendingFortPass(recovery);
+      if (isFortPassCancel) {
+        setFortPassNotice(recovery
+          ? "Checkout was canceled. Start a new fort to resume or verify that same saved checkout, or explicitly choose a free fort. Payment has not been confirmed."
+          : "Checkout was canceled. No payment has been confirmed. You can still start a free fort.");
+      }
+    }
+    if (isFortPassReturn || isFortPassCancel) {
+      const cleanedPath = fortPassReturnCleanupPath(location.pathname, location.search, location.hash);
+      if (cleanedPath) history.replaceState(null, "", cleanedPath);
+    }
     void (async () => {
       const activity = await getDiscordActivityContext().catch(() => null);
       if (cancelled) return;
@@ -68,53 +98,16 @@ export function HomeScreen() {
         });
       }
 
-      const params = new URLSearchParams(location.search);
-      const fortPassCode = normalizeFortPassCode(params.get("code"));
-      const fortPassSessionId = normalizeFortPassSessionId(params.get("session_id"));
-      const fortPassClaimSecret = fortPassSessionId ? getFortPassClaimSecret(fortPassSessionId) : null;
-      const isFortPassReturn = params.get("fort_pass") === "success";
-      const isFortPassCancel = params.get("fort_pass") === "cancel";
-      if (
-        isFortPassReturn
-        && !activity
-        && fortPassCode
-        && fortPassSessionId
-        && fortPassClaimSecret
-      ) {
-        // Persist the same-tab recovery pointer before removing the return
-        // parameters. If provider verification stalls, the page reloads, or
-        // the network drops after this point, the raw claim remains
-        // discoverable without ever placing it in history or the URL.
-        rememberPendingFortPassRedemption(
-          fortPassCode,
-          fortPassSessionId,
-          fortPassClaimSecret,
-        );
-      }
-      if (isFortPassReturn || isFortPassCancel) {
-        const cleanedPath = fortPassReturnCleanupPath(
-          location.pathname,
-          location.search,
-          location.hash,
-        );
-        if (cleanedPath) history.replaceState(null, "", cleanedPath);
-      }
-      if (!activity && !isFortPassReturn) {
-        const recovery = getPendingFortPassRedemption();
-        if (recovery && !useGameStore.getState().pendingFortPass) {
-          useGameStore.getState().setPendingFortPass(recovery);
-        }
-      }
       if (isFortPassReturn && (activity || !fortPassCode || !fortPassSessionId || !fortPassClaimSecret)) {
         track("fort_pass_checkout_failed", {
           reason: activity ? "activity_unverified" : "missing_claim_secret",
           source: "stripe",
         });
-        useGameStore.getState().showError(
-          activity
-            ? "Fort Pass redemption is unavailable inside an unverified Discord Activity."
-            : "This Checkout return must be opened in the same browser tab that started payment.",
-        );
+        const message = activity
+          ? "Fort Pass redemption is unavailable inside an unverified Discord Activity. Keep your original checkout in the browser tab where you started it."
+          : "This Checkout return must be opened in the same browser tab that started payment. Return to that tab to resume or verify the original purchase; do not buy another pass.";
+        setFortPassNotice(message);
+        useGameStore.getState().showError(message);
         return;
       }
       if (
@@ -147,11 +140,9 @@ export function HomeScreen() {
           setScreen("setup");
         } else {
           track("fort_pass_checkout_failed", { reason: redemption.error, source: "stripe" });
-          useGameStore.getState().showError(
-            redemption.error === "pending"
-              ? "Payment verification is still pending. Wait a moment before trying setup again."
-              : "Payment could not be verified, so the custom code was not unlocked.",
-          );
+          const message = fortPassRedemptionErrorMessage(redemption.error);
+          setFortPassNotice(message);
+          useGameStore.getState().showError(message);
         }
         return;
       }
@@ -169,9 +160,11 @@ export function HomeScreen() {
   }, []);
 
   const readScreenName = () => {
-    const enteredName = inputRef.current?.value.trim();
-    if (!enteredName) {
-      setNameError("Choose a screen name before continuing.");
+    const enteredName = inputRef.current?.value.normalize("NFC").trim() ?? "";
+    if (!isSecureDisplayNameV4(enteredName)) {
+      setNameError(enteredName
+        ? "Use 1–24 visible characters. Remove hidden/control characters and choose a non-reserved name (not constructor, prototype, or __proto__)."
+        : "Choose a screen name before continuing.");
       inputRef.current?.focus();
       return null;
     }
@@ -197,100 +190,58 @@ export function HomeScreen() {
   };
 
   return (
-    <div className="screen">
-      <BackgroundCanvas />
-      <Window
-        title="Welcome to pillowfort"
-        className="auth-window home-window"
-      >
-        <div className="xp-window-body">
-          <header className="home-brand">
-            <div className="home-logo-wrap">
-              <LogoIcon size={68} />
-            </div>
-            <div className="home-brand-copy">
-              <div className="home-eyebrow">Private hangouts, no accounts</div>
-              <h1 className="home-title">pillowfort</h1>
-              <p className="home-tagline">set up &middot; hang out &middot; knock down</p>
-            </div>
-          </header>
-
-          <div className="home-content">
-            {activitySource && (
-              <div className="home-activity-note" role="status">
-                Discord Activity preview — shared launch linking is not enabled yet.
-              </div>
-            )}
-
-            <section className="home-identity" aria-labelledby="home-identity-title">
-              <h2 id="home-identity-title">What should your friends call you?</h2>
-              <p>This name only follows you into the fort you enter.</p>
-              <Input
-                id="name-input"
-                label="Screen name"
-                placeholder="e.g. luna"
-                maxLength={24}
-                autoComplete="off"
-                autoCapitalize="off"
-                defaultValue={name}
-                ref={inputRef}
-                aria-invalid={!!nameError}
-                aria-describedby={nameError ? "name-input-help name-input-error" : "name-input-help"}
-                onChange={() => {
-                  if (nameError) setNameError("");
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleSetup();
-                }}
-              />
-              <div id="name-input-help" className="home-name-help">
-                No profile, email, or password needed.
-              </div>
-              {nameError && (
-                <div id="name-input-error" className="home-name-error" role="alert">
-                  {nameError}
-                </div>
-              )}
-            </section>
-
-            <div className="home-actions" aria-label="Choose how to enter Pillowfort">
-              <Button id="btn-setup" primary className="home-action home-action-primary" onClick={handleSetup}>
-                <span className="home-action-copy">
-                  <span className="home-action-name">Start a new fort</span>
-                  <span className="home-action-description">Open a temporary room and invite your people.</span>
-                </span>
-                <span className="home-action-arrow" aria-hidden="true">→</span>
-              </Button>
-              <Button id="btn-join" className="home-action home-action-secondary" onClick={handleJoin}>
-                <span className="home-action-copy">
-                  <span className="home-action-name">Join a friend&apos;s fort</span>
-                  <span className="home-action-description">Use the fort flag and secret they sent you.</span>
-                </span>
-                <span className="home-action-arrow" aria-hidden="true">→</span>
-              </Button>
-            </div>
-
-            <ul className="home-trust-strip" aria-label="Pillowfort room promises">
-              <li><strong>Invite-only</strong><small>The host approves each device</small></li>
-              <li><strong>Encrypted</strong><small>Chat and games stay private</small></li>
-              <li><strong>Temporary</strong><small>End the room when you&apos;re done</small></li>
-            </ul>
-
-            <details className="home-privacy-note">
-              <summary>Privacy at a glance</summary>
-              <p>
-                Messages and game state are end-to-end encrypted. The relay can still see the room ID,
-                connection timing, size buckets, and connected-device count. As with any web app, the code
-                served to your browser must be trusted.
-              </p>
-            </details>
-
-            <div className="home-version">
-              Public beta &middot; 2026
-            </div>
+    <main className="screen entry-screen">
+      <section className="entry-card entry-card-home" aria-labelledby="home-title">
+        <header className="entry-brand">
+          <LogoIcon size={48} />
+          <span>pillowfort</span>
+        </header>
+        <h1 id="home-title" className="entry-title">A little room for your people</h1>
+        <p className="entry-description">
+          Invite your friends to talk, doodle, and play. A private, temporary fort, with no accounts.
+        </p>
+        {activitySource && (
+          <p className="auth-note" role="status">
+            Discord Activity preview — shared launch linking is not enabled yet.
+          </p>
+        )}
+        {fortPassNotice && <p className="auth-note" role="status">{fortPassNotice}</p>}
+        <form className="entry-form" onSubmit={(event) => { event.preventDefault(); handleSetup(); }}>
+          <Input
+            id="name-input"
+            label="What should your friends call you?"
+            placeholder="Your screen name"
+            maxLength={24}
+            autoComplete="off"
+            autoCapitalize="off"
+            defaultValue={name}
+            ref={inputRef}
+            aria-invalid={!!nameError}
+            aria-describedby={nameError ? "name-input-help name-input-error" : "name-input-help"}
+            onChange={() => {
+              if (nameError) setNameError("");
+            }}
+            autoFocus
+          />
+          <p id="name-input-help" className="secret-help">Just a name for this fort. No account or email needed.</p>
+          {nameError && (
+            <div id="name-input-error" className="secret-error" role="alert">{nameError}</div>
+          )}
+          <div className="entry-actions">
+            <Button id="btn-setup" type="submit" primary>Start a new fort</Button>
+            <Button id="btn-join" type="button" onClick={handleJoin}>Join a friend&apos;s fort</Button>
           </div>
-        </div>
-      </Window>
-    </div>
+        </form>
+        <details className="entry-details">
+          <summary>Private by invitation. Temporary by design.</summary>
+          <p>
+            Friends need the password and your approval to enter. End the fort when you&apos;re done.
+            Messages and game state are end-to-end encrypted. The relay can still see the room ID,
+            connection timing, size buckets, and connected-device count. As with any web app, the code
+            served to your browser must be trusted.
+          </p>
+        </details>
+      </section>
+    </main>
   );
 }

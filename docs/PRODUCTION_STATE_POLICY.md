@@ -128,13 +128,25 @@ Current protocol-v4 design:
   device, protocol mode, credential, and KeyPackage. Host approval and an MLS
   Add commit are separately required before a new device becomes active.
 - The invitation public key is deterministic and can confirm a guessed secret.
-  The first-party client therefore defaults to a generated 256-bit `pf2_`
-  secret. Explicit new custom passwords require 6–64 safe characters and pass
-  creation-only common/repetition/sequence/context checks before a
-  room-instance-bound 600,000-round PBKDF2 derivation into canonical secret
-  material. Join keeps a stable syntax policy so future strength-list updates
-  cannot lock an existing room. The UI warns that custom phrases remain
-  offline-guessable.
+  The first-party client therefore defaults to a 26-character `pf3_` password:
+  a prefix plus the canonical unpadded base64url encoding of 16 CSPRNG bytes
+  (128 bits of random entropy). It is resolved through the unchanged
+  room-ID/room-instance-bound, 600,000-round PBKDF2-HMAC-SHA-256 derivation
+  into a canonical 32-byte `pf2_` protocol secret before use by MLS or encrypted
+  state. The 256-bit output width does not increase the input's 128-bit entropy.
+  Existing canonical 32-byte `pf2_` passwords remain accepted and pass through
+  exactly unchanged, preserving invitation and recovery identity; they still
+  execute and wipe an equivalent 32-byte PBKDF2 result to preserve the
+  credential-mode timing policy. Temporary byte arrays are wiped in every path.
+  Internal key-format validation, KDF domain/identifier/salt construction, and
+  custom-password derivation outputs are unchanged.
+- Both `pf2_` and `pf3_` namespaces are reserved: malformed values fail closed
+  rather than falling back to custom input, and custom-entry mode rejects even
+  canonical values in either namespace. Explicit new custom passwords retain
+  the 6–64 safe-character syntax policy and creation-only
+  common/repetition/sequence/context checks. Join keeps the stable syntax
+  policy so future strength-list updates cannot lock an existing room. The UI
+  warns that custom phrases remain offline-guessable.
 - Every application event is encrypted inside MLS. The relay sees routing
   identifiers, protocol and destination class, timing/count, and coarse padded
   ciphertext size.

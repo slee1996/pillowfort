@@ -1,29 +1,28 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { send } from "../services/ws";
-import { track, trackOnce } from "../services/analytics";
+import { track } from "../services/analytics";
 import { showToast } from "../components/xp/Toast";
-import { TitleBar } from "../components/xp/TitleBar";
-import { MenuBar } from "../components/chat/MenuBar";
-import { ActionBar } from "../components/chat/ActionBar";
-import { FormatToolbar } from "../components/chat/FormatToolbar";
+import { RoomHeader } from "../components/chat/RoomHeader";
+import { RoomMenu } from "../components/chat/RoomMenu";
 import { MessageList } from "../components/chat/MessageList";
 import { MessageInput } from "../components/chat/MessageInput";
 import { TypingIndicator } from "../components/chat/TypingIndicator";
-import { BuddyPanel } from "../components/sidebar/BuddyPanel";
-import { MobileBuddyOverlay } from "../components/sidebar/MobileBuddyOverlay";
-import { MobileInviteSheet } from "../components/sidebar/MobileInviteSheet";
+import { PeopleDialog } from "../components/sidebar/PeopleDialog";
+import { InviteDialog } from "../components/sidebar/InviteDialog";
+import { RoomRoster } from "../components/sidebar/RoomRoster";
 import { MemberPicker } from "../components/overlays/MemberPicker";
 import { HostOfferDialog } from "../components/overlays/HostOfferDialog";
 import { AdmissionApprovalDialog } from "../components/overlays/AdmissionApprovalDialog";
+import { ExitConfirmationDialog } from "../components/overlays/ExitConfirmationDialog";
 import { VoteBanner } from "../components/games/VoteBanner";
 import { RpsOverlay } from "../components/games/RpsOverlay";
 import { TttOverlay } from "../components/games/TttOverlay";
 import { SabVoteBanner } from "../components/games/SabVoteBanner";
 import { DrawCanvas } from "../components/canvas/DrawCanvas";
 import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
-import { DraggableWindow } from "../components/effects/DraggableWindow";
 import type { GameQueueItem } from "../services/protocol";
+import { agentMode, registerRoomActivities } from "../agent/breakout";
 
 type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | "sab-accuse" | null;
 
@@ -42,20 +41,8 @@ function describeQueueItem(item: GameQueueItem): string {
   }
 }
 
-function themeLabel(theme: string): string {
-  switch (theme) {
-    case "campus-blue":
-      return "Campus Blue";
-    case "top-8":
-      return "Top 8";
-    default:
-      return "Away Message";
-  }
-}
-
 export function ChatScreen() {
   const roomId = useGameStore((s) => s.roomId);
-  const password = useGameStore((s) => s.password);
   const isHost = useGameStore((s) => s.isHost);
   const name = useGameStore((s) => s.name);
   const members = useGameStore((s) => s.members);
@@ -67,15 +54,18 @@ export function ChatScreen() {
   const sabDetonateSignal = useGameStore((s) => s.sabDetonateSignal);
   const gameQueue = useGameStore((s) => s.gameQueue);
   const roomTheme = useGameStore((s) => s.roomTheme);
-  const memberPresence = useGameStore((s) => s.memberPresence);
-  const fortPass = useGameStore((s) => s.fortPass);
 
   const [picker, setPicker] = useState<PickerType>(null);
   const [sabFrameFx, setSabFrameFx] = useState("");
-  const [activationDismissed, setActivationDismissed] = useState(false);
-  const titleBarRef = useRef<HTMLDivElement>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [pendingExit, setPendingExit] = useState<{ roomId: string; isHost: boolean } | null>(null);
   const fxTimeoutRef = useRef<number | null>(null);
   const prevSabStrikesRef = useRef(0);
+  const returnButtonRef = useRef<HTMLButtonElement>(null);
+  const focusedActivity = drawing || minimized;
+  const roomMode = drawing ? "drawing" : minimized ? "breakout" : "conversation";
 
   useEffect(() => {
     if (sabStrikes <= 0 || sabStrikes === prevSabStrikesRef.current) return;
@@ -112,70 +102,63 @@ export function ChatScreen() {
   }, []);
 
   useEffect(() => {
-    setActivationDismissed(false);
+    setDrawing(false);
+    setPeopleOpen(false);
+    setInviteOpen(false);
+    setPicker(null);
   }, [roomId]);
 
-  const handleMinimize = () => {
-    const m = !minimized;
-    useGameStore.getState().setMinimized(m);
-    if (m) {
-      track("game_started", {
-        kind: "breakout",
-        role: isHost ? "host" : "guest",
-        memberCount: members.length,
-      });
-    }
-    if (!m) useGameStore.getState().resetUnread();
+  useEffect(() => {
+    setPendingExit(null);
+  }, [roomId, isHost]);
+
+  useEffect(() => {
+    if (!focusedActivity) return;
+    const frame = requestAnimationFrame(() => returnButtonRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [focusedActivity]);
+
+  const handleDraw = () => {
+    setDrawing(true);
+    useGameStore.getState().setMinimized(true);
   };
 
-  const handleMaximize = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen();
-    }
-  };
-
-  const handleClose = () => {
-    if (isHost) {
-      useGameStore.getState().setIntentionalLeave(true);
-      send("knock-down");
-    } else {
-      useGameStore.getState().setIntentionalLeave(true);
-      send("leave");
-    }
+  const handleTakeBreak = () => {
+    setDrawing(false);
+    useGameStore.getState().setMinimized(true);
+    track("game_started", {
+      kind: "breakout",
+      role: isHost ? "host" : "guest",
+      memberCount: members.length,
+    });
   };
 
   const handleRestore = () => {
-    if (minimized) {
-      useGameStore.getState().setMinimized(false);
-      useGameStore.getState().resetUnread();
-    }
+    setDrawing(false);
+    useGameStore.getState().setMinimized(false);
+    useGameStore.getState().resetUnread();
+    requestAnimationFrame(() => document.getElementById("msg-input")?.focus());
   };
 
-  const handleCopyRoom = () => {
-    if (roomId) navigator.clipboard.writeText(roomId).then(() => {
-      showToast("Copied!");
-      track("invite_copied", {
-        role: isHost ? "host" : "guest",
-        source: "room_code",
-        memberCount: members.length,
-      });
+  useEffect(() => {
+    if (!agentMode()) return;
+    return registerRoomActivities({
+      drawing: handleDraw,
+      breakout: handleTakeBreak,
+      conversation: handleRestore,
     });
+  }, [roomId, isHost, members.length]);
+
+  const onRequestExit = () => {
+    if (roomId) setPendingExit({ roomId, isHost });
   };
 
-  const handleCopyInvite = (source: string) => {
-    if (!roomId) return;
-    const link = `${location.origin}/${roomId}`;
-    const text = password ? `${link}\npassword: ${password}` : link;
-    navigator.clipboard.writeText(text).then(() => {
-      showToast("Invite copied!");
-      track("invite_copied", {
-        role: isHost ? "host" : "guest",
-        source,
-        memberCount: members.length,
-      });
-    });
+  const handleConfirmExit = () => {
+    const current = useGameStore.getState();
+    setPendingExit(null);
+    if (!pendingExit || current.roomId !== pendingExit.roomId || current.isHost !== pendingExit.isHost) return;
+    current.setIntentionalLeave(true);
+    send(current.isHost ? "knock-down" : "leave");
   };
 
   const handlePickerOpen = useCallback((type: string) => {
@@ -216,7 +199,7 @@ export function ChatScreen() {
   };
 
   const pickerTitles: Record<string, string> = {
-    toss: "Toss Pillow to...",
+    toss: "Pass host to...",
     mute: "Mute / Unmute",
     vote: "Vote to kick...",
     rps: "Challenge to RPS...",
@@ -228,57 +211,34 @@ export function ChatScreen() {
     ? members.filter((n) => n !== name)
     : [];
 
-  const handleInsertEmoji = (emoji: string) => {
-    const input = (window as any).__pfMsgInput?.current as HTMLInputElement | undefined;
-    if (input) {
-      input.value += emoji;
-      input.focus();
-    }
-  };
-
-  const chatInfoText = `You are chatting with ${
-    members.length === 1 ? "0 buddies" : `${members.length - 1} ${members.length - 1 === 1 ? "buddy" : "buddies"}`
-  }`;
-  const awayCount = members.filter((member) => memberPresence[member]?.status === "away").length;
-  const availableCount = Math.max(0, members.length - awayCount);
-  const activeThemeLabel = themeLabel(roomTheme);
-  const activationKind = members.length <= 1
-    ? "empty_room"
-    : gameQueue.current || gameQueue.queue.length > 0
-      ? null
-      : "start_game";
-  const showActivationNudge = !activationDismissed && !minimized && !!activationKind;
-
-  useEffect(() => {
-    if (!showActivationNudge || !activationKind) return;
-    trackOnce(`activation:${roomId || "none"}:${activationKind}`, "activation_nudge_shown", {
-      kind: activationKind,
-      role: isHost ? "host" : "guest",
-      memberCount: members.length,
-    });
-  }, [activationKind, isHost, members.length, roomId, showActivationNudge]);
-
-  const handleStartGameNudge = (type: "rps" | "ttt") => {
-    track("activation_nudge_clicked", {
-      kind: type,
-      role: isHost ? "host" : "guest",
-      source: "start_game_nudge",
-      memberCount: members.length,
-    });
-    handlePickerOpen(type);
-  };
 
   return (
-    <div className={`screen screen-chat theme-${roomTheme}`}>
+    <div className={`screen room-scene screen-chat theme-${roomTheme}`} data-room-mode={roomMode}>
       <DrawCanvas />
-      <BreakoutCanvas active={minimized} />
+      <BreakoutCanvas active={minimized && !drawing} />
 
-      <DraggableWindow
-        className={`xp-window chat-window ${minimized ? "chat-window-minimized" : ""} ${sabFrameFx}`}
-        minimized={minimized}
-        titleBarRef={titleBarRef}
-      >
-        {!minimized && sabBombCountdown > 0 && (
+      {focusedActivity && (
+        <div className="room-focus-bar">
+          <span className="room-focus-label">{drawing ? "Doodle together" : "Breakout"}</span>
+          <button
+            type="button"
+            id="btn-return-room"
+            className="room-header-action"
+            ref={returnButtonRef}
+            onClick={handleRestore}
+          >
+            Back to fort
+            {unreadCount > 0 && (
+              <span className="unread-badge" aria-label={`${unreadCount} unread messages`}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      <main className={`room-shell ${sabFrameFx}`} hidden={focusedActivity}>
+        {sabBombCountdown > 0 && (
           <div
             className={`sab-bomb-overlay ${sabBombCountdown <= 3 ? "critical" : ""}`}
             aria-live="polite"
@@ -288,7 +248,7 @@ export function ChatScreen() {
             <span className="sab-bomb-count">{sabBombCountdown}</span>
           </div>
         )}
-        {!minimized && sabFrameFx === "sab-fx-explode" && (
+        {sabFrameFx === "sab-fx-explode" && (
           <div className="sab-mushroom-cloud" aria-hidden>
             <div className="sab-cloud-cap" />
             <div className="sab-cloud-stem" />
@@ -296,163 +256,82 @@ export function ChatScreen() {
           </div>
         )}
 
-        <TitleBar
-          ref={titleBarRef}
-          title=""
-          onDoubleClick={handleRestore}
-          buttons={[
-            { id: "chat-btn-min", label: "─", onClick: handleMinimize },
-            { id: "chat-btn-max", label: "□", onClick: handleMaximize },
-            { label: "✕", close: true, onClick: handleClose },
-          ]}
-          extra={
-            <>
-              pillowfort —{" "}
-              <span
-                id="room-code"
-                className="room-code"
-                title="Click to copy fort flag"
-                onClick={handleCopyRoom}
-              >
-                {roomId}
-              </span>
-              {unreadCount > 0 && (
-                <span className="unread-badge">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-              {sabRole && (
-                <span className={`sab-role-badge ${sabRole}`}>
-                  {sabRole === "saboteur" ? "SABOTEUR" : "DEFENDER"}
-                </span>
-              )}
-            </>
-          }
-        />
+        <RoomHeader
+          roomId={roomId}
+          isHost={isHost}
+          memberCount={members.length}
+          onInvite={() => setInviteOpen(true)}
+          onPeople={() => setPeopleOpen(true)}
+        >
+          <RoomMenu onPickerOpen={handlePickerOpen} onRequestExit={onRequestExit} />
+        </RoomHeader>
 
-        {!minimized && (
-          <>
-            <MenuBar />
-            <ActionBar onPickerOpen={handlePickerOpen} />
-
-            <div className="chat-main">
-              <div className="chat-column">
-                <div className="chat-info-bar">
-                  <div className="chat-info-primary">{chatInfoText}</div>
-                  {gameQueue.current && (
-                    <>
-                      <span className="chat-info-sep">•</span>
-                      <span className="chat-info-queue-now">
-                      Now playing: {describeQueueItem(gameQueue.current)}
-                      </span>
-                    </>
-                  )}
-                  {gameQueue.queue.length > 0 && (
-                    <>
-                      <span className="chat-info-sep">•</span>
-                      <span className="chat-info-queue-next">
-                        Up next: {gameQueue.queue.map(describeQueueItem).join(" • ")}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {showActivationNudge && (
-                  <div className="activation-nudge" role="status">
-                    <div className="activation-nudge-copy">
-                      {activationKind === "empty_room" ? (
-                        <>
-                          <strong>Waiting for buddies.</strong>
-                          <span>Copy the invite and password before the room goes quiet.</span>
-                        </>
-                      ) : (
-                        <>
-                          <strong>Room is live.</strong>
-                          <span>Start a quick game while everyone is here.</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="activation-nudge-actions">
-                      {activationKind === "empty_room" ? (
-                        <button
-                          type="button"
-                          className="activation-nudge-btn primary"
-                          onClick={() => {
-                            track("activation_nudge_clicked", {
-                              kind: "empty_room",
-                              role: isHost ? "host" : "guest",
-                              source: "copy_invite",
-                              memberCount: members.length,
-                            });
-                            handleCopyInvite("empty_room_nudge");
-                          }}
-                        >
-                          Copy Invite
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="activation-nudge-btn primary"
-                            onClick={() => handleStartGameNudge("rps")}
-                          >
-                            Start RPS
-                          </button>
-                          <button
-                            type="button"
-                            className="activation-nudge-btn"
-                            onClick={() => handleStartGameNudge("ttt")}
-                          >
-                            Tic-Tac-Toe
-                          </button>
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        className="activation-nudge-close"
-                        aria-label="Dismiss"
-                        onClick={() => setActivationDismissed(true)}
-                      >
-                        x
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <SabVoteBanner />
-                <VoteBanner />
-                <MessageList />
-                <TypingIndicator />
-                <FormatToolbar onInsertEmoji={handleInsertEmoji} />
-                <MessageInput onPickerOpen={handlePickerOpen} />
-                <div className="chat-status-strip" aria-live="polite">
-                  <span className="status-strip-cell status-online">
-                    <span className="status-light" aria-hidden />
-                    {availableCount} available
-                  </span>
-                  {awayCount > 0 && (
-                    <span className="status-strip-cell status-away">{awayCount} away</span>
-                  )}
-                  <span className="status-strip-cell">skin: {activeThemeLabel}</span>
-                  <span className="status-strip-cell">encrypted</span>
-                  {fortPass?.themePack === "retro-plus" && (
-                    <span className="status-strip-cell status-fort-pass">Fort Pass</span>
-                  )}
-                </div>
-              </div>
-              <BuddyPanel />
+        <div className="room-workspace">
+          <div className="room-chat-column">
+        <section className="room-conversation" aria-label="Conversation">
+          {(gameQueue.current || gameQueue.queue.length > 0) && (
+            <details className="room-game-queue">
+              <summary>
+                {gameQueue.current
+                  ? `Now playing: ${describeQueueItem(gameQueue.current)}`
+                  : `${gameQueue.queue.length} ${gameQueue.queue.length === 1 ? "game" : "games"} queued`}
+              </summary>
+              {gameQueue.queue.length > 0 ? (
+                <ol aria-label="Up next">
+                  {gameQueue.queue.map((item, index) => (
+                    <li key={`${item.kind}-${item.by}-${item.target || ""}-${index}`}>
+                      {describeQueueItem(item)}
+                    </li>
+                  ))}
+                </ol>
+              ) : <p>No games queued.</p>}
+            </details>
+          )}
+          {sabRole && (
+            <div className={`sab-role-badge ${sabRole}`}>
+              {sabRole === "saboteur" ? "You are the saboteur" : "You are a defender"}
             </div>
-          </>
-        )}
-      </DraggableWindow>
+          )}
+          <SabVoteBanner />
+          <VoteBanner />
+          <MessageList
+            emptyState={members.length <= 1 ? (
+              <div className="room-empty-state">
+                <h1 className="room-empty-title">Your fort is open.</h1>
+                <p className="room-empty-description">Invite your people, then settle in.</p>
+                <button type="button" className="room-empty-action" onClick={() => setInviteOpen(true)}>
+                  Invite friends
+                </button>
+              </div>
+            ) : (
+              <p className="room-empty-state">You're in. Say hello.</p>
+            )}
+          />
+          <TypingIndicator />
+        </section>
+        <MessageInput
+          onPickerOpen={handlePickerOpen}
+          onDraw={handleDraw}
+          onTakeBreak={handleTakeBreak}
+        />
+          </div>
+          <RoomRoster />
+        </div>
+      </main>
 
-      {/* Overlays */}
       <AdmissionApprovalDialog />
       <HostOfferDialog />
       <RpsOverlay />
       <TttOverlay />
-      <MobileBuddyOverlay />
-      <MobileInviteSheet />
+      <PeopleDialog open={peopleOpen} onClose={() => setPeopleOpen(false)} />
+      <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      {pendingExit && pendingExit.roomId === roomId && pendingExit.isHost === isHost && (
+        <ExitConfirmationDialog
+          isHost={isHost}
+          onConfirm={handleConfirmExit}
+          onCancel={() => setPendingExit(null)}
+        />
+      )}
 
       {picker && (
         <MemberPicker

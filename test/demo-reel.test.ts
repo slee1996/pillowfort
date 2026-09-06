@@ -45,7 +45,10 @@ afterAll(async () => {
 });
 
 async function newPage(): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   contexts.push(ctx);
   const page = await ctx.newPage();
   await page.goto(`http://localhost:${getPort()}/`);
@@ -86,24 +89,18 @@ async function waitForMessage(page: Page, text: string): Promise<void> {
 }
 
 async function drawStroke(page: Page, points: [number, number][]): Promise<void> {
-  await page.locator("#game-canvas").evaluate((canvas, normalizedPoints) => {
-    const element = canvas as HTMLCanvasElement;
-    const rect = element.getBoundingClientRect();
-    const dispatch = (type: string, point: [number, number], buttons: number) => {
-      element.dispatchEvent(new PointerEvent(type, {
-        bubbles: true,
-        pointerId: 1,
-        pointerType: "mouse",
-        isPrimary: true,
-        buttons,
-        clientX: rect.left + point[0] * rect.width,
-        clientY: rect.top + point[1] * rect.height,
-      }));
-    };
-    dispatch("pointerdown", normalizedPoints[0], 1);
-    for (const point of normalizedPoints.slice(1)) dispatch("pointermove", point, 1);
-    dispatch("pointerup", normalizedPoints[normalizedPoints.length - 1], 0);
-  }, points);
+  await page.click("#btn-open-games");
+  await page.click("#btn-start-drawing");
+  const canvas = await page.locator("#game-canvas").boundingBox();
+  if (!canvas) throw new Error("Drawing canvas is not visible");
+  await page.mouse.move(canvas.x + points[0][0] * canvas.width, canvas.y + points[0][1] * canvas.height);
+  await page.mouse.down();
+  for (const [x, y] of points.slice(1)) {
+    await page.mouse.move(canvas.x + x * canvas.width, canvas.y + y * canvas.height, { steps: 4 });
+  }
+  await page.mouse.up();
+  await page.click("#btn-return-room");
+  await page.waitForSelector(".room-shell", { state: "visible" });
 }
 
 async function observeRemoteDraws(page: Page): Promise<void> {
@@ -122,49 +119,38 @@ async function waitForRemoteDraw(page: Page, count: number): Promise<void> {
   count, { timeout: 15_000 });
 }
 
-/** Mask dynamic elements so screenshots are stable across runs. */
-async function maskDynamic(page: Page) {
-  await page.evaluate(() => {
-    // Room code changes every run
-    const rc = document.getElementById("room-code");
-    if (rc) rc.textContent = "abc12345";
-    // The room flag is also rendered in system chat and the buddy panel.
-    // Normalize text nodes in place so their surrounding markup/styles remain intact.
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let textNode: Node | null;
-    while ((textNode = walker.nextNode())) {
-      textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
-    }
-    // Timestamps in chat messages
-    document.querySelectorAll(".msg-time, .chat-timestamp").forEach((el) => {
-      (el as HTMLElement).textContent = "12:00";
-    });
-    // Saboteur role badges — role is random each run
-    document.querySelectorAll(".sab-role-badge").forEach((el) => {
-      el.classList.remove("saboteur", "defender");
-      el.classList.add("defender"); // normalize to one style
-      (el as HTMLElement).textContent = "ROLE";
-    });
-    // Saboteur role system messages (saboteur vs defender text differs)
-    document.querySelectorAll(".msg-system").forEach((el) => {
-      const text = (el as HTMLElement).textContent || "";
-      if (text.includes("saboteur") || text.includes("Saboteur") || text.includes("defender") || text.includes("strike")) {
-        (el as HTMLElement).textContent = "Role assigned. The game begins!";
-      }
-    });
-  });
-}
 
 /**
  * Take screenshot and compare against saved baseline.
  * First run: saves baseline. Subsequent runs: compare pixel-by-pixel.
  */
 async function assertScreenshot(page: Page, name: string) {
-  await maskDynamic(page);
   // Small wait for any animations to settle
   await sleep(100);
 
-  const screenshotBuf = await page.screenshot({ type: "png" });
+  const screenshotBuf = await page.screenshot({
+    type: "png",
+    // Random role assignment remains asserted above; mask only its visual variants.
+    mask: [
+      page.locator("#room-code"),
+      page.locator(".chat-timestamp"),
+      page.locator(".sab-role-badge"),
+      page.locator('.sab-strike-btn, [title="Accuse Saboteur"]'),
+      page.locator(".chat-message-system").filter({
+        hasText: /YOU are the saboteur!|You are a defender\./,
+      }),
+    ],
+    // Screenshot-only geometry keeps different role labels/actions from moving
+    // adjacent content. Playwright restores these styles after the capture.
+    style: `
+      .sab-role-badge { box-sizing: border-box !important; width: 220px !important; height: 28px !important; }
+      .sab-strike-btn, [title="Accuse Saboteur"] {
+        box-sizing: border-box !important; flex: 0 0 160px !important;
+        width: 160px !important; height: 44px !important; min-height: 44px !important;
+        margin: 0 !important; animation: none !important;
+      }
+    `,
+  });
   const path = `${SNAPSHOT_DIR}/${name}.png`;
   const file = Bun.file(path);
 
@@ -216,7 +202,6 @@ async function setupRoom(page: Page): Promise<string> {
   await page.fill("#name-input", "luna");
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
-  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
@@ -248,8 +233,8 @@ describe("Demo reel: Sign On", () => {
     await page.waitForSelector("#setup-password", { state: "visible" });
     await assertScreenshot(page, "01-setup-password");
 
+    await page.click("#password-options > summary");
     await page.click("#btn-regenerate-secret");
-    await page.check("#setup-secret-saved");
     await page.click("#btn-create");
 
     await page.waitForSelector("#room-code");
@@ -295,7 +280,7 @@ describe("Demo reel: Friends Join + Chat", () => {
 // --- Phase 3: Drawing ---
 
 describe("Demo reel: Drawing", () => {
-  it("draw strokes appear on canvas while chat is open", async () => {
+  it("friends doodle together and return to the conversation", async () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
@@ -317,7 +302,12 @@ describe("Demo reel: Drawing", () => {
     ]);
     await waitForRemoteDraw(page, 2);
 
+    await page.click("#btn-open-games");
+    await page.click("#btn-start-drawing");
     await assertScreenshot(page, "04-drawing");
+    await page.click("#btn-return-room");
+    await sendChat(page, "love these doodles");
+    await waitForMessage(javi, "love these doodles");
   });
 });
 
@@ -331,14 +321,15 @@ describe("Demo reel: Tic-Tac-Toe", () => {
     const javi = await joinBrowser(page, roomCode, "javi");
     await waitForMembers(page, 2);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-ttt");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await assertScreenshot(page, "05-ttt-member-picker");
 
     await page.locator("#member-picker-body .member-picker-item", { hasText: "javi" }).click();
 
     await javi.waitForSelector("#ttt-overlay.open");
-    await javi.click("#ttt-actions .xp-btn-primary", { force: true });
+    await javi.click("#ttt-actions .xp-btn-primary");
 
     await page.waitForSelector("#ttt-board");
     await page.waitForSelector(".ttt-cell");
@@ -386,6 +377,7 @@ describe("Demo reel: Saboteur", () => {
     const kai = await joinBrowser(page, roomCode, "kai");
     await waitForMembers(page, 4);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-sab");
 
     const players = [page, javi, priya, kai];
@@ -414,14 +406,15 @@ describe("Demo reel: Pillow Fight", () => {
     const priya = await joinBrowser(page, roomCode, "priya");
     await waitForMembers(page, 3);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-vote");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "javi" }).click();
 
     await page.waitForSelector("#vote-banner.visible", { timeout: 5000 });
     await assertScreenshot(page, "09-vote-banner");
 
-    await priya.click("#vote-yes", { force: true });
+    await priya.click("#vote-yes");
     await javi.waitForSelector("#btn-home", { state: "visible", timeout: 15_000 });
 
     // Wait for vote result to render
@@ -441,13 +434,16 @@ describe("Demo reel: Pillow Toss", () => {
     const priya = await joinBrowser(page, roomCode, "priya");
     await waitForMembers(page, 3);
 
+    await page.click("#btn-room-menu");
     await page.click("#aim-btn-toss");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "priya" }).click();
 
     await priya.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
     await priya.click("#btn-catch");
+    await priya.click("#btn-room-menu");
     await priya.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
+    await javi.click("#btn-room-menu");
     await javi.waitForSelector("#btn-leave-room", { state: "visible", timeout: 15_000 });
 
     await sleep(300);
@@ -465,12 +461,14 @@ describe("Demo reel: Knock Down", () => {
     const priya = await joinBrowser(page, roomCode, "priya");
     await waitForMembers(page, 2);
 
+    await page.click("#btn-room-menu");
     await page.click("#aim-btn-toss");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "priya" }).click();
 
     await priya.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
     await priya.click("#btn-catch");
+    await priya.click("#btn-room-menu");
     await priya.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
 
     await page.waitForFunction(() => {
@@ -479,6 +477,7 @@ describe("Demo reel: Knock Down", () => {
     }, undefined, { timeout: 5000 });
 
     await priya.click("#btn-knock-down");
+    await priya.click("#btn-confirm-room-exit");
 
     await page.waitForSelector("#btn-home", { state: "visible", timeout: 5000 });
     await assertScreenshot(page, "12-knocked-down");

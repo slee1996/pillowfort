@@ -1,11 +1,13 @@
 import { useRef, useEffect, useCallback } from "react";
 import { send } from "../../services/ws";
 import { beep } from "../../hooks/useSound";
+import { agentMode, registerBreakout, notifyBreakout } from "../../agent/breakout";
 
 const BRICK_COLORS = ["#FF6B6B", "#FFA94D", "#FFD43B", "#69DB7C", "#4DABF7", "#9775FA", "#F06595", "#20C997"];
 const ROWS = 5, COLS = 8, BRICK_PAD = 4, BRICK_H = 18;
 const PADDLE_H = 12, BALL_R = 6;
 const MOBILE_PADDLE_LIFT_PX = 50;
+const FOCUS_BAR_GAP_PX = 16;
 
 interface Brick { x: number; y: number; w: number; h: number; color: string; alive: boolean }
 
@@ -35,6 +37,8 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     const w = cv.width, h = cv.height;
     const isMobile = window.matchMedia("(max-width: 600px)").matches;
     const paddleLift = isMobile ? MOBILE_PADDLE_LIFT_PX : 0;
+    const focusBarRect = parent.querySelector(".room-focus-bar")?.getBoundingClientRect();
+    const focusBarExtent = focusBarRect?.height ? Math.max(0, rect.bottom - focusBarRect.top) : 0;
     const brickW = (w - BRICK_PAD * (COLS + 1)) / COLS;
     const bricks: Brick[] = [];
     for (let r = 0; r < ROWS; r++) {
@@ -48,7 +52,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
         });
       }
     }
-    const barH = 50 + paddleLift;
+    const barH = Math.max(50 + paddleLift, focusBarExtent + PADDLE_H + FOCUS_BAR_GAP_PX);
     stateRef.current = {
       bricks,
       paddle: { x: w / 2 - 40, y: h - barH, w: 80, h: PADDLE_H },
@@ -79,6 +83,8 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     if (!cv) return;
     const ctx = cv.getContext("2d")!;
     let disposed = false;
+    const agentEnabled = agentMode();
+    let lastAgentFrame = 0;
 
     bootFrameRef.current = requestAnimationFrame(() => {
       bootFrameRef.current = 0;
@@ -205,6 +211,10 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
           ctx.fillText("Click to try again", w / 2, h / 2 + 24);
         }
 
+        if (agentEnabled && performance.now() - lastAgentFrame >= 100) {
+          lastAgentFrame = performance.now();
+          notifyBreakout();
+        }
         animRef.current = requestAnimationFrame(loop);
       }
 
@@ -244,6 +254,22 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     };
     const onKeyDown = (e: KeyboardEvent) => { keysRef.current[e.key] = true; };
     const onKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
+    const unregisterAgent = agentEnabled ? registerBreakout({
+      move: (x) => {
+        const rect = cv.getBoundingClientRect();
+        setPaddleFromClientX(rect.left + x * rect.width);
+      },
+      reset,
+      snapshot: () => {
+        const s = stateRef.current;
+        return s ? {
+          width: cv.width, height: cv.height,
+          ball: { ...s.ball }, paddle: { ...s.paddle },
+          bricks: s.bricks.map(brick => ({ ...brick })),
+          lives: s.lives, score: s.score, won: s.won, lost: s.lost, running: s.running,
+        } : null;
+      },
+    }) : null;
 
     cv.addEventListener("mousemove", onMouse);
     cv.addEventListener("touchstart", onTouchStart, { passive: false });
@@ -261,6 +287,7 @@ export function BreakoutCanvas({ active }: { active: boolean }) {
     return () => {
       disposed = true;
       stopGameLoop();
+      unregisterAgent?.();
       clearInterval(keyInterval);
       resizeObserver.disconnect();
       cv.removeEventListener("mousemove", onMouse);

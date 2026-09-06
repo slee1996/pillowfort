@@ -7,24 +7,28 @@
     "dev:client": "cd client && npx vite",
     "build": "npm run verify:openmls && npm --prefix client run build",
     "typecheck": "npm --prefix client run typecheck",
-    "deploy": "npm run build && npx wrangler deploy",
+    "check": "npm run typecheck && npm test && npm run build",
+    "deploy": "npm run check && npx wrangler deploy",
     "start": "bun server.ts",
     "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts && npm run test:security",
     "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
     "test:ui": "bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 60000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 60000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 60000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 60000 --max-concurrency 1 test/game-night.test.ts",
     "metrics:report": "node scripts/analytics_report.mjs",
+    "agent": "node scripts/agent.mjs",
+    "agent:mcp": "node scripts/agent.mjs mcp",
     "verify:openmls": "node scripts/verify-openmls-artifacts.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260722.1",
+    "@cloudflare/workers-types": "5.20260906.1",
     "@playwright/test": "1.59.1",
-    "playwright": "1.59.1",
     "sharp": "0.35.3",
-    "wrangler": "4.113.0"
+    "wrangler": "4.129.0"
   },
   "dependencies": {
-    "@noble/ed25519": "3.1.0"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@noble/ed25519": "3.1.0",
+    "playwright": "1.59.1"
   },
   "overrides": {
     "sharp": "0.35.3"

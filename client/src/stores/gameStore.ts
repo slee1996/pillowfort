@@ -87,9 +87,12 @@ export interface PendingAdmission {
   status: "pending" | "approving";
 }
 
+export type TerminalPresentation = "left" | "room-destroyed" | "admission-required" | "connection-ended";
+
 export interface GameStore {
   // Connection
   screen: Screen;
+  terminalPresentation: TerminalPresentation;
   name: string;
   roomId: string | null;
   password: string | null;
@@ -145,6 +148,7 @@ export interface GameStore {
 
   // Actions
   setScreen: (screen: Screen) => void;
+  setTerminalPresentation: (presentation: TerminalPresentation) => void;
   setName: (name: string) => void;
   setRoomId: (roomId: string | null) => void;
   setPassword: (password: string | null) => void;
@@ -204,6 +208,7 @@ function timeStr(): string {
 export const useGameStore = create<GameStore>((set, get) => ({
   // Connection
   screen: "home",
+  terminalPresentation: "connection-ended",
   name: readStoredName(),
   roomId: null,
   password: null,
@@ -259,6 +264,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Actions
   setScreen: (screen) => set({ screen }),
+  setTerminalPresentation: (terminalPresentation) => set({ terminalPresentation }),
   setName: (name) => {
     writeStoredName(name);
     set({ name });
@@ -371,6 +377,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   cleanup: () => {
     set({
+      terminalPresentation: "connection-ended",
       roomId: null,
       password: null,
       roomSafetyCode: null,

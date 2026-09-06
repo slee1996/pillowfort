@@ -1,17 +1,20 @@
 import { normalizeRoomId } from "../../../src/entitlements";
 import { SECURE_ROOM_ID_BYTES, canonicalBase64UrlByteLength } from "../../../src/protocolV4";
 
-const ROOM_SECRET_PREFIX = "pf2_";
-const GENERATED_SECRET_BYTES = 32;
+const GENERATED_SECRET_PREFIX = "pf3_";
+const PROTOCOL_SECRET_PREFIX = "pf2_";
+const GENERATED_SECRET_BYTES = 16;
+const PROTOCOL_SECRET_BYTES = 32;
 export const CUSTOM_ROOM_SECRET_MIN_LENGTH = 6;
 export const CUSTOM_ROOM_SECRET_MAX_LENGTH = 64;
 export const CUSTOM_ROOM_SECRET_MAX_UTF8_BYTES = 256;
 export const CUSTOM_ROOM_SECRET_KDF = "pbkdf2-sha256-600k-room-v1" as const;
 const CUSTOM_ROOM_SECRET_KDF_ITERATIONS = 600_000;
 const CUSTOM_ROOM_SECRET_KDF_DOMAIN = "pillowfort:custom-room-secret:v1";
-// A 32-byte unpadded base64url value has 43 characters and 16 valid
-// canonical final characters (the other two low bits must be zero padding).
-const GENERATED_SECRET_RE = /^pf2_[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+// A 16-byte unpadded base64url value has 22 characters; the final four
+// low bits must be zero. Legacy 32-byte values have two zero low bits.
+const GENERATED_SECRET_RE = /^pf3_[A-Za-z0-9_-]{21}[AQgw]$/;
+const PROTOCOL_SECRET_RE = /^pf2_[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const UNSAFE_CUSTOM_SECRET_RE = /[\p{Cc}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Noncharacter_Code_Point}]/u;
 const NON_ASCII_SEPARATOR_RE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/u;
 const COMMON_CUSTOM_SECRET_PARTS = [
@@ -52,7 +55,7 @@ export function generateRoomSecret(): string {
   const bytes = new Uint8Array(GENERATED_SECRET_BYTES);
   try {
     crypto.getRandomValues(bytes);
-    return ROOM_SECRET_PREFIX + base64Url(bytes);
+    return GENERATED_SECRET_PREFIX + base64Url(bytes);
   } finally {
     // The returned JavaScript string cannot be reliably zeroized, but the
     // mutable entropy buffer does not need to remain in memory as a second
@@ -62,7 +65,7 @@ export function generateRoomSecret(): string {
 }
 
 export function isGeneratedRoomSecret(value: unknown): boolean {
-  return typeof value === "string" && GENERATED_SECRET_RE.test(value);
+  return typeof value === "string" && (GENERATED_SECRET_RE.test(value) || PROTOCOL_SECRET_RE.test(value));
 }
 
 function compactForStrength(value: string): string {
@@ -111,7 +114,7 @@ export function validateRoomSecret(value: unknown): RoomSecretValidation {
   }
 
   if (isGeneratedRoomSecret(value)) return { valid: true, secret: value };
-  if (value.startsWith(ROOM_SECRET_PREFIX)) {
+  if (value.startsWith(GENERATED_SECRET_PREFIX) || value.startsWith(PROTOCOL_SECRET_PREFIX)) {
     return {
       valid: false,
       message: "That generated room secret is incomplete or malformed.",
@@ -144,15 +147,16 @@ export function validateRoomSecret(value: unknown): RoomSecretValidation {
   return { valid: true, secret };
 }
 
-/** Custom-entry mode reserves the pf2_ namespace for app-generated secrets. */
+/** Custom-entry mode reserves both generated-secret namespaces. */
 export function validateCustomRoomSecret(
   value: unknown,
   options: RoomSecretValidationOptions = {},
 ): RoomSecretValidation {
-  if (typeof value === "string" && value.startsWith(ROOM_SECRET_PREFIX)) {
+  if (typeof value === "string" &&
+      (value.startsWith(GENERATED_SECRET_PREFIX) || value.startsWith(PROTOCOL_SECRET_PREFIX))) {
     return {
       valid: false,
-      message: "Use Generated for pf2_ room secrets, or choose a different custom password.",
+      message: "Use Generated for pf3_ or pf2_ room secrets, or choose a different custom password.",
     };
   }
   const validation = validateRoomSecret(value);
@@ -167,9 +171,9 @@ export function validateCustomRoomSecret(
 }
 
 /**
- * Converts a human-authored password into the fixed-width, high-cost secret
- * material expected by protocol v4. Generated 256-bit secrets pass through so
- * existing rooms and invitations retain their exact cryptographic identity.
+ * Converts custom passwords and 128-bit generated secrets into the 32-byte
+ * material expected by protocol v4. Derivation does not add password entropy.
+ * Legacy 256-bit secrets pass through to preserve existing room identities.
  */
 export async function deriveProtocolRoomSecret(
   roomId: string,
@@ -182,7 +186,7 @@ export async function deriveProtocolRoomSecret(
   }
   const validation = validateRoomSecret(value);
   if (!validation.valid) throw new TypeError(validation.message);
-  const generated = isGeneratedRoomSecret(validation.secret);
+  const legacyGenerated = PROTOCOL_SECRET_RE.test(validation.secret);
 
   const crypto = globalThis.crypto;
   if (!crypto?.subtle) throw new Error("WebCrypto is required to protect a custom room password");
@@ -201,12 +205,12 @@ export async function deriveProtocolRoomSecret(
       hash: "SHA-256",
       iterations: CUSTOM_ROOM_SECRET_KDF_ITERATIONS,
       salt: saltBytes,
-    }, inputKey, GENERATED_SECRET_BYTES * 8));
-    // Generated credentials already contain 256 random bits and retain their
+    }, inputKey, PROTOCOL_SECRET_BYTES * 8));
+    // Legacy credentials already contain 256 random bits and retain their
     // exact protocol identity. Running the same expensive derivation before
-    // returning them prevents a relay from classifying weaker custom-password
-    // rooms by challenge-to-authenticate latency alone.
-    return generated ? validation.secret : ROOM_SECRET_PREFIX + base64Url(derived);
+    // returning them prevents a relay from classifying password formats by
+    // challenge-to-authenticate latency alone.
+    return legacyGenerated ? validation.secret : PROTOCOL_SECRET_PREFIX + base64Url(derived);
   } finally {
     secretBytes.fill(0);
     saltBytes.fill(0);

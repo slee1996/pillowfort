@@ -10,7 +10,7 @@ export type FortPassAvailability =
 
 export type FortPassCheckoutResult =
   | { ok: true; code: string; checkoutUrl: string; sessionId: string }
-  | { ok: false; error: "invalid_custom_room_code" | "custom_room_code_taken" | "checkout_not_configured" | "checkout_provider_error" | "unknown"; code?: string };
+  | { ok: false; error: "invalid_custom_room_code" | "custom_room_code_taken" | "checkout_not_configured" | "checkout_provider_error" | "checkout_rate_limited" | "checkout_source_unavailable" | "checkout_reservation_unavailable" | "unknown"; code?: string };
 
 export type FortPassStatus = {
   beta: boolean;
@@ -21,7 +21,7 @@ export type FortPassStatus = {
 
 export type FortPassRedemptionResult =
   | { ok: true; code: string }
-  | { ok: false; error: "pending" | "invalid_checkout_redemption" | "checkout_not_redeemable" | "checkout_not_configured" | "checkout_rate_limited" | "checkout_verification_failed" | "unknown" };
+  | { ok: false; error: "pending" | "invalid_checkout_redemption" | "checkout_not_redeemable" | "checkout_not_configured" | "checkout_rate_limited" | "checkout_source_unavailable" | "checkout_redemption_unavailable" | "checkout_verification_failed" | "unknown" };
 
 const FORT_PASS_SESSION_RE = /^cs_(?:test_|live_)?[A-Za-z0-9_]{3,255}$/;
 const STRIPE_HOSTED_CHECKOUT_ORIGIN = "https://checkout.stripe.com";
@@ -29,6 +29,7 @@ const MAX_STRIPE_CHECKOUT_URL_LENGTH = 8 * 1024;
 const MAX_FORT_PASS_API_RESPONSE_BYTES = 16 * 1024;
 const MAX_FORT_PASS_API_RESPONSE_CHUNKS = 8_192;
 const FORT_PASS_CLAIM_STORAGE_PREFIX = "pillowfort:fort-pass-claim:v1:";
+const FORT_PASS_CHECKOUT_URL_STORAGE_PREFIX = "pillowfort:fort-pass-checkout-url:v1:";
 const FORT_PASS_PENDING_REDEMPTION_KEY = "pillowfort:fort-pass-pending-redemption:v1";
 const MAX_FORT_PASS_PENDING_REDEMPTION_BYTES = 512;
 
@@ -168,6 +169,7 @@ export function clearFortPassClaimSecret(sessionIdInput: string): void {
   try {
     const storage = claimStorage();
     storage?.removeItem(`${FORT_PASS_CLAIM_STORAGE_PREFIX}${sessionId}`);
+    storage?.removeItem(`${FORT_PASS_CHECKOUT_URL_STORAGE_PREFIX}${sessionId}`);
     if (storage) {
       const pending = readPendingFortPassRedemption(storage);
       if (pending?.sessionId === sessionId) storage.removeItem(FORT_PASS_PENDING_REDEMPTION_KEY);
@@ -207,7 +209,8 @@ export function rememberPendingFortPassRedemption(
   try {
     if (storage.getItem(`${FORT_PASS_CLAIM_STORAGE_PREFIX}${sessionId}`) !== claimSecret) return false;
     storage.setItem(FORT_PASS_PENDING_REDEMPTION_KEY, JSON.stringify({ code, sessionId }));
-    return true;
+    const pending = readPendingFortPassRedemption(storage);
+    return pending?.code === code && pending.sessionId === sessionId;
   } catch {
     return false;
   }
@@ -230,6 +233,42 @@ export function getPendingFortPassRedemption(): PendingFortPassRedemption | null
     return { ...pending, claimSecret };
   } catch {
     return null;
+  }
+}
+
+export function getPendingFortPassCheckoutUrl(sessionIdInput: string): string | null {
+  const sessionId = normalizeFortPassSessionId(sessionIdInput);
+  if (!sessionId || sessionId !== sessionIdInput) return null;
+  const pending = getPendingFortPassRedemption();
+  if (pending?.sessionId !== sessionId) return null;
+  try {
+    const checkoutUrl = normalizeStripeHostedCheckoutUrl(
+      claimStorage()?.getItem(`${FORT_PASS_CHECKOUT_URL_STORAGE_PREFIX}${sessionId}`),
+    );
+    return checkoutUrl && !checkoutUrl.includes(pending.claimSecret) ? checkoutUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+export function fortPassRedemptionErrorMessage(
+  error: Extract<FortPassRedemptionResult, { ok: false }>["error"],
+): string {
+  switch (error) {
+    case "pending":
+      return "Payment verification is still pending. Complete the original checkout if needed, then retry this same purchase in this tab. Do not buy another pass.";
+    case "checkout_rate_limited":
+      return "Too many verification attempts. Wait a moment, then retry this same purchase in this tab. Do not buy another pass.";
+    case "checkout_not_configured":
+      return "Purchase verification is unavailable right now. Keep this tab and retry the original purchase later. Do not buy another pass.";
+    case "invalid_checkout_redemption":
+    case "checkout_not_redeemable":
+      return "This purchase could not be verified. Use the original checkout tab and retry the same purchase. If it still fails, contact support about that purchase; do not buy another pass.";
+    case "checkout_source_unavailable":
+    case "checkout_redemption_unavailable":
+    case "checkout_verification_failed":
+    case "unknown":
+      return "We could not confirm this purchase right now. Keep this tab and retry the same purchase in a moment. Do not buy another pass.";
   }
 }
 
@@ -293,13 +332,15 @@ export async function getFortPassStatus(): Promise<FortPassStatus> {
     headers: { "accept": "application/json" },
   });
   const data = await readBoundedApiJson(res);
-  if (res.status !== 200 || !data || !exactKeys(data, ["beta", "checkoutConfigured", "priceLabel", "perks"])) {
+  if (res.status !== 200 || !data || !exactKeys(data, ["beta", "checkoutConfigured", "priceLabel", "perks"]) ||
+    typeof data.beta !== "boolean" || typeof data.checkoutConfigured !== "boolean" ||
+    data.priceLabel !== "$5") {
     throw new Error("invalid Fort Pass status response");
   }
   return {
-    beta: data?.beta === true,
-    checkoutConfigured: data?.checkoutConfigured === true,
-    priceLabel: typeof data?.priceLabel === "string" && data.priceLabel.length <= 12 ? data.priceLabel : "$5",
+    beta: data.beta,
+    checkoutConfigured: data.checkoutConfigured,
+    priceLabel: data.priceLabel,
     perks: Array.isArray(data?.perks)
       ? data.perks.filter((perk): perk is string => typeof perk === "string" && perk.length <= 32).slice(0, 8)
       : [],
@@ -331,11 +372,17 @@ export async function startFortPassCheckout(code: string): Promise<FortPassCheck
     && exactKeys(data, ["code", "checkoutUrl", "sessionId"])
     && data.code === canonicalCode
     && checkoutUrl
+    && !checkoutUrl.includes(claimSecret)
     && sessionId
     && sessionId === data.sessionId
   ) {
     try {
       storage.setItem(`${FORT_PASS_CLAIM_STORAGE_PREFIX}${sessionId}`, claimSecret);
+      storage.setItem(`${FORT_PASS_CHECKOUT_URL_STORAGE_PREFIX}${sessionId}`, checkoutUrl);
+      if (
+        !rememberPendingFortPassRedemption(canonicalCode, sessionId, claimSecret)
+        || getPendingFortPassCheckoutUrl(sessionId) !== checkoutUrl
+      ) return { ok: false, error: "checkout_provider_error" };
     } catch {
       return { ok: false, error: "checkout_provider_error" };
     }
@@ -355,6 +402,9 @@ export async function startFortPassCheckout(code: string): Promise<FortPassCheck
     custom_room_code_taken: 409,
     checkout_not_configured: 501,
     checkout_provider_error: 502,
+    checkout_rate_limited: 429,
+    checkout_source_unavailable: 503,
+    checkout_reservation_unavailable: 503,
   } as const;
   if (error in expectedStatus && res.status === expectedStatus[error as keyof typeof expectedStatus] && data) {
     const responseCode = data.code;
@@ -407,6 +457,8 @@ export async function redeemFortPassCheckout(
     checkout_not_configured: 501,
     checkout_rate_limited: 429,
     checkout_verification_failed: 502,
+    checkout_source_unavailable: 503,
+    checkout_redemption_unavailable: 503,
   } as const;
   if (
     data

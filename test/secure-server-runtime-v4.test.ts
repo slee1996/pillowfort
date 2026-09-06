@@ -430,11 +430,11 @@ describe("protocol-v4 local relay runtime", () => {
     void server.stop(true);
   });
 
-  it("authenticates setup/join, forbids downgrade traffic, and resumes by the stored device key", async () => {
+  it.each(["connected", "disconnected"] as const)("authenticates setup/join, cancels a %s guest, forbids downgrade traffic, and resumes by the stored device key", async (guestState) => {
     const server = startLocalServer(0);
     servers.push(server);
     const port = server.port;
-    const roomId = "f-cccccccccc";
+    const roomId = guestState === "connected" ? "f-cccccccccc" : "f-ffffffffff";
     const roomSecret = "high entropy room invitation secret";
     const roomInstance = generateSecureRelayIdV4();
     const hostDeviceId = generateSecureRelayIdV4();
@@ -549,9 +549,12 @@ describe("protocol-v4 local relay runtime", () => {
       admissionId: joinRequestId,
       memberBinding: guestBinding,
     });
-    await guest.close();
-    expect(await host.waitFor((frame) => frame.type === "member-lifecycle"
-      && frame.deviceId === guestDeviceId && frame.status === "disconnected")).toMatchObject({ status: "disconnected" });
+    if (guestState === "disconnected") {
+      await guest.close();
+      expect(await host.waitFor((frame) => frame.type === "member-lifecycle"
+        && frame.deviceId === guestDeviceId && frame.status === "disconnected")).toMatchObject({ status: "disconnected" });
+    }
+    const guestClosed = guestState === "connected" ? waitForSocketClose(guest.ws) : null;
 
     const cancelRequestId = generateSecureRelayIdV4();
     host.ws.send(JSON.stringify({
@@ -560,6 +563,11 @@ describe("protocol-v4 local relay runtime", () => {
     }));
     expect(await host.waitFor((frame) => frame.type === "frame-accepted"
       && frame.messageId === cancelRequestId)).toMatchObject({ messageId: cancelRequestId });
+    if (guestClosed) {
+      expect(await guest.waitFor((frame) => frame.type === "member-lifecycle"
+        && frame.deviceId === guestDeviceId && frame.status === "retired")).toMatchObject({ status: "retired" });
+      expect(await guestClosed).toMatchObject({ code: 1008, reason: "membership ended" });
+    }
     await host.close();
     await Bun.sleep(30);
 
@@ -614,6 +622,13 @@ describe("protocol-v4 local relay runtime", () => {
 
     await resumed.close();
     await Bun.sleep(30);
+    if (guestState === "connected") {
+      // As with the server-initiated authentication closes above, Bun 1.3
+      // can leave stop(true)'s bookkeeping promise pending after close events.
+      // The guest retirement and both host closes have already been observed.
+      servers.splice(servers.indexOf(server), 1);
+      void server.stop(true);
+    }
   }, 15_000);
 
 });

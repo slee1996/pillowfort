@@ -210,9 +210,7 @@ export function initializeSecureRoomUiV4(options: {
   store.clearMessages();
   syncPersistent(state, ownDeviceId);
   store.setScreen("chat");
-  store.addSystemMessage(options.resumed ? "Reconnected securely." : "Welcome to the secure fort.");
-  store.addSystemMessage(`Fort flag: ${roomId}`);
-  if (!options.resumed) store.addSystemMessage("Share the fort flag and room secret privately to let your friends in.");
+  if (options.resumed) store.addSystemMessage("Reconnected securely.");
   playDoorOpen();
   void requestWakeLock();
 }
@@ -253,7 +251,9 @@ export function applySecureRoomUiV4(
         }
         break;
       case "typing":
-        window.dispatchEvent(new CustomEvent("pf-typing", { detail: effect.displayName }));
+        if (effect.deviceId !== ownDeviceId) {
+          window.dispatchEvent(new CustomEvent("pf-typing", { detail: effect.displayName }));
+        }
         break;
       case "drawing": {
         if (rememberDisplayedId(displayedDrawingIds, effect.eventId)) {

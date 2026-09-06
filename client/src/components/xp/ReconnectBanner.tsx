@@ -7,7 +7,7 @@ export function ReconnectBanner() {
   if (!reconnecting) return null;
 
   return (
-    <div className="reconnect-banner">
+    <div className="reconnect-banner" role="status">
       Reconnecting... (attempt {attempts}/3)
     </div>
   );

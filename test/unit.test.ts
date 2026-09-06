@@ -6,11 +6,11 @@ import {
   clearFortPassClaimSecret,
   fortPassReturnCleanupPath,
   getFortPassClaimSecret,
+  getPendingFortPassCheckoutUrl,
   getPendingFortPassRedemption,
   normalizeFortPassCode,
   normalizeFortPassSessionId,
   redeemFortPassCheckout,
-  rememberPendingFortPassRedemption,
   startFortPassCheckout,
 } from "../client/src/services/fortPass";
 import { getDiscordActivityContext } from "../client/src/services/discordActivity";
@@ -35,9 +35,6 @@ import { isRpsPick, rpsWinner, tttWinner, voteHasMajority } from "../src/game";
 import { isDiscordActivityRequest, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders } from "../src/security";
 import { sanitizeDraw, sanitizeStyle, uniqueName, STYLE_COLORS, MAX_DRAW_POINTS, MAX_NAME_LEN } from "../src/shared";
 import {
-  CUSTOM_ROOM_SECRET_KDF,
-  CUSTOM_ROOM_SECRET_MAX_LENGTH,
-  CUSTOM_ROOM_SECRET_MIN_LENGTH,
   deriveProtocolRoomSecret,
   generateRoomId,
   generateRoomSecret,
@@ -83,23 +80,52 @@ function installMemorySessionStorage(): { values: Map<string, string>; restore: 
 }
 
 describe("room secrets", () => {
-  it("generates a high-entropy base64url secret", () => {
+  it("generates a compact canonical 128-bit base64url secret", () => {
     const first = generateRoomSecret();
     const second = generateRoomSecret();
-    expect(first).toMatch(/^pf2_[A-Za-z0-9_-]{43}$/);
+    expect(first).toMatch(/^pf3_[A-Za-z0-9_-]{21}[AQgw]$/);
+    expect(first).toHaveLength(26);
     expect(second).not.toBe(first);
     expect(validateRoomSecret(first)).toEqual({ valid: true, secret: first });
-    for (let sample = 0; sample < 128; sample++) {
-      expect(validateRoomSecret(generateRoomSecret()).valid).toBe(true);
+    expect(isGeneratedRoomSecret(first)).toBe(true);
+  });
+
+  it("accepts canonical generated formats and reserves both namespaces from custom entry", () => {
+    for (const [prefix, leadingLength, finalCharacters] of [
+      ["pf3_", 21, "AQgw"],
+      ["pf2_", 42, "AEIMQUYcgkosw048"],
+    ] as const) {
+      for (const finalCharacter of finalCharacters) {
+        const secret = prefix + "A".repeat(leadingLength) + finalCharacter;
+        expect(isGeneratedRoomSecret(secret)).toBe(true);
+        expect(validateRoomSecret(secret)).toEqual({ valid: true, secret });
+        expect(validateCustomRoomSecret(secret).valid).toBe(false);
+      }
+    }
+  });
+
+  it("rejects malformed reserved secrets instead of treating them as custom passwords", async () => {
+    for (const [prefix, suffixLength] of [["pf3_", 22], ["pf2_", 43]] as const) {
+      for (const suffix of [
+        "A".repeat(suffixLength - 1),
+        "A".repeat(suffixLength + 1),
+        "A".repeat(suffixLength - 1) + "B",
+        "A".repeat(suffixLength) + "=",
+        "+".repeat(suffixLength - 1) + "A",
+      ]) {
+        const secret = prefix + suffix;
+        expect(isGeneratedRoomSecret(secret)).toBe(false);
+        expect(validateRoomSecret(secret).valid).toBe(false);
+        expect(validateCustomRoomSecret(secret).valid).toBe(false);
+        await expect(deriveProtocolRoomSecret("abcdefghij", "AAAAAAAAAAAAAAAAAAAAAA", secret))
+          .rejects.toBeInstanceOf(TypeError);
+      }
     }
   });
 
   it("accepts bounded custom passwords without weakening generated-secret parsing", () => {
     const variedUnicode = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x400 + index)).join("");
     const variedEmoji = Array.from({ length: 64 }, (_, index) => String.fromCodePoint(0x1f300 + index)).join("");
-    expect(CUSTOM_ROOM_SECRET_MIN_LENGTH).toBe(6);
-    expect(CUSTOM_ROOM_SECRET_MAX_LENGTH).toBe(64);
-    expect(CUSTOM_ROOM_SECRET_KDF).toBe("pbkdf2-sha256-600k-room-v1");
     expect(validateRoomSecret("Velvet!Orbit7-Cedar")).toEqual({ valid: true, secret: "Velvet!Orbit7-Cedar" });
     expect(validateRoomSecret("four cozy pillows")).toEqual({ valid: true, secret: "four cozy pillows" });
     expect(validateRoomSecret("orb!7x")).toEqual({ valid: true, secret: "orb!7x" });
@@ -134,9 +160,6 @@ describe("room secrets", () => {
     expect(validateRoomSecret("correcthorsebatterystaple").valid).toBe(true);
     expect(validateRoomSecret("abcd".repeat(16)).valid).toBe(true);
     expect(validateRoomSecret(null).valid).toBe(false);
-    expect(validateRoomSecret(`pf2_${"A".repeat(42)}`).valid).toBe(false);
-    expect(validateRoomSecret(`pf2_${"A".repeat(42)}B`).valid).toBe(false);
-    expect(validateCustomRoomSecret(`pf2_${"A".repeat(43)}`).valid).toBe(false);
   });
 
   it("hardens custom passwords into room-instance-bound canonical protocol secrets", async () => {
@@ -154,8 +177,6 @@ describe("room secrets", () => {
     expect(isGeneratedRoomSecret(first)).toBe(true);
     expect(validateRoomSecret(first)).toEqual({ valid: true, secret: first });
 
-    const generated = generateRoomSecret();
-    expect(await deriveProtocolRoomSecret(roomId, roomInstance, generated)).toBe(generated);
     const creationBlockedLegacy = "correcthorsebatterystaple";
     expect(validateCustomRoomSecret(creationBlockedLegacy).valid).toBe(false);
     expect(await deriveProtocolRoomSecret(roomId, roomInstance, creationBlockedLegacy)).toBe(
@@ -163,6 +184,25 @@ describe("room secrets", () => {
     );
     await expect(deriveProtocolRoomSecret("INVALID", roomInstance, password)).rejects.toThrow("invalid canonical room id");
     await expect(deriveProtocolRoomSecret(roomId, "invalid", password)).rejects.toThrow("invalid canonical room instance");
+  });
+
+  it("preserves legacy generated invitations exactly across room contexts", async () => {
+    const legacy = "pf2_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
+    expect(await deriveProtocolRoomSecret("abcdefghij", "AAAAAAAAAAAAAAAAAAAAAA", legacy)).toBe(legacy);
+    expect(await deriveProtocolRoomSecret("klmnopqrst", "AQEBAQEBAQEBAQEBAQEBAQ", legacy)).toBe(legacy);
+  });
+
+  it("expands compact generated secrets into deterministic room-bound 32-byte protocol material", async () => {
+    const secret = "pf3_AAECAwQFBgcICQoLDA0ODw";
+    const roomId = "abcdefghij";
+    const roomInstance = "AAAAAAAAAAAAAAAAAAAAAA";
+    const first = await deriveProtocolRoomSecret(roomId, roomInstance, secret);
+    expect(first).toMatch(/^pf2_[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
+    expect(atob(first.slice(4).replace(/-/g, "+").replace(/_/g, "/")).length).toBe(32);
+    expect(await deriveProtocolRoomSecret(roomId, roomInstance, secret)).toBe(first);
+    expect(await deriveProtocolRoomSecret("klmnopqrst", roomInstance, secret)).not.toBe(first);
+    expect(await deriveProtocolRoomSecret(roomId, "AQEBAQEBAQEBAQEBAQEBAQ", secret)).not.toBe(first);
+    expect(await deriveProtocolRoomSecret(roomId, roomInstance, "pf3_AQEBAQEBAQEBAQEBAQEBAQ")).not.toBe(first);
   });
 
   it("generates crypto-backed room IDs in the expected format", () => {
@@ -649,7 +689,7 @@ describe("Fort Pass client helpers", () => {
     expect(fortPassReturnCleanupPath("/", "?code=party-1", "")).toBeNull();
   });
 
-  it("keeps the raw checkout claim tab-scoped and recovers a redeemed pass after navigation", async () => {
+  it("keeps the raw checkout claim tab-scoped and recovers the original checkout before redemption", async () => {
     const originalFetch = globalThis.fetch;
     const storage = installMemorySessionStorage();
     let requestBody: Record<string, unknown> = {};
@@ -673,15 +713,16 @@ describe("Fort Pass client helpers", () => {
       expect(await fortPassClaimHash(claimSecret)).toBe(requestBody.claimHash);
       expect(requestBody.claimHash).not.toBe(claimSecret);
 
-      expect(rememberPendingFortPassRedemption("party-1", "cs_test_123", claimSecret!)).toBe(true);
       expect(getPendingFortPassRedemption()).toEqual({
         code: "party-1",
         sessionId: "cs_test_123",
         claimSecret,
       });
+      expect(getPendingFortPassCheckoutUrl("cs_test_123")).toBe("https://checkout.stripe.com/c/pay/cs_test_123");
       clearFortPassClaimSecret("cs_test_123");
       expect(getFortPassClaimSecret("cs_test_123")).toBeNull();
       expect(getPendingFortPassRedemption()).toBeNull();
+      expect(getPendingFortPassCheckoutUrl("cs_test_123")).toBeNull();
     } finally {
       globalThis.fetch = originalFetch;
       storage.restore();

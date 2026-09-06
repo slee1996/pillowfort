@@ -1,8 +1,9 @@
 # Fort Pass Support Runbook
 
-Use this runbook for the first paid Fort Pass beta. Keep the support posture
-simple: one paid room upgrade, accountless guests, manual refunds, no chat
-history storage.
+Use this internal runbook for the first paid Fort Pass beta. Keep the support
+posture simple: one paid room upgrade, accountless guests, manual refunds,
+and no plaintext server chat history. This document is not a published
+customer refund policy or a monitored support channel.
 
 ## Support Scope
 
@@ -21,6 +22,24 @@ Fort Pass support does not cover:
 - Identifying anonymous guests.
 - Restoring a knocked-down fort.
 - Permanent ownership of a room code.
+
+## Paid Promotion Gate
+
+Keep paid promotion blocked until:
+
+- An owner approves and publishes the customer refund policy and a monitored
+  support destination, assigns a response owner, and makes both discoverable
+  before purchase. Align Stripe receipts/business support details with that
+  destination. No public support endpoint currently exists in the repository;
+  do not invent one or treat this internal runbook as a substitute.
+- The purchase explanation states that Fort Pass upgrades one temporary room,
+  guests do not pay, codes are not permanently owned, and checkout must finish
+  in the originating tab. Publish the approved recovery/refund terms rather
+  than promising secret or account recovery.
+- The intended live deployment's price, credentials, Checkout return origin,
+  and required webhook subscriptions are verified, and an authorized live
+  same-tab purchase, return, redemption, and refund are observed end to end.
+  Historical sandbox results and a configured status response are not proof.
 
 ## Information To Collect
 
@@ -41,9 +60,11 @@ Do not ask for:
 
 ## Refund Policy
 
-For the beta, refund quickly and manually.
+The following is an internal beta recommendation, not a published commitment.
+The owner must approve the actual policy and refund window before paid
+promotion. Until then, do not present these recommendations as customer terms.
 
-Recommended rule:
+Recommended handling:
 
 - Refund any Fort Pass request within the paid room window unless there is clear
   abuse.
@@ -61,6 +82,10 @@ Current product behavior:
 - Delayed events for an older Checkout Session cannot revoke a newer owner.
 - Provider/API outages return a retryable webhook error rather than silently
   accepting an unverified revocation.
+- Room teardown deletes live room state and the encrypted delivery backlog,
+  but retains minimal payment/redemption integrity records, including refunded
+  tombstones, to prevent replay or an older purchase affecting a newer one.
+  It does not imply deletion of Stripe records or operational metadata.
 
 ## Common Cases
 
@@ -92,6 +117,8 @@ Action:
 
 - Check Worker logs for `/api/stripe/webhook`.
 - Confirm the webhook secret matches the deployed endpoint.
+- Confirm the endpoint subscribes to `checkout.session.completed`,
+  `charge.refunded`, and `charge.dispute.created` in the correct Stripe mode.
 - Confirm the event is `checkout.session.completed` with `payment_status:
   paid` and Fort Pass metadata.
 - Retry or replay the provider event if available.
@@ -134,20 +161,37 @@ Action:
 
 ## Operational Checks
 
-Before enabling Fort Pass publicly:
+Before enabling Fort Pass publicly, satisfy the paid promotion gate above and
+record these checks (do not infer dashboard configuration from this document):
 
 - Run `npm run typecheck`.
 - Run `npm test`.
 - Run `npm run build`.
 - Complete one test-mode Stripe purchase against the deployed URL.
+- Verify `checkout.session.completed`, `charge.refunded`, and
+  `charge.dispute.created` are all enabled on the deployment's Stripe webhook
+  endpoint, with matching API and signing credentials.
+- Verify the configured one-time amount, currency, and applicable tax
+  presentation match the buyer-facing offer; a sandbox price is not live proof.
 - Confirm `/api/stripe/webhook` rejects unsigned payloads.
 - Confirm a signed paid event makes the code unavailable.
 - Confirm partial refund, full refund, and dispute events revoke only their
-  exact Checkout Session and are safe to replay.
-- Confirm setup from the checkout success URL creates the paid room.
+  exact Checkout Session, remove paid perks without destroying the active
+  encrypted room, and are safe to replay. Use separate test-mode purchases.
+- Deliver a verified refund before completion fulfillment; then deliver and
+  replay completion and confirm the refunded purchase cannot grant or redeem.
+- Replay completion after redemption and after refund; confirm no duplicate
+  grant or resurrection. Replay older refund/dispute events after a newer
+  purchase uses the code; confirm the newer entitlement remains unaffected.
+- Confirm the checkout success return creates the paid room in the same tab
+  that started Checkout.
 - Confirm copied success URLs cannot redeem without the originating tab secret.
 - Confirm setup without either the Checkout Session ID or the matching claim
   secret is rejected.
+- Complete and observe an authorized live same-tab purchase, return,
+  redemption, and refund on the intended public deployment before paid
+  promotion. Keep dispute and ordering exercises in test mode; do not create
+  a live dispute merely to verify the integration.
 
 ## Support Copy
 
@@ -156,7 +200,10 @@ Use concise copy:
 - "Fort Pass upgrades one disposable room."
 - "Guests do not need accounts or payment."
 - "Paid rooms are still temporary."
-- "We do not store chat history or room passwords."
+- "Room content is end-to-end encrypted. Ending a fort deletes its live room
+  state and encrypted delivery backlog; minimal payment integrity records
+  remain."
+- "We cannot recover room passwords or restore a knocked-down fort."
 
 Avoid copy that implies:
 

@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { installPillowfortAgent } from "./agent/bridge";
 import "./styles/app.css";
 
 function syncVisualViewportVars() {
@@ -8,6 +9,7 @@ function syncVisualViewportVars() {
   const top = vv ? vv.offsetTop : 0;
   document.documentElement.style.setProperty("--vvh", `${height}px`);
   document.documentElement.style.setProperty("--vv-top", `${top}px`);
+  document.documentElement.toggleAttribute("data-compact-room", window.innerWidth <= 600 && height <= 400);
 }
 
 // Visual viewport handler (virtual keyboard + iOS viewport offset)
@@ -18,5 +20,11 @@ if (window.visualViewport) {
 }
 window.addEventListener("resize", syncVisualViewportVars);
 window.addEventListener("orientationchange", syncVisualViewportVars);
+
+// Opt-in transport surface, not a privilege boundary: same-origin JavaScript
+// already has the participant's authority. Preserve all normal URL handling.
+if (new URLSearchParams(location.search).get("agent") === "1") {
+  installPillowfortAgent();
+}
 
 createRoot(document.getElementById("root")!).render(<App />);

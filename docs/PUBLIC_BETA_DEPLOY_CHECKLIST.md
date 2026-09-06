@@ -8,13 +8,13 @@ Worker entrypoint, and one Durable Object class for room state.
 
 Do not deploy a public beta unless all of these are true:
 
-- `npm run typecheck` passes.
-- `npm test` passes.
-- `npm run build` passes.
+- `npm run check` passes. This single executable gate runs typecheck, `npm test`,
+  and the production build in order, stopping on the first failure.
 - Worker routing and Durable Object alarm tests pass as part of `npm test`.
-- `npm run test:security` passes for invitation and device authentication,
+- `npm test` also runs the security suite for invitation and device authentication,
   MLS add/remove/update epochs, durable replay rejection, exact resume ordering,
-  membership barriers, malformed-frame rejection, and encrypted game events.
+  membership barriers, malformed-frame rejection, and encrypted game events; do
+  not run it a second time as a separate release requirement.
 - `wrangler.toml` still points at `src/index.ts`.
 - `client/dist` was produced by the current commit.
 - The Durable Object migration list still includes the `Room` class.
@@ -25,6 +25,10 @@ Do not deploy a public beta unless all of these are true:
 - `/api/fort-pass/status` reports `checkoutConfigured: true` before Fort Pass
   is promoted outside quiet beta. This requires Checkout and webhook secrets.
 
+Read paid status from the configured canonical checkout origin. A noncanonical
+`workers.dev` alias can intentionally report `checkoutConfigured: false`; this
+does not by itself establish missing credentials or a different Worker.
+
 Optional but recommended before a marketing push:
 
 - `npm run test:design-snapshots`
@@ -32,18 +36,23 @@ Optional but recommended before a marketing push:
 
 ## Preflight Commands
 
-From the repo root:
+Use Node.js 22.13+ and Bun 1.3.14; the release-check CI workflow uses Node.js 22.
+The security gate runs persistent-browser tests with Node's native TypeScript
+support and the remaining suites with Bun. From the repo root, install both
+dependency trees from their committed lockfiles and install Playwright Chromium:
 
 ```bash
-npm install
-cd client
-npm install
-cd ..
+npm ci
+npm --prefix client ci
+npx playwright install --with-deps chromium
 
-npm run typecheck
-npm test
-npm run build
+npm run check
 ```
+
+The release-check workflow runs the same gate on pushes and pull requests with
+read-only repository permissions, without deployment secrets or private
+submodule checkout. It never deploys. Optional marketing and UI suites remain
+separate from this gate.
 
 Confirm Cloudflare auth before deploying:
 
@@ -51,7 +60,9 @@ Confirm Cloudflare auth before deploying:
 npx wrangler whoami
 ```
 
-Deploy:
+Deploy with the guarded entrypoint. It reruns `npm run check`, rebuilding assets
+from the selected source revision, and invokes Wrangler only if every gate
+stage succeeds:
 
 ```bash
 npm run deploy
@@ -62,21 +73,42 @@ npm run deploy
 Run this against the deployed URL, not only local development:
 
 1. Open the home screen on desktop.
-2. Create one fort with the locked, generated `pf2_` room secret, then repeat
-   with an explicit 16+ character custom password.
-3. Copy the flag and secret from the intentional room controls; confirm the
-   secret is masked unless revealed.
-4. Join from a second browser profile or device with each secret. Confirm a
+2. Use copy-and-create with the locked generated password. Confirm the new
+   default is exactly 26 characters: `pf3_` plus 22 canonical unpadded
+   base64url characters, ending in `A`, `Q`, `g`, or `w`. Repeat with an
+   explicit 16+ character custom password.
+3. Deny clipboard permission and repeat creation. Confirm no room is silently
+   created: manually copy the password and explicitly confirm it is saved
+   before continuing.
+4. Copy the flag and password from Invite; confirm the password is masked
+   unless revealed.
+5. Join from a second browser profile or device with each password. Confirm a
    wrong custom password is rejected before a host approval prompt and can be
    corrected in the same browser.
-5. Approve the pending device from the host, compare the displayed safety
+6. Approve the pending device from People, compare the displayed safety
    fingerprints out of band, then send one styled message from each participant
    and confirm text and style arrive in order.
-6. Start one lightweight game, preferably Rock Paper Scissors.
-7. Disconnect and reconnect one participant inside the grace window.
-8. Change presence to away and back.
-9. Knock the fort down as host.
-10. Confirm the old room cannot be rejoined as an active room.
+7. Reload and recover the original device by re-entering the exact saved
+   password, for both the new default and custom-password rooms. Confirm the
+   existing identity resumes rather than requiring an unintended new admission.
+8. With a still-live protocol-v4 room created using the old canonical `pf2_`
+   format (32 bytes, 43 base64url suffix characters), join from another browser
+   with the original invitation, then reload and recover an established device
+   using that same password. Confirm the old room and device identities remain
+   intact; do not substitute a newly generated `pf3_` password for the old one.
+9. Start one lightweight game from Play, preferably Rock Paper Scissors.
+10. Disconnect and reconnect one participant inside the grace window.
+11. Change presence to away and back.
+12. Knock the fort down as host from Room, confirming the destructive action.
+13. Confirm the old room cannot be rejoined as an active room.
+
+These are required smoke scenarios, not a record that they have been executed.
+The short default carries 128 bits of random entropy; its room-bound
+600,000-round PBKDF2-HMAC-SHA-256 resolution produces a canonical 32-byte
+`pf2_` protocol secret, not 256 bits of input entropy. The old `pf2_` path keeps
+its exact secret after equivalent derivation/wiping for timing compatibility,
+and the custom-password controls and derivation remain unchanged. Neither
+reserved namespace may fall back to custom input when malformed.
 
 Mobile smoke:
 
@@ -184,7 +216,9 @@ Security behavior:
 
 Immediately after deploy:
 
-- Watch Worker logs for uncaught exceptions.
+- Observe uncaught exceptions without saving raw real-time tail output or request
+  envelopes. Keep invocation logs disabled; retain only sanitized application
+  events and redacted exception details, never request URLs or secret material.
 - Confirm `/analytics` accepts known events and rejects unknown events.
 - Confirm sanitized analytics log lines do not include names, room codes,
   room secrets, authentication material, or message text.
@@ -202,8 +236,10 @@ Immediately after deploy:
   metadata.
 - Confirm the non-secret Stripe setup record in `docs/STRIPE_TEST_SETUP.md` is
   current before running paid tests.
-- Keep the paid SKU private until there is a written refund/support process and
-  one successful production-mode Stripe test purchase.
+- Keep paid promotion blocked until the [Paid Promotion Gate](FORT_PASS_SUPPORT_RUNBOOK.md#paid-promotion-gate)
+  is satisfied: owner-approved public refund/support details and an explicitly
+  authorized live-mode purchase, return, redemption, and refund. A sandbox smoke
+  or `checkoutConfigured: true` is not sufficient.
 - Use `docs/FORT_PASS_SUPPORT_RUNBOOK.md` for paid beta support and refunds.
 - Watch for repeated websocket close/error patterns.
 - Watch room creation rate-limit hits.
@@ -223,10 +259,24 @@ If the deploy breaks room creation, websocket join, message send, or fort
 destruction:
 
 1. Stop promotion and stop sharing the beta URL.
-2. Deploy the last known good commit with `npx wrangler deploy`.
-3. Verify create, join, chat, reconnect, and knock-down on the rolled-back URL.
-4. Preserve logs from the failed deploy before they age out.
-5. Write the incident summary in `docs/` or the issue tracker before retrying.
+2. Select a verified known-good source revision and record its commit and
+   deployment/version ID. Confirm its Worker, browser protocol, Durable Object
+   schema, and migrations are compatible with the state currently in production.
+   A code rollback does not roll back Durable Object storage or reverse migrations;
+   if compatibility cannot be established, do not deploy that revision.
+3. Use a clean checkout of that revision and repeat the locked dependency and
+   Playwright installation steps above. Ensure its scripts retain the guarded
+   `npm run check` then Wrangler deployment chain documented here; restore that
+   guard before proceeding if the historical revision predates it.
+4. Run `npm run deploy` from that checkout. The gate must pass and regenerate
+   matching client assets before Wrangler uploads them. Never roll back with a
+   bare `npx wrangler deploy` or reuse `client/dist` from another revision.
+5. Verify create, join, chat, reconnect, and knock-down on the rolled-back URL.
+6. Preserve only sanitized application events and redacted exception details from
+   the failed deploy. Never save raw real-time tail output, request envelopes or
+   URLs, room codes, secrets, authentication material, or message content.
+7. Write the incident summary in `docs/` or the issue tracker before retrying,
+   using only those sanitized records.
 
 If analytics breaks but rooms still work:
 

@@ -43,7 +43,10 @@ afterAll(async () => {
 });
 
 async function newPage(): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   contexts.push(ctx);
   const page = await ctx.newPage();
   await page.goto(`http://localhost:${getPort()}/`);
@@ -103,24 +106,18 @@ async function waitForMessage(page: Page, text: string): Promise<void> {
 }
 
 async function drawStroke(page: Page, points: [number, number][]): Promise<void> {
-  await page.locator("#game-canvas").evaluate((canvas, normalizedPoints) => {
-    const element = canvas as HTMLCanvasElement;
-    const rect = element.getBoundingClientRect();
-    const dispatch = (type: string, point: [number, number], buttons: number) => {
-      element.dispatchEvent(new PointerEvent(type, {
-        bubbles: true,
-        pointerId: 1,
-        pointerType: "mouse",
-        isPrimary: true,
-        buttons,
-        clientX: rect.left + point[0] * rect.width,
-        clientY: rect.top + point[1] * rect.height,
-      }));
-    };
-    dispatch("pointerdown", normalizedPoints[0], 1);
-    for (const point of normalizedPoints.slice(1)) dispatch("pointermove", point, 1);
-    dispatch("pointerup", normalizedPoints[normalizedPoints.length - 1], 0);
-  }, points);
+  await page.click("#btn-open-games");
+  await page.click("#btn-start-drawing");
+  const canvas = await page.locator("#game-canvas").boundingBox();
+  if (!canvas) throw new Error("Drawing canvas is not visible");
+  await page.mouse.move(canvas.x + points[0][0] * canvas.width, canvas.y + points[0][1] * canvas.height);
+  await page.mouse.down();
+  for (const [x, y] of points.slice(1)) {
+    await page.mouse.move(canvas.x + x * canvas.width, canvas.y + y * canvas.height, { steps: 4 });
+  }
+  await page.mouse.up();
+  await page.click("#btn-return-room");
+  await page.waitForSelector(".room-shell", { state: "visible" });
 }
 
 async function observeRemoteDraws(page: Page): Promise<void> {
@@ -141,35 +138,31 @@ async function waitForRemoteDraw(page: Page, count: number): Promise<void> {
   );
 }
 
-async function maskDynamic(page: Page) {
-  await page.evaluate(() => {
-    const rc = document.getElementById("room-code");
-    if (rc) rc.textContent = "abc12345";
-    // The room flag is also rendered in system chat and the buddy panel.
-    // Normalize text nodes in place so their surrounding markup/styles remain intact.
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let textNode: Node | null;
-    while ((textNode = walker.nextNode())) {
-      textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
-    }
-    document.querySelectorAll(".msg-time, .chat-timestamp").forEach((el) => {
-      (el as HTMLElement).textContent = "12:00";
-    });
-    // Saboteur role system messages (role text differs each run)
-    document.querySelectorAll(".msg-system, .chat-message-system").forEach((el) => {
-      const text = (el as HTMLElement).textContent || "";
-      if (text.includes("saboteur") || text.includes("Saboteur") || text.includes("defender") || text.includes("strike")) {
-        (el as HTMLElement).textContent = "Role assigned. The game begins!";
-      }
-    });
-  });
-}
 
 async function assertScreenshot(page: Page, name: string) {
-  await maskDynamic(page);
   await sleep(100);
 
-  const screenshotBuf = await page.screenshot({ type: "png" });
+  const screenshotBuf = await page.screenshot({
+    type: "png",
+    mask: [
+      page.locator("#room-code"),
+      page.locator(".chat-timestamp"),
+      page.locator(".sab-role-badge"),
+      page.locator('.sab-strike-btn, [title="Accuse Saboteur"]'),
+      page.locator(".chat-message-system").filter({
+        hasText: /YOU are the saboteur!|You are a defender\./,
+      }),
+    ],
+    // Normalize only random role geometry during capture, not game state or chat.
+    style: `
+      .sab-role-badge { box-sizing: border-box !important; width: 220px !important; height: 28px !important; }
+      .sab-strike-btn, [title="Accuse Saboteur"] {
+        box-sizing: border-box !important; flex: 0 0 160px !important;
+        width: 160px !important; height: 44px !important; min-height: 44px !important;
+        margin: 0 !important; animation: none !important;
+      }
+    `,
+  });
   const path = `${SNAPSHOT_DIR}/${name}.png`;
   const file = Bun.file(path);
 
@@ -218,7 +211,6 @@ async function setupRoom(page: Page): Promise<string> {
   await page.fill("#name-input", "luna");
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
-  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");
@@ -343,34 +335,35 @@ describe("Full tour: Drawing", () => {
     ]);
     await waitForRemoteDraw(page, 3);
 
+    await page.click("#btn-open-games");
+    await page.click("#btn-start-drawing");
     await assertScreenshot(page, "03-drawing");
+    await page.click("#btn-return-room");
+    await sendChat(page, "our shared sketchbook");
+    await waitForMessage(kai, "our shared sketchbook");
   });
 });
 
 // --- Phase 4: Breakout ---
 
 describe("Full tour: Breakout", () => {
-  it("chat minimize/maximize works, breakout auto-starts", async () => {
+  it("starts Breakout from Play and returns to the conversation", async () => {
     const page = await newPage();
     const roomCode = await setupRoom(page);
 
     await joinBrowser(page, roomCode, "javi");
     await waitForAllMembers(2);
 
-    // Minimize chat → auto-starts breakout
+    await page.click("#btn-open-games");
     await page.click("#chat-btn-min");
     await sleep(500);
 
     await assertScreenshot(page, "04-breakout");
 
-    // Restore chat
-    await page.click("#chat-btn-min");
-    await sleep(300);
-
-    await page.waitForFunction(() => {
-      const win = document.querySelector('.chat-window');
-      return win && !win.classList.contains('minimized');
-    });
+    await page.click("#btn-return-room");
+    await page.waitForSelector(".room-shell", { state: "visible" });
+    await sendChat(page, "back from Breakout");
+    await waitForMessage(page, "back from Breakout");
   });
 });
 
@@ -386,12 +379,13 @@ describe("Full tour: Rock Paper Scissors", () => {
     await joinBrowser(page, roomCode, "kai");
     await waitForAllMembers(4);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-rps");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "javi" }).click();
 
     await javi.waitForSelector("#rps-overlay.open");
-    await javi.click("#rps-actions .xp-btn-primary", { force: true });
+    await javi.click("#rps-actions .xp-btn-primary");
 
     await page.waitForSelector("#rps-overlay.open");
     await page.waitForSelector(".rps-pick");
@@ -428,12 +422,13 @@ describe("Full tour: Tic-Tac-Toe", () => {
     await joinBrowser(page, roomCode, "kai");
     await waitForAllMembers(4);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-ttt");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "priya" }).click();
 
     await priya.waitForSelector("#ttt-overlay.open");
-    await priya.click("#ttt-actions .xp-btn-primary", { force: true });
+    await priya.click("#ttt-actions .xp-btn-primary");
 
     // Wait for the board to render with 9 cells
     await page.waitForFunction(() => {
@@ -444,7 +439,7 @@ describe("Full tour: Tic-Tac-Toe", () => {
 
     // luna(4), priya(0), luna(2), priya(6), luna(5), priya(1), luna(8)
     await page.locator("#ttt-board > *").nth(4).click();
-    await priya.locator("#ttt-board > *").nth(4).waitFor({ state: "visible" });
+    await priya.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length === 1);
     await priya.locator("#ttt-board > *").nth(0).click();
     await page.waitForFunction(() => document.querySelectorAll("#ttt-board > .ttt-cell:not(:empty)").length >= 2);
     await page.locator("#ttt-board > *").nth(2).click();
@@ -482,6 +477,7 @@ describe("Full tour: Saboteur", () => {
     const kai = await joinBrowser(page, roomCode, "kai");
     await waitForAllMembers(4);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-sab");
 
     // V4 distributes the encrypted role state to every admitted member.
@@ -512,6 +508,7 @@ describe("Full tour: King of the Hill", () => {
     const kai = await joinBrowser(page, roomCode, "kai");
     await waitForAllMembers(4);
 
+    await kai.click("#btn-open-games");
     await kai.click("#aim-btn-koth");
 
     await page.waitForSelector("#rps-overlay.open", { timeout: 5000 });
@@ -533,13 +530,16 @@ describe("Full tour: King of the Hill", () => {
 
     // Dismiss overlay
     await page.waitForSelector("#rps-actions .xp-btn");
-    await page.click("#rps-actions .xp-btn", { force: true });
-    await kai.click("#rps-actions .xp-btn", { force: true });
+    await page.click("#rps-actions .xp-btn");
+    await kai.click("#rps-actions .xp-btn");
     await sleep(300);
 
     // Luna won, so relay authority must not move to the challenger.
+    await page.click("#btn-room-menu");
     await page.waitForSelector("#btn-knock-down", { state: "visible" });
+    await kai.click("#btn-room-menu");
     expect(await kai.locator("#btn-leave-room").isVisible()).toBe(true);
+    await javi.click("#btn-room-menu");
     expect(await javi.locator("#btn-leave-room").isVisible()).toBe(true);
   });
 });
@@ -556,8 +556,9 @@ describe("Full tour: Pillow Fight", () => {
     const kai = await joinBrowser(page, roomCode, "kai");
     await waitForAllMembers(4);
 
+    await page.click("#btn-open-games");
     await page.click("#aim-btn-vote");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "javi" }).click();
     await sleep(500);
 
@@ -588,19 +589,24 @@ describe("Full tour: Pillow Toss + Knock Down", () => {
     await waitForAllMembers(4);
 
     // Luna tosses host to kai
+    await page.click("#btn-room-menu");
     await page.click("#aim-btn-toss");
-    await page.waitForSelector("#member-picker-overlay.open");
+    await page.waitForSelector("dialog#member-picker-overlay[open]");
     await page.locator("#member-picker-body .member-picker-item", { hasText: "kai" }).click();
     await kai.waitForSelector("#host-offer-overlay", { timeout: 15_000 });
     await kai.click("#btn-catch");
 
     // Verify the capability-bound host transfer reached every participant.
+    await kai.click("#btn-room-menu");
     await kai.waitForSelector("#btn-knock-down", { state: "visible", timeout: 15_000 });
+    await javi.click("#btn-room-menu");
     expect(await javi.locator("#btn-leave-room").isVisible()).toBe(true);
+    await priya.click("#btn-room-menu");
     expect(await priya.locator("#btn-leave-room").isVisible()).toBe(true);
 
     // kai knocks down
     await kai.click("#btn-knock-down");
+    await kai.click("#btn-confirm-room-exit");
 
     await page.waitForSelector("#btn-home", { state: "visible", timeout: 5000 });
     await assertScreenshot(page, "11-knocked-down");

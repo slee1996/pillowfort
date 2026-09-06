@@ -1,6 +1,36 @@
 # Early-00s IM UI References
 
-This pass keeps Pillowfort in the desktop instant-messenger lane: dense, practical, small controls, visible presence, and skinnable room chrome.
+The historical exploration below is not a literal UI specification. The current direction in [PROJECT_LEAD_BRIEF.md](PROJECT_LEAD_BRIEF.md) applies the verified AIM 4.x comps to a focused, private fort: a room-scoped buddy roster, separate transcript/editor panes, and explicit People, Invite, Room, and Play controls—not ads, global buddy graphs, or stacked utility menus.
+
+## Verified Screenshot Comps
+
+- [AIM reference board](design-comps/aim/aim-reference-board.png): six labeled Buddy List, conversation, away-state, and sign-on comps.
+- [Messenger contrast board](design-comps/aim/messenger-contrast-board.png): MSN 6, ICQ 2000a, and two later AIM iPhone screens.
+- [Browsable source gallery](design-comps/aim/index.html): all 11 originals, source links, version evidence, and caveats.
+- [Machine-readable provenance](design-comps/aim/sources.json): original/resolved URLs, dimensions, file hashes, and the one explicitly labeled crop.
+
+The strongest baseline is the [archived first-party AIM 4.7 page](https://web.archive.org/web/20020119232831/http://aim.aol.com/) and its original screenshot assets. The [AIM 4.8 away-message tutorial](https://web.archive.org/web/20030410070015/http://www.awaymessages.com/guide/aim1.htm) and its archived editor image provide another period-confirmed reference. The sign-on and customized conversation images from [Defragg](https://defragg.com/history-of-aim-aol-instant-messenger/) are explicitly labeled secondary: the sign-on visibly identifies version 3.0.1464, but their original capture dates are unverified.
+
+### What the screenshots establish
+
+- The period AIM 4.7/4.8 examples use gray controls and white transcript/editor areas. A uniformly cream interface is an interpretation, not a universal AIM default.
+- Blue title bars and bevels are shared Windows conventions. Grouped Buddy Lists, away-note markers, running-man/buddy branding, colored screen names, and personal expression are more AIM-specific.
+- The IM window separates transcript and composition, with formatting between them; it is not just a recolored single-line modern chat composer.
+- The first-party preferences screenshot explicitly shows a configurable Buddy List font set to Arial, size 9. Do not assume one universal Tahoma treatment across all AIM surfaces.
+- The secondary customized screenshot is useful for buddy-icon/personality layering, not for establishing the default client skin.
+- [AIM for iPhone in 2010](https://www.webdesignmuseum.org/iphone/aim-for-iphone-in-2010) preserves buddy identity/groups while using mobile-native chrome. It is a later translation comp, not a desktop-era baseline.
+
+For Pillowfort, the next design decision should select an explicit AIM-era baseline and adapt room-scoped presence, personal identity, and conversation rhythm. Do not inherit ads, global account graphs, or outdated security. No application code or styling changed in this research pass.
+
+These are reference-only images of proprietary software, not cleared product artwork. Archive capture dates are not software release dates; all uncertainties and the Flickr uploader attribution are retained in the source catalog.
+
+## Applied Direction
+
+The approved application uses A01–A03 as the baseline: white transcript/editing areas, gray controls, and a restrained navy cap. A narrow desktop roster and compact mobile presence strip expose actual room membership and user-set Available/Away state; host identity is preserved across those groups.
+
+The composer is a real multiline editor with its formatting band above it and Play/Send actions below. Enter sends once, Shift+Enter inserts a newline, and IME composition does not submit. The shorter generated passwords, accountless entry, encrypted room events, host approval, and exit confirmations remain unchanged.
+
+The screenshots remain reference material only. The implementation uses Pillowfort-owned branding and existing personalization; no AOL screenshots or mascot assets were imported into the product.
 
 ## Primary References
 

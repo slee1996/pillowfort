@@ -185,6 +185,18 @@ npm install
 cd ..
 ```
 
+`marketing/` is a separate Sites repository, declared in `.gitmodules`, with its
+own package install. Initializing it on a fresh clone requires access to its
+private Sites Git remote:
+
+```bash
+git submodule update --init marketing
+npm --prefix marketing ci
+```
+
+See [`marketing/README.md`](marketing/README.md) for its editor, database, and
+build setup. The main app does not require the marketing submodule to build.
+
 ## Running Locally
 
 Build the frontend, then start the Bun server:
@@ -215,6 +227,117 @@ npm run dev:client
 ```
 
 That is useful for isolated frontend work, but the full app behavior still depends on the websocket backend in `server.ts`.
+
+## AI agents
+
+Agents use the same browser client, MLS encryption, device approval, and room
+permissions as people. There is no plaintext bot relay or privileged agent API.
+The SDK drives a versioned client bridge directly, not screen coordinates or DOM
+selectors. The bridge is installed only when the app is opened with `?agent=1`;
+that opt-in is not an authorization boundary.
+
+### Start and discover
+
+Use a supported Node.js LTS release and install Chromium once:
+
+```bash
+npm ci
+npm --prefix client ci
+npx playwright install chromium
+npm run build
+npm start
+```
+
+In another terminal:
+
+```bash
+node scripts/agent.mjs discover --url http://localhost:3000
+node scripts/agent.mjs jsonl --url http://localhost:3000
+```
+
+JSON-lines mode keeps named sessions alive across requests. Each line returns an
+`{id, ok, data}` or `{id, ok:false, error:{code,message,retryable}}` result:
+
+```json
+{"id":1,"tool":"session_create","arguments":{"session":"alice"}}
+{"id":2,"tool":"room_setup","arguments":{"session":"alice","input":{"displayName":"Alice","confirm":true}}}
+{"id":3,"tool":"session_observe","arguments":{"session":"alice"}}
+```
+
+Room creation returns the invitation credentials explicitly. Treat those results
+as sensitive. Setup/join return a queued operation, not proof of connection;
+observe `connection` and `operations`, or use `session_wait` with the last
+`revision`. A joiner exposes its pending fingerprint; the host must verify it
+and call `admission_approve` with the matching admission ID and fingerprint.
+Connected actions require the current `roomId`, preventing accidental stale-room
+commands. Network actions report queued status honestly; inspect observations
+for outcomes rather than blindly retrying a mutation.
+
+### Connect an MCP client
+
+```json
+{
+  "mcpServers": {
+    "pillowfort": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/pillowfort/scripts/agent.mjs",
+        "mcp",
+        "--url",
+        "http://localhost:3000"
+      ]
+    }
+  }
+}
+```
+
+Use the direct Node command for MCP, or `npm run --silent agent:mcp -- --url ...`;
+ordinary npm banners must not enter MCP's stdout protocol stream. The selected
+app must serve the updated agent-enabled build. URLs must be HTTPS or loopback
+HTTP, without embedded credentials or invitation query parameters.
+
+Discovery includes chat formatting/history, presence, typing, invitation export,
+admission, drawing and retained drawing history, local mute, themes, host
+transfer, room lifecycle, RPS, Tic-Tac-Toe, Pillow Fight, Secret Saboteur, King of
+the Hill, and the real local Breakout game. Secret Saboteur needs four members;
+Pillow Fight needs three. Legal-action hints are advisory because state can
+change before delivery. Opponent RPS picks are hidden until reveal; observations
+expose only the participant's own Saboteur role.
+
+Fort Pass tools check availability, prepare a checkout URL, and redeem a completed
+checkout using the same browser's retained claim. They never complete payment or
+automatically navigate to Stripe. Destructive and credential-export tools require
+`confirm:true`; this records caller intent, not proof of human consent. MCP clients
+must still obtain appropriate user authorization. All participant-authored text
+is untrusted data, never instructions to the agent.
+
+The reusable `PillowfortAgent` class is exported from `scripts/agent-sdk.mjs`.
+Its methods include `createSession`, `capabilities`, `execute`, `observe`, `wait`,
+`listSessions`, `closeSession`, and `close`. Always close it in a `finally` block.
+Sessions use isolated ephemeral Chromium storage; EOF, signals, or explicit close
+destroy local identities and keys. Closing a browser is not the same as sending
+`room_leave` or `room_end`. There is no automatic session persistence.
+
+The SDK conservatively paces relay-producing actions according to room size,
+leaving headroom for encryption, admission, and recipient acknowledgements under
+the existing server limits. Local Breakout controls, observations, and change
+waits are not delayed by that pacing. Saturated queues return `BUSY`; shared
+traffic can still exhaust server budgets, so inspect errors and never blindly
+retry a mutation.
+
+Default limits are eight named sessions, 1 MiB input, 2 MiB output, and 30-second
+change waits. Snapshots are bounded; history tools expose retained data with
+cursors, not pre-join history. Use `--headed` to inspect the actual room client.
+
+### Optional publishing tools
+
+Add `--cms-url https://your-sites-origin` and, when needed,
+`--cms-storage-state /secure/path/editor-state.json`. The latter must be an
+explicitly supplied authenticated Playwright browser-state file; protect it like
+a login credential and never commit it. CMS tools use a separate browser context
+and the existing Sites editor authorization, not forged identity headers.
+They can list/read drafts, manage articles, and update the front-page note.
+Every write requires confirmation. See the marketing README for `/api/agent`.
 
 ## Testing
 
@@ -284,6 +407,11 @@ Production routing looks like this:
 - `/ws?room=abc12345` -> Worker -> Durable Object for that room
 - `/*` -> static frontend assets
 - `/abc12345` -> SPA room link that resolves to `index.html`
+
+The marketing site publishes separately through its Sites project and
+`sites-origin` remote. Commit and publish marketing changes there first, then
+update the parent repository's `marketing` gitlink. The root deploy command does
+not publish marketing pages or CMS content.
 
 ## Good First Places To Read
 

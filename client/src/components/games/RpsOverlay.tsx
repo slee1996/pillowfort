@@ -64,6 +64,7 @@ export function RpsOverlay() {
                     key={pick}
                     className="rps-pick"
                     title={pick}
+                    aria-label={pick}
                     onClick={() => {
                       useGameStore.getState().setRpsState({ ...rps, myPick: pick });
                       send("rps-pick", { pick });

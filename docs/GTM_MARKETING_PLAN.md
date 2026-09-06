@@ -22,8 +22,8 @@ What exists now:
 - Browser-side encrypted chat payloads.
 - No public room directory.
 - No durable chat history for late joiners.
-- AIM / Windows XP visual identity.
-- Built-in small-group games: drawing, RPS, Tic-Tac-Toe, Secret Saboteur, King of the Hill, Pillow Fight vote-to-kick, Breakout-on-minimize.
+- Retro-flavored, product-first private room interface.
+- Built-in small-group games: drawing, RPS, Tic-Tac-Toe, Secret Saboteur, King of the Hill, Pillow Fight vote-to-kick, and solo Breakout from Play.
 - Fort Pass beta path for custom codes, 6-hour idle, and social skins.
 - Cloudflare Worker + Durable Object production architecture.
 - Privacy-safe analytics log events and weekly report script.

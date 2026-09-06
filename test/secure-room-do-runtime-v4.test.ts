@@ -648,7 +648,7 @@ describe("protocol-v4 Durable Object runtime", () => {
     expect(state.storage.values.has(SECURE_RELAY_MANIFEST_KEY_V4)).toBe(true);
   });
 
-  it("closes sockets whose committed membership becomes retired", async () => {
+  it("delivers committed device retirement before closing its cleared-connection socket", async () => {
     const state = new TestState();
     const room = new Room(state as unknown as DurableObjectState, env());
     await state.ready;
@@ -660,11 +660,24 @@ describe("protocol-v4 Durable Object runtime", () => {
       secureConnectionId: generateSecureRelayIdV4(), secureAuthentication: "invitation",
     }, state.storage.events);
     state.sockets.push(socket);
+    Reflect.set(room, "secureRelayState", {
+      members: [{ deviceId, connectionId: null, status: "retired" }],
+    });
+    let noticeBeforeClose = false;
+    const close = socket.close.bind(socket);
+    socket.close = (code, reason) => {
+      noticeBeforeClose = socket.sent.some((wire) => {
+        const frame = parseSecureServerFrameV4(JSON.parse(wire));
+        return frame?.type === "member-lifecycle" && frame.deviceId === deviceId && frame.status === "retired";
+      });
+      close(code, reason);
+    };
 
     (room as any).dispatchSecureEffects([
       { type: "member-lifecycle", deviceId, status: "retired" },
     ] satisfies SecureRelayEffectV4[]);
 
+    expect(noticeBeforeClose).toBe(true);
     expect(socket.closed).toEqual({ code: 1008, reason: "membership ended" });
     expect(socket.attachment.secureAuthenticated).toBe(false);
   });

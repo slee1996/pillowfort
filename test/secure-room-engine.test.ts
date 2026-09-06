@@ -3038,9 +3038,10 @@ describe("protocol-v4 durable secure room engine", () => {
         import("/src/services/secureRoomEngine.ts"),
       ]);
 
-      const exercise = async (kind: "terminal" | "pre-auth") => {
+      const exercise = async (kind: "terminal" | "lifecycle" | "pre-auth") => {
         sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
         const roomInstance = stateModule.randomSecureRoomIdV4(16);
+        const deviceId = stateModule.randomSecureRoomIdV4(16);
         const events: string[] = [];
         const settlements: unknown[] = [];
         const controller = new SecureRoomController();
@@ -3057,6 +3058,7 @@ describe("protocol-v4 durable secure room engine", () => {
         };
         harness.engine = {
           roomInstance,
+          deviceId,
           pendingOutbox: [],
           isProvisional: false,
           isAuthenticationAmbiguous: true,
@@ -3078,9 +3080,16 @@ describe("protocol-v4 durable secure room engine", () => {
         harness.terminal = false;
         harness.unresolvedAuthentication = true;
         harness.rememberRecoveryContext();
-        if (kind === "terminal") {
+        if (kind === "terminal" || kind === "lifecycle") {
           harness.authenticated = true;
-          await harness.finishTerminal("This secure fort is no longer available.");
+          if (kind === "terminal") {
+            await harness.finishTerminal("room-destroyed", "This secure fort is no longer available.");
+          } else {
+            await harness.handleServerFrame({
+              kind: "secure-server", v: 4, suite: 1, type: "member-lifecycle",
+              deviceId, status: "retired",
+            });
+          }
         } else {
           harness.authenticated = false;
           harness.authenticatedMode = "join";
@@ -3111,6 +3120,7 @@ describe("protocol-v4 durable secure room engine", () => {
       try {
         return {
           terminal: await exercise("terminal"),
+          lifecycle: await exercise("lifecycle"),
           preAuth: await exercise("pre-auth"),
         };
       } finally {
@@ -3119,8 +3129,9 @@ describe("protocol-v4 durable secure room engine", () => {
     });
 
     expect(result.terminal.settlement).toBeNull();
+    expect(result.lifecycle.settlement).toBeNull();
     expect(result.preAuth.settlement).toEqual({ status: "failed", reason: "recovery-required" });
-    for (const outcome of [result.terminal, result.preAuth]) {
+    for (const outcome of [result.terminal, result.lifecycle, result.preAuth]) {
       expect(outcome.recovery).toEqual({
         mode: "join", roomId: "abcdefghij", displayName: "Cleanup Guest",
       });
@@ -3946,6 +3957,95 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.messageSawCurrentSocket).toBe(true);
     expect(result.closeWaitedBehindMessage).toBe(true);
     expect(result.closeReconciledAfterMessage).toBe(true);
+  });
+
+  it("ends a rejected pending admission before socket close can reconnect its retired identity", async () => {
+    const result = await page.evaluate(async () => {
+      const [{ SecureRoomController }, stateModule, { useGameStore }] = await Promise.all([
+        import("/src/services/secureRoomController.ts"),
+        import("/src/services/secureRoomState.ts"),
+        import("/src/stores/gameStore.ts"),
+      ]);
+      const NativeWebSocket = window.WebSocket;
+      const sockets: FakeWebSocket[] = [];
+      class FakeWebSocket {
+        static readonly OPEN = 1;
+        readyState = FakeWebSocket.OPEN;
+        onmessage: ((event: { data: string }) => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor(_url: string) { sockets.push(this); }
+        close() {}
+      }
+      Object.defineProperty(window, "WebSocket", { configurable: true, writable: true, value: FakeWebSocket });
+      try {
+        const controller = new SecureRoomController();
+        // Exercise the real serialized socket handlers with deterministic
+        // transport and durable-erasure boundaries instead of network timing.
+        const harness = controller as unknown as {
+          authenticated: boolean;
+          openSocket: (generation: number) => void;
+          serialQueue: Promise<void>;
+        };
+        const roomInstance = stateModule.randomSecureRoomIdV4(16);
+        const deviceId = stateModule.randomSecureRoomIdV4(16);
+        let releaseRetire!: () => void;
+        let retireEntered!: () => void;
+        const retireGate = new Promise<void>((resolve) => { releaseRetire = resolve; });
+        const retireStarted = new Promise<void>((resolve) => { retireEntered = resolve; });
+        let reconnects = 0;
+        Object.assign(harness, {
+          generation: 51,
+          stopped: false,
+          terminal: false,
+          unresolvedAuthentication: true,
+          config: {
+            initialMode: "join",
+            roomId: "rejectjoin",
+            roomSecret: "unused",
+            displayName: "Pending guest",
+            roomInstance,
+            setupRoomInstance: null,
+          },
+          engine: {
+            deviceId,
+            retire: async () => { retireEntered(); await retireGate; },
+            dispose: () => {},
+          },
+          lease: { isActive: () => true, release: () => {} },
+          scheduleReconnect: () => { reconnects += 1; },
+        });
+        useGameStore.getState().setScreen("join");
+        harness.openSocket(51);
+        harness.authenticated = true;
+        const socket = sockets[0]!;
+        socket.onmessage?.({ data: JSON.stringify({
+          kind: "secure-server", v: 4, suite: 1, type: "member-lifecycle",
+          deviceId, status: "retired",
+        }) });
+        socket.onclose?.();
+        await retireStarted;
+        const actionAcceptedDuringRetirement = controller.sendUiAction("chat", { text: "too late" });
+        releaseRetire();
+        await harness.serialQueue;
+        return {
+          actionAcceptedDuringRetirement,
+          reconnects,
+          screen: useGameStore.getState().screen,
+          presentation: useGameStore.getState().terminalPresentation,
+        };
+      } finally {
+        Object.defineProperty(window, "WebSocket", { configurable: true, writable: true, value: NativeWebSocket });
+        useGameStore.getState().cleanup();
+        useGameStore.getState().setScreen("home");
+      }
+    });
+    expect(result).toEqual({
+      actionAcceptedDuringRetirement: false,
+      reconnects: 0,
+      screen: "knocked",
+      presentation: "admission-required",
+    });
   });
 
   it("shows an inbound self-removal as a knocked terminal state, not a voluntary leave", async () => {

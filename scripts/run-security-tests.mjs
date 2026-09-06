@@ -10,7 +10,6 @@ const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 // release gate independent of unrelated local servers and guarantees every
 // hook gets a fresh runtime to tear down.
 const groups = [
-  ["test/replay-persistence.test.ts"],
   ["test/mls-protocol-v4.test.ts", "test/openmls-wasm-zeroization.test.ts"],
   ["test/secure-room-engine.test.ts"],
   ["test/security-boundaries.test.ts"],
@@ -31,7 +30,16 @@ const groups = [
   ],
 ];
 
-let passedFiles = 0;
+// Persistent Chromium profiles use Playwright's Node runtime host.
+const persistenceResult = spawnSync(
+  process.execPath,
+  ["--experimental-strip-types", "--test", "test/replay-persistence.node.ts"],
+  { cwd: repositoryRoot, stdio: "inherit" },
+);
+if (persistenceResult.error) throw persistenceResult.error;
+if (persistenceResult.status !== 0) process.exit(persistenceResult.status ?? 1);
+
+let passedFiles = 1;
 for (const files of groups) {
   const result = spawnSync(
     "bun",

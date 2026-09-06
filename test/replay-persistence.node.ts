@@ -1,41 +1,67 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { after, afterEach, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServer, type ViteDevServer } from "../client/node_modules/vite/dist/node/index.js";
 
 let vite: ViteDevServer;
-let baseUrl: string;
+let fixtureUrl: string;
 const contexts: BrowserContext[] = [];
 const profileDirectories: string[] = [];
+const FIXTURE_PATH = "/__test/replay-persistence.html";
 
-beforeAll(async () => {
+before(async () => {
   vite = await createServer({
-    root: join(import.meta.dir, "../client"),
+    root: fileURLToPath(new URL("../client", import.meta.url)),
     logLevel: "error",
+    plugins: [{
+      name: "replay-persistence-fixture",
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          if (request.url !== FIXTURE_PATH) return next();
+          // These tests import real modules directly; app startup is not part
+          // of the IndexedDB, persistent-profile, or Web Locks contract.
+          response.setHeader("Content-Type", "text/html; charset=utf-8");
+          response.end("<!doctype html><html><head><meta charset=\"utf-8\"><title>Replay persistence</title></head><body></body></html>");
+        });
+      },
+    }],
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
   await vite.listen();
-  baseUrl = vite.resolvedUrls?.local[0] || vite.resolvedUrls?.network[0] || "";
+  const baseUrl = vite.resolvedUrls?.local[0] || vite.resolvedUrls?.network[0];
   if (!baseUrl) throw new Error("Vite did not expose a replay-persistence test URL");
-}, 30_000);
+  fixtureUrl = new URL(FIXTURE_PATH, baseUrl).href;
+}, { timeout: 30_000 });
 
 afterEach(async () => {
   for (const context of contexts.splice(0)) {
-    try { await context.close(); } catch {}
+    await closePersistentContext(context);
   }
-}, 30_000);
+}, { timeout: 30_000 });
 
-afterAll(async () => {
+after(async () => {
   for (const context of contexts.splice(0)) {
-    try { await context.close(); } catch {}
+    await closePersistentContext(context);
   }
   await vite?.close();
   for (const directory of profileDirectories.splice(0)) {
     try { await rm(directory, { recursive: true, force: true }); } catch {}
   }
-}, 30_000);
+}, { timeout: 30_000 });
+
+async function closePersistentContext(context: BrowserContext): Promise<void> {
+  try {
+    for (const page of context.pages()) {
+      await page.close();
+    }
+  } finally {
+    await context.close();
+  }
+}
 
 async function persistentContext(profileDirectory: string): Promise<BrowserContext> {
   const context = await chromium.launchPersistentContext(profileDirectory, { headless: true });
@@ -45,7 +71,7 @@ async function persistentContext(profileDirectory: string): Promise<BrowserConte
 
 async function readyPage(context: BrowserContext): Promise<Page> {
   const page = context.pages()[0] || await context.newPage();
-  await page.goto(baseUrl);
+  await page.goto(fixtureUrl);
   return page;
 }
 
@@ -54,7 +80,7 @@ function uniqueDatabase(label: string): string {
 }
 
 describe("durable replay and cryptographic state", () => {
-  it("derives opaque v4 store keys and erases secrets without erasing replay tombstones", async () => {
+  it("derives opaque v4 store keys and erases secrets without erasing replay tombstones", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-v4-state-profile-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("v4-state-erasure");
@@ -119,29 +145,29 @@ describe("durable replay and cryptographic state", () => {
         replayAfterRecreate,
       };
     }, { databaseName });
-
-    expect(result.opaqueRoomInstance).toBe(result.repeatedDerivation);
-    expect(result.opaqueRoomInstance).not.toContain(result.publicRoomInstance);
-    expect(result.opaqueRoomInstance).not.toBe(result.legacyDomainKey);
-    expect(result.committed).toEqual({ committed: true, revision: 1 });
-    expect(result.staleErase).toEqual({
+  
+    assert.equal(result.opaqueRoomInstance, result.repeatedDerivation);
+    assert.ok(!(result.opaqueRoomInstance).includes(result.publicRoomInstance));
+    assert.notEqual(result.opaqueRoomInstance, result.legacyDomainKey);
+    assert.deepEqual(result.committed, { committed: true, revision: 1 });
+    assert.deepEqual(result.staleErase, {
       erased: false,
       reason: "revision-conflict",
       currentRevision: 1,
     });
-    expect(result.stateAfterStaleErase).toEqual([7, 8, 9]);
-    expect(result.erased).toEqual({ erased: true, revision: 1 });
-    expect(result.stateAfterErase).toBeNull();
-    expect(result.replayAfterErase).toEqual({ accepted: false, reason: "replay", currentSequence: 12 });
-    expect(result.recreated).toEqual({ committed: true, revision: 1 });
-    expect(result.replayAfterRecreate).toBe(12);
-  }, 30_000);
+    assert.deepEqual(result.stateAfterStaleErase, [7, 8, 9]);
+    assert.deepEqual(result.erased, { erased: true, revision: 1 });
+    assert.equal(result.stateAfterErase, null);
+    assert.deepEqual(result.replayAfterErase, { accepted: false, reason: "replay", currentSequence: 12 });
+    assert.deepEqual(result.recreated, { committed: true, revision: 1 });
+    assert.equal(result.replayAfterRecreate, 12);
+  });
 
-  it("rejects the same replay position after a persistent browser profile restarts", async () => {
+  it("rejects the same replay position after a persistent browser profile restarts", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-replay-profile-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("restart");
-
+  
     let context = await persistentContext(profile);
     let page = await readyPage(context);
     const first = await page.evaluate(async ({ databaseName }) => {
@@ -157,10 +183,10 @@ describe("durable replay and cryptographic state", () => {
       await store.close();
       return { roomInstance, result };
     }, { databaseName });
-    expect(first.result).toEqual({ accepted: true, previousSequence: 0, currentSequence: 7 });
-
+    assert.deepEqual(first.result, { accepted: true, previousSequence: 0, currentSequence: 7 });
+  
     contexts.splice(contexts.indexOf(context), 1);
-    await context.close();
+    await closePersistentContext(context);
     context = await persistentContext(profile);
     page = await readyPage(context);
     const afterRestart = await page.evaluate(async ({ databaseName, roomInstance }) => {
@@ -181,19 +207,19 @@ describe("durable replay and cryptographic state", () => {
       await store.close();
       return { replay, next };
     }, { databaseName, roomInstance: first.roomInstance });
+  
+    assert.deepEqual(afterRestart.replay, { accepted: false, reason: "replay", currentSequence: 7 });
+    assert.deepEqual(afterRestart.next, { accepted: true, previousSequence: 7, currentSequence: 8 });
+  });
 
-    expect(afterRestart.replay).toEqual({ accepted: false, reason: "replay", currentSequence: 7 });
-    expect(afterRestart.next).toEqual({ accepted: true, previousSequence: 7, currentSequence: 8 });
-  }, 30_000);
-
-  it("serializes concurrent compare-and-advance operations across tabs", async () => {
+  it("serializes concurrent compare-and-advance operations across tabs", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-replay-tabs-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("tabs");
     const context = await persistentContext(profile);
     const firstPage = await readyPage(context);
     const secondPage = await context.newPage();
-    await secondPage.goto(baseUrl);
+    await secondPage.goto(fixtureUrl);
     const roomInstance = await firstPage.evaluate(async () => {
       const module = await import("/src/services/cryptoStateStore.ts");
       return module.deriveCryptoRoomInstance("tabs-room", "B".repeat(43));
@@ -213,15 +239,15 @@ describe("durable replay and cryptographic state", () => {
         await store.close();
       }
     }, input);
-
+  
     const results = await Promise.all([advance(firstPage), advance(secondPage)]);
-    expect(results.filter((result) => result.accepted)).toHaveLength(1);
-    expect(results.filter((result) => !result.accepted)).toEqual([
+    assert.equal((results.filter((result) => result.accepted)).length, 1);
+    assert.deepEqual(results.filter((result) => !result.accepted), [
       { accepted: false, reason: "replay", currentSequence: 11 },
     ]);
-  }, 30_000);
+  });
 
-  it("uses revision CAS for opaque state and migrates one room from the strict v1 ledger", async () => {
+  it("uses revision CAS for opaque state and migrates one room from the strict v1 ledger", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-replay-migrate-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("migration");
@@ -240,7 +266,7 @@ describe("durable replay and cryptographic state", () => {
       const conflictingMove = await store.compareAndMoveOpaqueState(roomInstance, 2, occupiedDestination);
       const sourceAfterMoveConflict = await store.loadOpaqueState(roomInstance);
       const destinationAfterMoveConflict = await store.loadOpaqueState(occupiedDestination);
-
+  
       const rawLedger = JSON.stringify({
         v: 1,
         entries: [
@@ -276,21 +302,21 @@ describe("durable replay and cryptographic state", () => {
         replay,
       };
     }, { databaseName });
+  
+    assert.deepEqual(result.firstCommit, { committed: true, revision: 1 });
+    assert.deepEqual(result.conflictingCommit, { committed: false, reason: "revision-conflict", currentRevision: 1 });
+    assert.deepEqual(result.secondCommit, { committed: true, revision: 2 });
+    assert.deepEqual(result.snapshot, { revision: 2, state: [4, 5], updatedAt: 1234 });
+    assert.deepEqual(result.conflictingMove, { moved: false, reason: "destination-exists", currentRevision: 1 });
+    assert.deepEqual(result.sourceAfterMoveConflict, [4, 5]);
+    assert.deepEqual(result.destinationAfterMoveConflict, [7, 8]);
+    assert.deepEqual(result.migration, { migrated: true, importedEntries: 1 });
+    assert.deepEqual(result.repeatedMigration, { migrated: false, reason: "already-migrated", importedEntries: 1 });
+    assert.equal(result.highWater, 15);
+    assert.deepEqual(result.replay, { accepted: false, reason: "replay", currentSequence: 15 });
+  });
 
-    expect(result.firstCommit).toEqual({ committed: true, revision: 1 });
-    expect(result.conflictingCommit).toEqual({ committed: false, reason: "revision-conflict", currentRevision: 1 });
-    expect(result.secondCommit).toEqual({ committed: true, revision: 2 });
-    expect(result.snapshot).toEqual({ revision: 2, state: [4, 5], updatedAt: 1234 });
-    expect(result.conflictingMove).toEqual({ moved: false, reason: "destination-exists", currentRevision: 1 });
-    expect(result.sourceAfterMoveConflict).toEqual([4, 5]);
-    expect(result.destinationAfterMoveConflict).toEqual([7, 8]);
-    expect(result.migration).toEqual({ migrated: true, importedEntries: 1 });
-    expect(result.repeatedMigration).toEqual({ migrated: false, reason: "already-migrated", importedEntries: 1 });
-    expect(result.highWater).toBe(15);
-    expect(result.replay).toEqual({ accepted: false, reason: "replay", currentSequence: 15 });
-  }, 30_000);
-
-  it("bounds provisional identities without evicting established or ambiguous state", async () => {
+  it("bounds provisional identities without evicting established or ambiguous state", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-provisional-registry-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("provisional-registry");
@@ -319,7 +345,7 @@ describe("durable replay and cryptographic state", () => {
       const movedAmbiguous = await store.compareAndMoveOpaqueState(moveSource, 2, moveDestination);
       const movedAmbiguousSnapshot = await store.loadOpaqueState(moveDestination);
       const deletedMovedAmbiguous = await store.compareAndDeleteOpaqueState(moveDestination, 2);
-
+  
       const sameRoomCreates = [];
       for (let index = 0; index < 4; index += 1) {
         sameRoomCreates.push(await store.createProvisionalOpaqueState(
@@ -330,7 +356,7 @@ describe("durable replay and cryptographic state", () => {
       const sameRoomOverflow = await store.createProvisionalOpaqueState(
         sameRoomOverflowKey, scope, new Uint8Array([20]),
       );
-
+  
       const globalCreates = [];
       for (let index = 0; index < 12; index += 1) {
         globalCreates.push(await store.createProvisionalOpaqueState(
@@ -375,34 +401,34 @@ describe("durable replay and cryptographic state", () => {
         rejectedKeysWereNotWritten,
       };
     }, { databaseName });
-
-    expect(result.first).toEqual({ committed: true, revision: 1 });
-    expect(result.deleted).toEqual({ erased: true, revision: 1 });
-    expect(result.recreated).toEqual({ committed: true, revision: 1 });
-    expect(result.ambiguous).toEqual({ committed: true, revision: 2 });
-    expect(result.ambiguousAgain).toEqual({ committed: true, revision: 2 });
-    expect(result.ambiguousLifecycle).toBe("authentication-ambiguous");
-    expect(result.established).toEqual({ committed: true, revision: 3 });
-    expect(result.duplicateAfterEstablish).toEqual({
+  
+    assert.deepEqual(result.first, { committed: true, revision: 1 });
+    assert.deepEqual(result.deleted, { erased: true, revision: 1 });
+    assert.deepEqual(result.recreated, { committed: true, revision: 1 });
+    assert.deepEqual(result.ambiguous, { committed: true, revision: 2 });
+    assert.deepEqual(result.ambiguousAgain, { committed: true, revision: 2 });
+    assert.equal(result.ambiguousLifecycle, "authentication-ambiguous");
+    assert.deepEqual(result.established, { committed: true, revision: 3 });
+    assert.deepEqual(result.duplicateAfterEstablish, {
       committed: false, reason: "revision-conflict", currentRevision: 3,
     });
-    expect(result.movedAmbiguous).toEqual({ moved: true, revision: 2 });
-    expect(result.movedAmbiguousLifecycle).toBe("authentication-ambiguous");
-    expect(result.deletedMovedAmbiguous).toEqual({ erased: true, revision: 2 });
-    expect(result.sameRoomCreates).toEqual(Array(4).fill({ committed: true, revision: 1 }));
-    expect(result.sameRoomOverflow).toEqual({
+    assert.deepEqual(result.movedAmbiguous, { moved: true, revision: 2 });
+    assert.equal(result.movedAmbiguousLifecycle, "authentication-ambiguous");
+    assert.deepEqual(result.deletedMovedAmbiguous, { erased: true, revision: 2 });
+    assert.deepEqual(result.sameRoomCreates, Array(4).fill({ committed: true, revision: 1 }));
+    assert.deepEqual(result.sameRoomOverflow, {
       committed: false, reason: "provisional-saturated", currentRevision: null,
     });
-    expect(result.globalCreates).toEqual(Array(12).fill({ committed: true, revision: 1 }));
-    expect(result.globalOverflow).toEqual({
+    assert.deepEqual(result.globalCreates, Array(12).fill({ committed: true, revision: 1 }));
+    assert.deepEqual(result.globalOverflow, {
       committed: false, reason: "provisional-saturated", currentRevision: null,
     });
-    expect(result.establishedSnapshot).toEqual({ revision: 3, state: [2] });
-    expect(result.preservedAmbiguous).toBe(true);
-    expect(result.rejectedKeysWereNotWritten).toBe(true);
-  }, 30_000);
+    assert.deepEqual(result.establishedSnapshot, { revision: 3, state: [2] });
+    assert.equal(result.preservedAmbiguous, true);
+    assert.equal(result.rejectedKeysWereNotWritten, true);
+  });
 
-  it("fails closed for unavailable, corrupt, saturated, and transaction-failing storage", async () => {
+  it("fails closed for unavailable, corrupt, saturated, and transaction-failing storage", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-replay-failures-"));
     profileDirectories.push(profile);
     const databaseName = uniqueDatabase("failures");
@@ -425,11 +451,11 @@ describe("durable replay and cryptographic state", () => {
           return (error as { code?: string }).code || "unknown";
         }
       };
-
+  
       const unsupported = await errorCode(() => new module.CryptoStateStore({ indexedDB: null }).open());
       const store = new module.CryptoStateStore({ databaseName });
       await store.advanceReplay(position);
-
+  
       const direct = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(databaseName, 1);
         request.onsuccess = () => resolve(request.result);
@@ -450,7 +476,7 @@ describe("durable replay and cryptographic state", () => {
       direct.close();
       const corrupt = await errorCode(() => store.advanceReplay({ ...position, sequence: 2 }));
       await store.close();
-
+  
       const transactionStore = new module.CryptoStateStore({ databaseName: `${databaseName}-transaction` });
       await transactionStore.open();
       const originalTransaction = IDBDatabase.prototype.transaction;
@@ -460,7 +486,7 @@ describe("durable replay and cryptographic state", () => {
       const transactionFailure = await errorCode(() => transactionStore.advanceReplay(position));
       IDBDatabase.prototype.transaction = originalTransaction;
       await transactionStore.close();
-
+  
       const saturatedStore = new module.CryptoStateStore({ databaseName: `${databaseName}-legacy` });
       const legacySaturated = await errorCode(() => saturatedStore.migrateLegacyReplayLedger({
         roomId: "failure-room",
@@ -478,30 +504,30 @@ describe("durable replay and cryptographic state", () => {
       await saturatedStore.close();
       return { unsupported, corrupt, transactionFailure, legacySaturated, legacyNonCanonical };
     }, { databaseName });
-
-    expect(result).toEqual({
+  
+    assert.deepEqual(result, {
       unsupported: "unsupported",
       corrupt: "corrupt-record",
       transactionFailure: "transaction-failed",
       legacySaturated: "legacy-saturated",
       legacyNonCanonical: "legacy-invalid",
     });
-  }, 30_000);
+  });
 });
 
 describe("single-writer room cryptographic lock", () => {
-  it("reports busy, cooperatively transfers ownership, and aborts the old lease", async () => {
+  it("reports busy, cooperatively transfers ownership, and aborts the old lease", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-lock-tabs-"));
     profileDirectories.push(profile);
     const context = await persistentContext(profile);
     const ownerPage = await readyPage(context);
     const takeoverPage = await context.newPage();
-    await takeoverPage.goto(baseUrl);
+    await takeoverPage.goto(fixtureUrl);
     const roomInstance = await ownerPage.evaluate(async () => {
       const module = await import("/src/services/cryptoStateStore.ts");
       return module.deriveCryptoRoomInstance("locked-room", "E".repeat(43));
     });
-
+  
     const owner = await ownerPage.evaluate(async (roomInstance) => {
       const module = await import("/src/services/roomCryptoLock.ts");
       const coordinator = new module.RoomCryptoLockCoordinator();
@@ -510,8 +536,8 @@ describe("single-writer room cryptographic lock", () => {
       Object.assign(globalThis, { testLockCoordinator: coordinator, testLockLease: result.lease });
       return { status: result.status, active: result.lease.isActive() };
     }, roomInstance);
-    expect(owner).toEqual({ status: "acquired", active: true });
-
+    assert.deepEqual(owner, { status: "acquired", active: true });
+  
     const busy = await takeoverPage.evaluate(async (roomInstance) => {
       const module = await import("/src/services/roomCryptoLock.ts");
       const coordinator = new module.RoomCryptoLockCoordinator();
@@ -519,8 +545,8 @@ describe("single-writer room cryptographic lock", () => {
       const result = await coordinator.acquire(roomInstance);
       return result.status === "busy" ? { status: result.status, reason: result.reason } : { status: result.status };
     }, roomInstance);
-    expect(busy).toEqual({ status: "busy", reason: "held-in-another-context" });
-
+    assert.deepEqual(busy, { status: "busy", reason: "held-in-another-context" });
+  
     const takeover = await takeoverPage.evaluate(async (roomInstance) => {
       const coordinator = (globalThis as typeof globalThis & { testLockCoordinator: any }).testLockCoordinator;
       const result = await coordinator.acquire(roomInstance, { takeover: true, timeoutMs: 3_000 });
@@ -528,14 +554,14 @@ describe("single-writer room cryptographic lock", () => {
       Object.assign(globalThis, { testLockLease: result.lease });
       return { status: result.status, active: result.lease.isActive() };
     }, roomInstance);
-    expect(takeover).toEqual({ status: "acquired", active: true });
-
+    assert.deepEqual(takeover, { status: "acquired", active: true });
+  
     const prior = await ownerPage.evaluate(async () => {
       const lease = (globalThis as typeof globalThis & { testLockLease: any }).testLockLease;
       return { active: lease.isActive(), reason: await lease.released, aborted: lease.signal.aborted };
     });
-    expect(prior).toEqual({ active: false, reason: "takeover", aborted: true });
-
+    assert.deepEqual(prior, { active: false, reason: "takeover", aborted: true });
+  
     await takeoverPage.evaluate(() => {
       const globals = globalThis as typeof globalThis & { testLockLease: any; testLockCoordinator: any };
       globals.testLockLease.release();
@@ -544,9 +570,9 @@ describe("single-writer room cryptographic lock", () => {
     await ownerPage.evaluate(() => {
       (globalThis as typeof globalThis & { testLockCoordinator: any }).testLockCoordinator.close();
     });
-  }, 30_000);
+  });
 
-  it("does not silently fall back when Web Locks or takeover signaling are unavailable", async () => {
+  it("does not silently fall back when Web Locks or takeover signaling are unavailable", { timeout: 30_000 }, async () => {
     const profile = await mkdtemp(join(tmpdir(), "pillowfort-lock-unsupported-"));
     profileDirectories.push(profile);
     const context = await persistentContext(profile);
@@ -555,27 +581,41 @@ describe("single-writer room cryptographic lock", () => {
       const stateModule = await import("/src/services/cryptoStateStore.ts");
       const lockModule = await import("/src/services/roomCryptoLock.ts");
       const roomInstance = await stateModule.deriveCryptoRoomInstance("unsupported-room", "F".repeat(43));
+      const nativeRequests: Promise<unknown>[] = [];
+      const locks = {
+        request(name: string, options: LockOptions, callback: (lock: Lock | null) => Promise<void>) {
+          const request = navigator.locks.request(name, options, callback);
+          nativeRequests.push(request);
+          return request;
+        },
+      };
       const noLocks = new lockModule.RoomCryptoLockCoordinator({ locks: null, channelFactory: null });
-      const noLocksResult = await noLocks.acquire(roomInstance);
-      const noChannel = new lockModule.RoomCryptoLockCoordinator({ channelFactory: null });
-      const noChannelResult = await noChannel.acquire(roomInstance, { takeover: true });
-      const holder = new lockModule.RoomCryptoLockCoordinator();
-      const held = await holder.acquire(roomInstance);
+      const noChannel = new lockModule.RoomCryptoLockCoordinator({ locks, channelFactory: null });
+      const holder = new lockModule.RoomCryptoLockCoordinator({ locks });
       const silentChannelFactory = () => ({ onmessage: null, postMessage() {}, close() {} });
-      const waiting = new lockModule.RoomCryptoLockCoordinator({ channelFactory: silentChannelFactory });
-      const timedOutTakeover = await waiting.acquire(roomInstance, { takeover: true, timeoutMs: 25 });
-      if (held.status === "acquired") held.lease.release();
-      noLocks.close();
-      noChannel.close();
-      holder.close();
-      waiting.close();
-      return { noLocksResult, noChannelResult, timedOutTakeover };
+      const waiting = new lockModule.RoomCryptoLockCoordinator({ locks, channelFactory: silentChannelFactory });
+      try {
+        const noLocksResult = await noLocks.acquire(roomInstance);
+        const noChannelResult = await noChannel.acquire(roomInstance, { takeover: true });
+        const held = await holder.acquire(roomInstance);
+        if (held.status !== "acquired") throw new Error("The timeout scenario requires a held native Web Lock");
+        const timedOutTakeover = await waiting.acquire(roomInstance, { takeover: true, timeoutMs: 25 });
+        return { noLocksResult, noChannelResult, timedOutTakeover };
+      } finally {
+        noLocks.close();
+        noChannel.close();
+        holder.close();
+        waiting.close();
+        // Releasing a lease signals its callback; it does not await completion
+        // of the native request. Drain both release and abort before Chromium exits.
+        await Promise.allSettled(nativeRequests);
+      }
     });
-
-    expect(result).toEqual({
+  
+    assert.deepEqual(result, {
       noLocksResult: { status: "unsupported", reason: "web-locks-unavailable" },
       noChannelResult: { status: "unsupported", reason: "takeover-channel-unavailable" },
       timedOutTakeover: { status: "failed", reason: "takeover-timeout" },
     });
-  }, 30_000);
+  });
 });

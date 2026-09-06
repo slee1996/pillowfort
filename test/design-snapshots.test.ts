@@ -34,7 +34,7 @@ afterAll(async () => {
 }, 30_000);
 
 async function newPage(viewport = { width: 1366, height: 900 }): Promise<Page> {
-  const ctx = await browser.newContext({ viewport });
+  const ctx = await browser.newContext({ viewport, permissions: ["clipboard-read", "clipboard-write"] });
   contexts.push(ctx);
   const page = await ctx.newPage();
   await page.goto(BASE_URL || `http://localhost:${getPort()}/`);
@@ -77,7 +77,7 @@ async function maskDynamic(page: Page) {
       textNode.nodeValue = textNode.nodeValue?.replace(/\bf-[a-z2-7]{10}\b/g, "f-aaaaaaaaaa") ?? null;
     }
     document.querySelectorAll(".msg-time, .chat-timestamp").forEach((el) => {
-      (el as HTMLElement).textContent = "12:00";
+      el.textContent = el.textContent?.replace(/\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?/g, "12:00") ?? "";
     });
   });
 }
@@ -130,7 +130,6 @@ async function createFort(page: Page, name = "luna"): Promise<string> {
   await page.fill("#name-input", name);
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
-  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForFunction(() => {
     const el = document.getElementById("room-code");

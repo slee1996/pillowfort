@@ -28,7 +28,10 @@ afterAll(async () => {
 const roomPasswords = new Map<string, string>();
 
 async function newPage(): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 960, height: 540 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   contexts.push(ctx);
   const page = await ctx.newPage();
   const diagnostics: string[] = [];
@@ -65,7 +68,6 @@ async function createFort(page: Page, name: string): Promise<string> {
   await page.fill("#name-input", name);
   await page.click("#btn-setup");
   const password = await page.inputValue("#setup-password");
-  await page.check("#setup-secret-saved");
   await page.click("#btn-create");
   await page.waitForSelector("#room-code");
   await page.waitForFunction(() => {
@@ -96,7 +98,7 @@ async function waitForMembers(page: Page, count: number) {
   await page.waitForFunction(
     (n) => {
       const el = document.getElementById("member-count");
-      return el && el.textContent && el.textContent.includes(`${n} inside`);
+      return el && Number.parseInt(el.textContent ?? "", 10) === n;
     },
     count,
     { timeout: 10000 },
@@ -136,11 +138,78 @@ describe("V9 Quad View - 4-browser choreography", () => {
   it("Phase 1: Roll Call — 4 players join via browser UI", async () => {
     const [luna, javi, priya, kai] = await setupFourPlayers();
 
-    // All 4 should see "4 inside"
+    // Every participant sees the full room membership.
     for (const p of [luna, javi, priya, kai]) {
       const text = await p.locator("#member-count").innerText();
-      expect(text).toContain("4 inside");
+      expect(Number.parseInt(text, 10)).toBe(4);
+      const roster = p.locator("#room-roster .roster-desktop");
+      expect(await roster.isVisible()).toBe(true);
+      expect((await roster.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "luna", "priya"]);
+      for (const name of ["luna", "javi", "priya", "kai"]) {
+        expect(await roster.getByText(name, { exact: true }).isVisible()).toBe(true);
+      }
+      await p.click("#btn-people");
+      const people = p.locator(".people-dialog");
+      await people.waitFor({ state: "visible" });
+      expect((await people.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "luna", "priya"]);
+      await people.getByRole("tab", { name: "Leaderboard", exact: true }).click();
+      expect(await people.getByRole("tabpanel", { name: "Leaderboard", exact: true }).isVisible()).toBe(true);
+      expect(await people.getByRole("tabpanel", { name: "People", exact: true }).isVisible()).toBe(false);
+      await people.getByRole("tab", { name: "People", exact: true }).click();
+      expect((await people.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "luna", "priya"]);
+      await p.keyboard.press("Escape");
+      await people.waitFor({ state: "hidden" });
+      expect(await p.evaluate(() => document.activeElement?.id)).toBe("btn-people");
     }
+
+    // Presence comes from the member's room setting, not inferred connectivity.
+    luna.once("dialog", (dialog) => dialog.accept("stepping out for tea"));
+    await luna.click("#btn-room-menu");
+    await luna.locator("#room-menu").getByRole("button", { name: "Away…", exact: true }).click();
+    for (const p of [luna, javi, priya, kai]) {
+      const roster = p.locator("#room-roster .roster-desktop");
+      const away = roster.locator(".roster-group").filter({
+        has: p.getByRole("heading", { name: /^Away\b/ }),
+      });
+      const available = roster.locator(".roster-group").filter({
+        has: p.getByRole("heading", { name: /^Available\b/ }),
+      });
+      await away.locator(".member-away-text", { hasText: "stepping out for tea" }).waitFor();
+      expect(await away.locator(".member-name").allTextContents()).toEqual(["luna"]);
+      expect((await available.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "priya"]);
+      expect(await away.locator(".host-badge").isVisible()).toBe(true);
+      expect(await available.locator(".host-badge").count()).toBe(0);
+    }
+
+    // The narrow layout retains room membership and away/host context without
+    // requiring the People dialog or overflowing the document.
+    await kai.setViewportSize({ width: 320, height: 568 });
+    const mobileRoster = kai.locator("#room-roster .roster-mobile");
+    expect(await mobileRoster.isVisible()).toBe(true);
+    expect((await mobileRoster.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "luna", "priya"]);
+    const mobileHost = mobileRoster.locator(".member-entry", {
+      has: kai.locator(".member-name", { hasText: /^luna$/ }),
+    });
+    expect(await mobileHost.locator(".host-badge").isVisible()).toBe(true);
+    expect(await mobileHost.locator(".member-status-pill").isVisible()).toBe(true);
+    expect(await mobileRoster.locator(".host-badge").count()).toBe(1);
+    expect(await kai.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    await luna.click("#btn-room-menu");
+    await luna.locator("#room-menu").getByRole("button", { name: "Available", exact: true }).click();
+    await mobileHost.locator(".member-status-pill").waitFor({ state: "detached" });
+    expect(await mobileHost.locator(".host-badge").isVisible()).toBe(true);
+    for (const p of [luna, javi, priya]) {
+      const available = p.locator("#room-roster .roster-desktop .roster-group").filter({
+        has: p.getByRole("heading", { name: /^Available\b/ }),
+      });
+      await available.locator(".member-name", { hasText: /^luna$/ }).waitFor();
+      expect((await available.locator(".member-name").allTextContents()).sort()).toEqual(["javi", "kai", "luna", "priya"]);
+      expect(await available.locator(".member-entry", {
+        has: p.locator(".member-name", { hasText: /^luna$/ }),
+      }).locator(".host-badge").isVisible()).toBe(true);
+    }
+    await kai.setViewportSize({ width: 960, height: 540 });
 
     // luna sends a message visible to all
     await luna.fill("#msg-input", "everyone here? 🏰");
@@ -152,7 +221,7 @@ describe("V9 Quad View - 4-browser choreography", () => {
         return msgs && msgs.textContent && msgs.textContent.includes("everyone here?");
       }, undefined, { timeout: 5000 });
     }
-  });
+  }, 60_000);
 
   it("Phase 2: Chat Showcase — styled messages from each browser", async () => {
     const [luna, javi, priya, kai] = await setupFourPlayers();
@@ -199,12 +268,17 @@ describe("V9 Quad View - 4-browser choreography", () => {
       }));
       throw new Error(`quad chat did not converge\n${diagnostics.join("\n---\n")}`, { cause: error });
     }
+    const boldMessage = luna.locator(".chat-content", { hasText: "let's goooo" });
+    const italicMessage = luna.locator(".chat-content", { hasText: "this is so cozy" });
+    expect(await boldMessage.locator("b, strong").innerText()).toBe("let's goooo");
+    expect(await italicMessage.locator("i, em").innerText()).toBe("this is so cozy");
   });
 
   it("Phase 3: RPS Showdown — luna vs javi, both see overlay", async () => {
     const [luna, javi, priya, kai] = await setupFourPlayers();
 
     // luna challenges javi
+    await luna.click("#btn-open-games");
     await luna.click("#aim-btn-rps");
     await pickMember(luna, "javi");
 
@@ -247,6 +321,7 @@ describe("V9 Quad View - 4-browser choreography", () => {
     const names = ["luna", "javi", "priya", "kai"];
 
     // luna starts saboteur
+    await luna.click("#btn-open-games");
     await luna.click("#aim-btn-sab");
 
     // Starting the mode assigns private roles; a defender must explicitly
@@ -294,7 +369,24 @@ describe("V9 Quad View - 4-browser choreography", () => {
     const [luna, javi, priya, kai] = await setupFourPlayers();
 
     // luna clicks knock down (she's the host)
+    await luna.fill("#msg-input", "not ready to leave");
+    await luna.click("#btn-room-menu");
     await luna.click("#btn-knock-down");
+    await luna.waitForSelector("#room-exit-dialog[open]");
+    expect(await luna.evaluate(() => document.activeElement?.id)).toBe("btn-cancel-room-exit");
+    await luna.click("#btn-cancel-room-exit");
+    await luna.waitForSelector("#room-exit-dialog[open]", { state: "hidden" });
+    expect(await luna.evaluate(() => document.activeElement?.id)).toBe("btn-room-menu");
+    expect(await luna.inputValue("#msg-input")).toBe("not ready to leave");
+    await luna.click("#btn-send");
+    await Promise.all([javi, priya, kai].map((page) =>
+      page.waitForFunction(() => document.getElementById("messages")?.textContent?.includes("not ready to leave")),
+    ));
+
+    // Only confirmation ends the room for all four participants.
+    await luna.click("#btn-room-menu");
+    await luna.click("#btn-knock-down");
+    await luna.click("#btn-confirm-room-exit");
 
     // All 4 should see the btn-home (knocked down screen)
     await Promise.all(

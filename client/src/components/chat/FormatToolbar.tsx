@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { useFormatStore } from "../../stores/formatStore";
-import { useGameStore } from "../../stores/gameStore";
 
 const FMT_COLORS = ["#FF0000", "#0000FF", "#008000", "#FF8C00", "#800080", "#000000", "#FF69B4", "#8B4513"];
 const EMOJIS = [
@@ -12,11 +11,10 @@ const EMOJIS = [
 
 export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string) => void }) {
   const { bold, italic, underline, color, toggleBold, toggleItalic, toggleUnderline, setColor } = useFormatStore();
-  const members = useGameStore((s) => s.members);
   const [colorOpen, setColorOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const colorRef = useRef<HTMLDivElement>(null);
-  const emojiRef = useRef<HTMLDivElement>(null);
+  const colorButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const handler = () => {
@@ -27,112 +25,133 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
     return () => document.removeEventListener("click", handler);
   }, []);
 
-  const handleShowPeople = () => {
-    if (window.innerWidth <= 600) {
-      window.dispatchEvent(new CustomEvent("pf-show-mobile-buddies"));
-    } else {
-      window.dispatchEvent(new CustomEvent("pf-toggle-buddy-panel"));
-    }
-  };
-
-  const handleShowInvites = () => {
-    window.dispatchEvent(new CustomEvent("pf-show-mobile-invites"));
-  };
-
   return (
-    <div className="format-toolbar">
+    <div
+      className="format-toolbar"
+      role="group"
+      aria-label="Message formatting"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || (!colorOpen && !emojiOpen)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        (colorOpen ? colorButtonRef : emojiButtonRef).current?.focus();
+        setColorOpen(false);
+        setEmojiOpen(false);
+      }}
+    >
       <button
+        type="button"
         id="fmt-bold"
         className={`format-btn ${bold ? "active" : ""}`}
         onClick={toggleBold}
         title="Bold"
+        aria-label="Bold"
+        aria-pressed={bold}
       >
         <b>B</b>
       </button>
       <button
+        type="button"
         id="fmt-italic"
         className={`format-btn ${italic ? "active" : ""}`}
         onClick={toggleItalic}
         title="Italic"
+        aria-label="Italic"
+        aria-pressed={italic}
       >
         <i>I</i>
       </button>
       <button
+        type="button"
         id="fmt-underline"
         className={`format-btn ${underline ? "active" : ""}`}
         onClick={toggleUnderline}
         title="Underline"
+        aria-label="Underline"
+        aria-pressed={underline}
       >
         <u>U</u>
       </button>
 
-      <div className="format-sep" />
+      <div className="format-sep" aria-hidden="true" />
 
-      <div className="format-popover-anchor" ref={colorRef}>
+      <div className="format-popover-anchor">
         <button
+          type="button"
+          ref={colorButtonRef}
           className="format-btn"
           title="Font Color"
-          onClick={(e) => {
-            e.stopPropagation();
+          aria-label="Font color"
+          aria-expanded={colorOpen}
+          aria-controls="format-colors"
+          onClick={(event) => {
+            event.stopPropagation();
             setEmojiOpen(false);
             setColorOpen(!colorOpen);
           }}
         >
-          <div
+          <span
             className="format-color-preview"
             style={{ background: color || "#FF0000" }}
+            aria-hidden="true"
           />
         </button>
-        <div className={`color-palette ${colorOpen ? "open" : ""}`}>
+        <div id="format-colors" className={`color-palette ${colorOpen ? "open" : ""}`} hidden={!colorOpen}>
           {FMT_COLORS.map((c) => (
-            <div
+            <button
+              type="button"
               key={c}
               className="color-palette-swatch"
               style={{ background: c }}
-              onClick={(e) => {
-                e.stopPropagation();
+              aria-label={`Text color ${c}`}
+              aria-pressed={color === c}
+              onClick={(event) => {
+                event.stopPropagation();
                 setColor(color === c ? null : c);
                 setColorOpen(false);
+                colorButtonRef.current?.focus();
               }}
             />
           ))}
         </div>
       </div>
 
-      <div className="format-sep" />
+      <div className="format-sep" aria-hidden="true" />
 
-      <div className="format-popover-anchor" ref={emojiRef}>
+      <div className="format-popover-anchor">
         <button
+          type="button"
+          ref={emojiButtonRef}
           className="format-btn format-btn-emoji"
           title="Insert Smiley"
-          onClick={(e) => {
-            e.stopPropagation();
+          aria-label="Insert smiley"
+          aria-expanded={emojiOpen}
+          aria-controls="format-emojis"
+          onClick={(event) => {
+            event.stopPropagation();
             setColorOpen(false);
             setEmojiOpen(!emojiOpen);
           }}
         >
           ☺
         </button>
-        <div className={`emoji-picker ${emojiOpen ? "open" : ""}`}>
+        <div id="format-emojis" className={`emoji-picker ${emojiOpen ? "open" : ""}`} hidden={!emojiOpen}>
           {EMOJIS.map((em) => (
-            <span
+            <button
+              type="button"
               key={em}
               className="emoji-pick"
-              onClick={(e) => {
-                e.stopPropagation();
+              aria-label={`Insert ${em}`}
+              onClick={(event) => {
+                event.stopPropagation();
                 onInsertEmoji(em);
                 setEmojiOpen(false);
               }}
             >
               {em}
-            </span>
+            </button>
           ))}
         </div>
-      </div>
-      <span id="member-count" className="format-member-count">{members.length} inside</span>
-      <div className="format-mobile-actions">
-        <button className="format-mobile-action" onClick={handleShowPeople}>People</button>
-        <button className="format-mobile-action" onClick={handleShowInvites}>Invites</button>
       </div>
     </div>
   );

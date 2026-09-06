@@ -65,32 +65,47 @@ still consume the raw budgets, but are not charged a second time as initiated
 operations. This bounds abuse without disconnecting passive recipients merely
 for completing mandatory protocol fanout.
 
-The first-party client defaults to a generated 32-byte invitation secret,
-encoded as canonical `pf2_` plus 43 unpadded base64url characters. A host may
-instead explicitly choose a custom password of 6–64 Unicode scalar values.
-Custom input is NFC-normalized; leading/trailing whitespace, control/default-
-ignorable/line-separator characters, lone surrogates, oversized UTF-8
-encodings, noncharacters/non-ASCII separators, and malformed values in the
-reserved `pf2_` namespace are rejected. New-room creation additionally rejects
+The first-party client defaults to a 26-character generated password: `pf3_`
+plus the canonical unpadded base64url encoding of 16 CSPRNG bytes (22 suffix
+characters, with the final character one of `A`, `Q`, `g`, or `w`). This has
+128 bits of random entropy, not the 256 bits of the previous generated default.
+Existing canonical `pf2_` passwords (32 bytes encoded as 43 unpadded base64url
+characters after the prefix) remain accepted for invitations and recovery.
+
+A host may instead explicitly choose a custom password of 6–64 Unicode scalar
+values. Custom input is NFC-normalized; leading/trailing whitespace,
+control/default-ignorable/line-separator characters, lone surrogates, oversized
+UTF-8 encodings, and noncharacters/non-ASCII separators are rejected. Both
+`pf2_` and `pf3_` are reserved namespaces: malformed values are rejected rather
+than treated as custom passwords. Custom-entry mode rejects even canonical
+values in either namespace so a hand-authored low-entropy string cannot
+masquerade as the generated option. New-room creation additionally rejects
 common, repeated, sequential, low-diversity, and room/name-derived choices.
 That strength policy is intentionally not applied while joining or deriving an
 existing room: changing a future creation blocklist must not lock out an
-already-compatible room. Custom-entry mode rejects syntactically canonical
-`pf2_` values so a hand-authored low-entropy string cannot masquerade as the
-generated option.
+already-compatible room.
 
-Before any custom password reaches MLS, invitation authentication, or durable
-state, the browser derives a 32-byte canonical protocol secret using
-PBKDF2-HMAC-SHA-256 with 600,000 iterations. The salt is a canonical JSON tuple
-containing `pillowfort:custom-room-secret:v1`, the pinned KDF identifier, room
-ID, and random 128-bit room instance. Generated `pf2_` secrets pass through
-unchanged for compatibility, but execute and wipe one equivalent PBKDF2 result
-so challenge timing does not reveal which credential mode the host selected.
-The human password remains only in the mounted UI so an invite can reproduce
-it; the protocol and encrypted state use the resolved canonical secret. A
-non-secret, tab-scoped recovery pointer (mode, room ID, display name, and exact
-room instance) survives reload, but recovery still requires re-entering the exact
-copied password.
+Before a new `pf3_` password or custom password reaches MLS, invitation
+authentication, or durable state, the browser derives a 32-byte canonical
+`pf2_` protocol secret using PBKDF2-HMAC-SHA-256 with 600,000 iterations. The
+salt remains a canonical JSON tuple containing
+`pillowfort:custom-room-secret:v1`, the pinned KDF identifier, room ID, and
+random 128-bit room instance. The output remains 32 bytes regardless of the
+generated password's 16-byte random input; a 256-bit derived key width does
+not increase its 128-bit input entropy. The KDF domain, identifier, salt
+construction, and custom-password output are unchanged.
+
+Existing canonical `pf2_` secrets pass through byte-for-byte unchanged,
+preserving old invitation and recovery identity, but still execute and wipe
+one equivalent 32-byte PBKDF2 result so challenge timing does not reveal which
+credential mode the host selected. Temporary byte arrays are wiped in each
+path. Raw `pf3_` passwords never reach MLS or the encrypted state store, whose
+canonical `pf2_` key-format validation and key width remain unchanged.
+The user-facing password remains only in the mounted UI so an invite can
+reproduce it; the protocol and encrypted state use the resolved canonical
+secret. A non-secret, tab-scoped recovery pointer (mode, room ID, display name,
+and exact room instance) survives reload, but recovery still requires
+re-entering the exact copied password.
 
 The resolved invitation secret is not an MLS group key and cannot decrypt MLS
 traffic. A second, domain-separated PBKDF2-HMAC-SHA-256 derivation with 600,000
@@ -98,7 +113,7 @@ iterations produces the Ed25519 invitation-authentication key. The relay stores
 its public key, not the invitation secret or private key.
 
 Custom passwords are a deliberate usability compromise, not equivalent to the
-generated 256-bit default. The invitation public key and a stolen local wrapped
+generated 128-bit default. The invitation public key and a stolen local wrapped
 state are offline guess oracles. PBKDF2 raises the cost of each guess but cannot
 add entropy to a short or common phrase, so the UI recommends at least 16
 characters or four unrelated words and warns against password reuse. Explicit
@@ -490,7 +505,7 @@ properties:
 - Durable Object terminal delivery and split raw/operation rate budgets:
   `test/secure-room-do-runtime-v4.test.ts`.
 - Wrapped state, CAS persistence, replay tombstones, and locking:
-  `test/replay-persistence.test.ts` and `test/mls-protocol-v4.test.ts`.
+  `test/replay-persistence.node.ts` and `test/mls-protocol-v4.test.ts`.
 - WASM secret-residue regressions:
   `test/openmls-wasm-zeroization.test.ts`.
 

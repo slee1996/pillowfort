@@ -651,6 +651,16 @@ function dispatchLocalSecureEffects(room: SecureLocalRoom, effects: readonly Sec
           const retiredSocket = room.connections.get(effect.deviceId);
           if (retiredSocket) {
             const attachment = retiredSocket.data as WSData;
+            // The committed retirement cleared connectionId before the
+            // broadcast. Deliver the authoritative notice before closing.
+            if (attachment.secureAuthenticated && attachment.protocol === "v4" &&
+                attachment.secureDeviceId === effect.deviceId &&
+                room.state.members.some((member) => member.deviceId === effect.deviceId && member.status === "retired")) {
+              sendSecure(retiredSocket, {
+                kind: "secure-server", v: 4, suite: 1, type: "member-lifecycle",
+                deviceId: effect.deviceId, status: "retired",
+              });
+            }
             attachment.secureAuthenticated = false;
             room.connections.delete(effect.deviceId);
             try { retiredSocket.close(1008, "membership ended"); } catch {}
