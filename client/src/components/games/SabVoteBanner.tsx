@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function SabVoteBanner() {
   const sabVote = useGameStore((s) => s.sabVote);
@@ -28,13 +29,13 @@ export function SabVoteBanner() {
 
   return (
     <div id="sab-vote-banner" className="sab-vote-banner visible">
-      <div>🕵 <strong>ACCUSATION VOTE!</strong> {sabVote.accuser} accused <strong>{sabVote.suspect}</strong>.</div>
+      <div className="vote-banner-title"><PeriodIcon kind="search" /> <span><strong>ACCUSATION VOTE!</strong> {sabVote.accuser} accused <strong>{sabVote.suspect}</strong>.</span></div>
       <div id="sab-vote-list" className="sab-vote-options">
         <button className="xp-btn" onClick={() => vote("yes")} disabled={sabVote.myVote === "yes"}>
-          ✅ Yes, guilty
+          <PeriodIcon kind="check" size={16} /> Yes, guilty
         </button>
         <button className="xp-btn" onClick={() => vote("no")} disabled={sabVote.myVote === "no"}>
-          ❌ No, not them
+          <PeriodIcon kind="cross" size={16} /> No, not them
         </button>
       </div>
       <div className="vote-remaining">{remaining}s remaining</div>

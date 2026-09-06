@@ -2,6 +2,7 @@ import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { Button } from "../xp/Button";
 import { LogoIcon } from "../xp/Logo";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function HostOfferDialog() {
   const hostOffer = useGameStore((s) => s.hostOffer);
@@ -30,7 +31,7 @@ export function HostOfferDialog() {
         <div className="xp-window-body">
           <div className="notice-row">
             <div className="host-offer-icon-wrap">
-              🛏
+              <PeriodIcon kind="pillow" size={36} />
             </div>
             <div className="notice-text">
               <strong>{hostOffer.oldHost} threw a pillow at you!</strong>

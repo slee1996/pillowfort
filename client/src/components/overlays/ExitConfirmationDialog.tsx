@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { Button } from "../xp/Button";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 interface ExitConfirmationDialogProps {
   isHost: boolean;
@@ -37,6 +38,7 @@ export function ExitConfirmationDialog({ isHost, onConfirm, onCancel }: ExitConf
     >
       <div className="xp-title-bar">
         <div className="xp-title-text" id="room-exit-title">
+          <PeriodIcon kind={isHost ? "pillow" : "leave"} size={20} />
           {isHost ? "Knock down this fort?" : "Leave this fort?"}
         </div>
       </div>

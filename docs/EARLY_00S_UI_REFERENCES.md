@@ -1,6 +1,6 @@
 # Early-00s IM UI References
 
-The historical exploration below is not a literal UI specification. The current direction in [PROJECT_LEAD_BRIEF.md](PROJECT_LEAD_BRIEF.md) applies the verified AIM 4.x comps to a focused, private fort: a room-scoped buddy roster, separate transcript/editor panes, and explicit People, Invite, Room, and Play controls—not ads, global buddy graphs, or stacked utility menus.
+The application direction combines the verified AIM conversation structure with XP Luna/MSN 6-era chrome: a room-scoped buddy roster, separate transcript/editor panes, illustrated controls, blue dimensional title bars, and explicit People, Invite, Room, and Play actions. It does not reproduce ads, global contact graphs, or nonfunctional desktop controls.
 
 ## Verified Screenshot Comps
 
@@ -26,11 +26,17 @@ These are reference-only images of proprietary software, not cleared product art
 
 ## Applied Direction
 
-The approved application uses A01–A03 as the baseline: white transcript/editing areas, gray controls, and a restrained navy cap. A narrow desktop roster and compact mobile presence strip expose actual room membership and user-set Available/Away state; host identity is preserved across those groups.
+The application keeps A01–A03's white transcript/editing areas and adopts B01's XP-era dimensional blue frame and illustrated tool language. The neutral toolbar sits below the room identity title cap. A narrow desktop roster and compact mobile presence strip expose actual Available/Away membership and host identity, without inventing accounts or global buddy lists.
 
 The composer is a real multiline editor with its formatting band above it and Play/Send actions below. Enter sends once, Shift+Enter inserts a newline, and IME composition does not submit. The shorter generated passwords, accountless entry, encrypted room events, host approval, and exit confirmations remain unchanged.
 
 The screenshots remain reference material only. The implementation uses Pillowfort-owned branding and existing personalization; no AOL screenshots or mascot assets were imported into the product.
+
+UI illustrations are original SVGs in `client/src/components/xp/PeriodIcon.tsx`.
+They are decorative inside controls with existing accessible text labels; chat
+emoji remain user content, not replaced by the icon system. Mobile touch targets,
+IME handling, reduced motion, native modal protections, and encrypted agent
+permissions take precedence over reproducing obsolete platform limitations.
 
 ## Primary References
 
@@ -61,7 +67,7 @@ The screenshots remain reference material only. The implementation uses Pillowfo
 - Premium skins should feel like early social-web room chrome: same layout, different modules, borders, status treatment, and buddy-list behavior.
 - Prefer compact, repeat-use controls over large cards. The app should feel like something you leave open on the side of the desktop.
 
-## Implemented In This Pass
+## Earlier Social-Skin Exploration
 
 - Added an AIM-style profile card to the Buddy panel with current user, role, status, and copyable fort flag.
 - Split buddies into `Inside` and `Away` groups, including away-message snippets.
@@ -76,4 +82,5 @@ The screenshots remain reference material only. The implementation uses Pillowfo
 
 ## Screenshot Status
 
-The social skin screenshots should be refreshed after the next visual QA pass.
+The original boards remain historical references. Current app screenshots should
+be captured from the real encrypted room flow, not assembled from invented state.

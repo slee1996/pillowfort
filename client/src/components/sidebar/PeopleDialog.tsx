@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { MemberEntry } from "./MemberEntry";
 import { LeaderboardsPanel } from "../games/LeaderboardsPanel";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 interface PeopleDialogProps {
   open: boolean;
@@ -66,7 +67,7 @@ function PeopleDialogContent({ onClose }: Pick<PeopleDialogProps, "onClose">) {
       onClick={(event) => event.target === event.currentTarget && close()}
     >
       <div className="product-dialog-header">
-        <h2 id="people-dialog-title">People in this fort</h2>
+        <h2 id="people-dialog-title"><PeriodIcon kind="people" size={22} />People in this fort</h2>
         <button type="button" id="btn-close-people" onClick={close}>Close</button>
       </div>
       <div className="product-dialog-body">
@@ -82,7 +83,7 @@ function PeopleDialogContent({ onClose }: Pick<PeopleDialogProps, "onClose">) {
             className={`member-panel-tab ${tab === "people" ? "active" : ""}`}
             onClick={() => setTab("people")}
           >
-            People
+            <PeriodIcon kind="people" size={18} />People
           </button>
           <button
             ref={leaderboardTabRef}
@@ -95,7 +96,7 @@ function PeopleDialogContent({ onClose }: Pick<PeopleDialogProps, "onClose">) {
             className={`member-panel-tab ${tab === "leaderboard" ? "active" : ""}`}
             onClick={() => setTab("leaderboard")}
           >
-            Leaderboard
+            <PeriodIcon kind="crown" size={18} />Leaderboard
           </button>
         </div>
         <div id="people-panel" role="tabpanel" aria-labelledby="people-tab" hidden={tab !== "people"} tabIndex={0}>

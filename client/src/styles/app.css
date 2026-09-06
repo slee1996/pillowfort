@@ -24,7 +24,7 @@ body,
 body {
   color: var(--ink);
   background: linear-gradient(145deg, var(--desktop), var(--desktop-deep));
-  font-family: Arial, Tahoma, sans-serif;
+  font-family: Tahoma, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   overflow: hidden;
@@ -66,8 +66,8 @@ summary {
 }
 
 ::selection {
-  background: var(--warm);
-  color: var(--ink);
+  background: var(--action);
+  color: #fff;
 }
 
 .screen {
@@ -103,10 +103,10 @@ summary {
   width: max-content;
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--ink);
-  color: #fff;
+  border: 1px solid #a58b48;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fffef4, #fff3c6);
+  color: var(--ink);
   font-size: 14px;
   text-align: center;
   box-shadow: var(--panel-shadow);
@@ -128,6 +128,7 @@ summary {
   right: 0;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 75%), 0 2px 4px rgb(17 38 72 / 15%);
   color: var(--ink);
   font-size: 14px;
   text-align: center;
@@ -136,11 +137,11 @@ summary {
 }
 
 .error-banner {
-  background: var(--warm);
+  background: linear-gradient(180deg, #fffdf1, var(--warm));
 }
 
 .reconnect-banner {
-  background: var(--sky);
+  background: var(--selected-surface);
 }
 
 @media (max-width: 600px), (max-height: 500px) {

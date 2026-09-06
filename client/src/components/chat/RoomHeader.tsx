@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { LogoIcon } from "../xp/Logo";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 interface RoomHeaderProps {
   roomId: string | null;
@@ -28,12 +29,7 @@ export function RoomHeader({ roomId, isHost, memberCount, onInvite, onPeople, ch
           title="Buddy list"
           onClick={onPeople}
         >
-          <svg className="room-buddy-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <circle cx="7" cy="6" r="3" />
-            <path d="M1 18v-3a6 6 0 0 1 12 0v3Z" />
-            <circle cx="15" cy="7" r="2.5" />
-            <path d="M14 12a4 4 0 0 1 5 4v2h-4v-3Z" />
-          </svg>
+          <PeriodIcon kind="people" />
           People <span id="member-count">{memberCount}</span>
         </button>
         <button
@@ -43,7 +39,7 @@ export function RoomHeader({ roomId, isHost, memberCount, onInvite, onPeople, ch
           aria-haspopup="dialog"
           onClick={onInvite}
         >
-          Invite
+          <PeriodIcon kind="invite" /> Invite
         </button>
         {children}
       </div>

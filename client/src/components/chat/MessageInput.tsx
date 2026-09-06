@@ -7,6 +7,7 @@ import { playSendSound } from "../../hooks/useSound";
 import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
 import { FormatToolbar } from "./FormatToolbar";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 let lastTypingSent = 0;
 
@@ -143,7 +144,7 @@ export function MessageInput({
               aria-controls="game-picker-dialog"
               onClick={() => setGamesOpen(true)}
             >
-              Play
+              <PeriodIcon kind="games" /> Play
             </button>
             {sabRole === "defender" && (
               <button type="button" className="xp-btn" title="Accuse Saboteur" onClick={() => onPickerOpen("sab-accuse")}>
@@ -172,7 +173,7 @@ export function MessageInput({
         }}
       >
         <div className="product-dialog-header">
-          <h2 id="game-picker-title">Games</h2>
+          <h2 id="game-picker-title"><PeriodIcon kind="games" /> Games</h2>
         </div>
         <div className="product-dialog-body">
           <p id="game-picker-description">Pick something to do. {members.length} {members.length === 1 ? "person" : "people"} in this fort.</p>
@@ -186,7 +187,7 @@ export function MessageInput({
                 onDraw();
               }}
             >
-              <span className="game-choice-name">Doodle</span>
+              <span className="game-choice-name"><PeriodIcon kind="pencil" /> Doodle</span>
               <span className="game-choice-hint">Draw on the fort’s shared canvas.</span>
             </button>
             <button
@@ -197,7 +198,7 @@ export function MessageInput({
               disabled={members.length < 2}
               onClick={() => pickGame("rps")}
             >
-              <span className="game-choice-name">Rock Paper Scissors</span>
+              <span className="game-choice-name"><PeriodIcon kind="rock" /> Rock Paper Scissors</span>
               <span className="game-choice-hint">Challenge a buddy. Needs 2 people.</span>
             </button>
             <button
@@ -208,7 +209,7 @@ export function MessageInput({
               disabled={members.length < 2}
               onClick={() => pickGame("ttt")}
             >
-              <span className="game-choice-name">Tic-Tac-Toe</span>
+              <span className="game-choice-name"><PeriodIcon kind="board" /> Tic-Tac-Toe</span>
               <span className="game-choice-hint">Get three in a row. Needs 2 people.</span>
             </button>
             <button
@@ -219,7 +220,7 @@ export function MessageInput({
               disabled={members.length < 3}
               onClick={() => pickGame("vote")}
             >
-              <span className="game-choice-name">Pillow Fight</span>
+              <span className="game-choice-name"><PeriodIcon kind="pillow" /> Pillow Fight</span>
               <span className="game-choice-hint">Vote a buddy out of the fort. Needs 3 people.</span>
             </button>
             <button
@@ -233,7 +234,7 @@ export function MessageInput({
                 send("sab-start");
               }}
             >
-              <span className="game-choice-name">Secret Saboteur</span>
+              <span className="game-choice-name"><PeriodIcon kind="search" /> Secret Saboteur</span>
               <span className="game-choice-hint">Find the secret saboteur. Needs 4 people.</span>
             </button>
             <button
@@ -248,7 +249,7 @@ export function MessageInput({
                 useGameStore.getState().addSystemMessage("You challenged the host for the crown!");
               }}
             >
-              <span className="game-choice-name">Dethrone</span>
+              <span className="game-choice-name"><PeriodIcon kind="crown" /> Dethrone</span>
               <span className="game-choice-hint">
                 {isHost
                   ? "Guests challenge the host. You're already the host."
@@ -267,7 +268,7 @@ export function MessageInput({
                 onTakeBreak();
               }}
             >
-              <span className="game-choice-name">Breakout</span>
+              <span className="game-choice-name"><PeriodIcon kind="breakout" /> Breakout</span>
               <span className="game-choice-hint">Play solo while you wait for friends. Your fort stays open.</span>
             </button>
           </div>

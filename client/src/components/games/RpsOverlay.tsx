@@ -2,8 +2,7 @@ import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { Button } from "../xp/Button";
 import type { RpsPick } from "../../services/protocol";
-
-const RPS_EMOJI: Record<string, string> = { rock: "✊", paper: "🖐️", scissors: "✌️" };
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function RpsOverlay() {
   const rps = useGameStore((s) => s.rpsState);
@@ -18,7 +17,7 @@ export function RpsOverlay() {
     return (
       <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
-          <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
+          <div className="xp-title-bar"><div className="xp-title-text"><PeriodIcon kind="rock" /> Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
             <div id="rps-prompt">{rps.challengedBy} challenges you to RPS!</div>
             <div id="rps-actions" className="auth-actions game-actions">
@@ -35,7 +34,7 @@ export function RpsOverlay() {
     return (
       <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
-          <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
+          <div className="xp-title-bar"><div className="xp-title-text"><PeriodIcon kind="rock" /> Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
             <div id="rps-waiting" className="rps-status-waiting">Waiting for {rps.p2} to answer…</div>
             <div className="auth-actions game-actions">
@@ -53,9 +52,9 @@ export function RpsOverlay() {
     return (
       <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
-          <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
+          <div className="xp-title-bar"><div className="xp-title-text"><PeriodIcon kind="rock" /> Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
-            <div id="rps-prompt">RPS vs {opponent}{rps.koth ? " 👑 for the crown!" : ""} — pick your weapon!</div>
+            <div id="rps-prompt">RPS vs {opponent}{rps.koth ? <> <PeriodIcon kind="crown" /> for the crown!</> : ""} — pick your weapon!</div>
             {!rps.myPick ? (
               <div id="rps-picks" className="rps-picks">
                 {(["rock", "paper", "scissors"] as RpsPick[]).map((pick) => (
@@ -70,7 +69,7 @@ export function RpsOverlay() {
                       send("rps-pick", { pick });
                     }}
                   >
-                    {RPS_EMOJI[pick]}
+                    <PeriodIcon kind={pick} size={36} />
                   </button>
                 ))}
               </div>
@@ -89,14 +88,14 @@ export function RpsOverlay() {
   // Phase: result
   if (rps.phase === "result" && rps.result) {
     const { pick1, pick2, winner } = rps.result;
-    const line = `${rps.p1} ${RPS_EMOJI[pick1]} vs ${RPS_EMOJI[pick2]} ${rps.p2}`;
+    const line = `${rps.p1} (${pick1}) vs (${pick2}) ${rps.p2}`;
     return (
       <div id="rps-overlay" className="game-overlay open">
         <div className="game-dialog">
-          <div className="xp-title-bar"><div className="xp-title-text">✊ Rock Paper Scissors</div></div>
+          <div className="xp-title-bar"><div className="xp-title-text"><PeriodIcon kind="rock" /> Rock Paper Scissors</div></div>
           <div className="game-dialog-body">
             <div id="rps-result-text" className="rps-result-text">
-              {line}<br />{winner ? `${winner} wins!${rps.koth ? " 👑" : ""}` : "Draw!"}
+              {line}<br />{winner ? <>{winner} wins!{rps.koth && <> <PeriodIcon kind="crown" /></>}</> : "Draw!"}
             </div>
             <div id="rps-actions" className="auth-actions game-actions">
               <Button onClick={close}>OK</Button>

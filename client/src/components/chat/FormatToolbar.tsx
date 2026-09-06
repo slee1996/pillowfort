@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useFormatStore } from "../../stores/formatStore";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 const FMT_COLORS = ["#FF0000", "#0000FF", "#008000", "#FF8C00", "#800080", "#000000", "#FF69B4", "#8B4513"];
 const EMOJIS = [
@@ -133,7 +134,7 @@ export function FormatToolbar({ onInsertEmoji }: { onInsertEmoji: (emoji: string
             setEmojiOpen(!emojiOpen);
           }}
         >
-          ☺
+          <PeriodIcon kind="smiley" />
         </button>
         <div id="format-emojis" className={`emoji-picker ${emojiOpen ? "open" : ""}`} hidden={!emojiOpen}>
           {EMOJIS.map((em) => (

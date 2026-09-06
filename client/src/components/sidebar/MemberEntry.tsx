@@ -1,4 +1,5 @@
 import { buddyIconColor } from "../../utils/nameColor";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 interface MemberEntryProps {
   name: string;
@@ -20,9 +21,9 @@ export function MemberEntry({ name, isHost, isMuted, status = "available", awayT
       title={`${name}${isHost ? " · Host" : ""} · ${statusTitle}${isMuted ? " · Muted on this device" : ""}`}
     >
       <div className="member-entry-main">
-        <span className="buddy-icon" style={{ background: buddyIconColor(name) }} />
-        <span className={`member-dot ${isAway ? "away" : ""}`} />
-        {isHost && <span className="host-badge" role="img" aria-label="Host" title="Host">★</span>}
+        <span className="buddy-icon" style={{ background: buddyIconColor(name) }} aria-hidden="true" />
+        <span className={`member-dot ${isAway ? "away" : ""}`} aria-hidden="true" />
+        {isHost && <span className="host-badge" role="img" aria-label="Host" title="Host"><PeriodIcon kind="crown" size={16} /></span>}
         <span className="member-name" title={name}>{name}</span>
         {isAway && <span className="member-status-pill">away</span>}
         {isMuted && <span className="member-muted-label">muted</span>}

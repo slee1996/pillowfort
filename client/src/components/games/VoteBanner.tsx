@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { Button } from "../xp/Button";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function VoteBanner() {
   const vote = useGameStore((s) => s.activeVote);
@@ -35,7 +36,7 @@ export function VoteBanner() {
 
   return (
     <div id="vote-banner" className="vote-banner visible">
-      <div>⚔ <strong>PILLOW FIGHT!</strong> Vote to kick <span className="vote-target-name">{vote.target}</span></div>
+      <div className="vote-banner-title"><PeriodIcon kind="pillow" /> <span><strong>PILLOW FIGHT!</strong> Vote to kick <span className="vote-target-name">{vote.target}</span></span></div>
       <div id="vote-buttons" className="vote-status">
         {myVote ? (
           <span className={`vote-choice ${myVote === "yes" ? "yes" : "no"}`}>
@@ -51,14 +52,14 @@ export function VoteBanner() {
             onClick={() => castVote("yes")}
             style={{ background: "linear-gradient(180deg,#fff,#D4E8D4)", borderColor: "#060" }}
           >
-            ✔ Kick
+            <PeriodIcon kind="check" size={16} /> Kick
           </Button>
           <Button
             id="vote-no"
             onClick={() => castVote("no")}
             style={{ background: "linear-gradient(180deg,#fff,#E8D4D4)", borderColor: "#800" }}
           >
-            ✘ Keep
+            <PeriodIcon kind="cross" size={16} /> Keep
           </Button>
         </div>
       )}

@@ -3,6 +3,7 @@ import { useGameStore } from "../../stores/gameStore";
 import { copyTextWithFallback } from "../../services/clipboard";
 import { track } from "../../services/analytics";
 import { showToast } from "../xp/Toast";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 interface InviteDialogProps {
   open: boolean;
@@ -94,7 +95,7 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
       onClick={(event) => event.target === event.currentTarget && close()}
     >
       <div className="product-dialog-header">
-        <h2 id="invite-dialog-title">Invite your friends</h2>
+        <h2 id="invite-dialog-title"><PeriodIcon kind="invite" size={22} />Invite your friends</h2>
         <button type="button" id="btn-close-invite" onClick={close}>Close</button>
       </div>
       <div className="product-dialog-body">

@@ -3,6 +3,7 @@ import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { Button } from "../xp/Button";
 import { LogoIcon } from "../xp/Logo";
+import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function AdmissionApprovalDialog() {
   const admissions = useGameStore((state) => state.pendingAdmissions);
@@ -70,7 +71,7 @@ export function AdmissionApprovalDialog() {
         </div>
         <div className="xp-window-body">
           <div className="notice-row">
-            <div className="host-offer-icon-wrap" aria-hidden>🔐</div>
+            <div className="host-offer-icon-wrap" aria-hidden><PeriodIcon kind="lock" size={36} /></div>
             <div className="notice-text" id="admission-approval-description" ref={explanationRef} tabIndex={-1}>
               <strong>A device with this fort&apos;s invitation wants to join.</strong>
               <p className="notice-subtext">
