@@ -1058,6 +1058,45 @@ describe("Mobile E2E", () => {
     );
   });
 
+  it("keeps concurrent drawers' paths and colors independent", async () => {
+    const red = await mobilePage();
+    const code = await createFort(red, "red-artist");
+    const blue = await mobilePage();
+    await joinFort(red, blue, code, "blue-artist");
+    for (const page of [red, blue]) {
+      await page.click("#btn-open-games");
+      await page.click("#btn-start-drawing");
+    }
+    await red.getByRole("button", { name: "Red", exact: true }).click();
+    await blue.getByRole("button", { name: "Blue", exact: true }).click();
+    const redPaper = (await red.locator("#game-canvas").boundingBox())!;
+    const bluePaper = (await blue.locator("#game-canvas").boundingBox())!;
+    await red.mouse.move(redPaper.x + redPaper.width * 0.1, redPaper.y + redPaper.height * 0.2);
+    await red.mouse.down();
+    await red.mouse.move(redPaper.x + redPaper.width * 0.4, redPaper.y + redPaper.height * 0.2, { steps: 8 });
+    await blue.mouse.move(bluePaper.x + bluePaper.width * 0.2, bluePaper.y + bluePaper.height * 0.6);
+    await blue.mouse.down();
+    await blue.mouse.move(bluePaper.x + bluePaper.width * 0.8, bluePaper.y + bluePaper.height * 0.6, { steps: 8 });
+    await blue.mouse.up();
+    const correctColors = () => {
+      const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
+      const context = canvas.getContext("2d")!;
+      return [[0.6, 0.2, 0], [0.5, 0.6, 2]].every(([x, y, channel]) => {
+        const pixels = context.getImageData(Math.floor(canvas.width * x) - 2, Math.floor(canvas.height * y) - 2, 5, 5).data;
+        for (let offset = 0; offset < pixels.length; offset += 4) {
+          if (pixels[offset + channel] > 180 && pixels[offset + 1] < 160 && pixels[offset + (channel === 0 ? 2 : 0)] < 160) return true;
+        }
+        return false;
+      });
+    };
+    await red.mouse.move(redPaper.x + redPaper.width * 0.8, redPaper.y + redPaper.height * 0.2, { steps: 8 });
+    await red.mouse.up();
+    for (const page of [red, blue]) {
+      await page.waitForFunction(correctColors);
+      expect(await page.evaluate(correctColors)).toBe(true);
+    }
+  });
+
   it("keeps a real doodle across room and Breakout transitions", async () => {
     const page = await mobilePage();
     await createFort(page, "artist");
@@ -1066,22 +1105,22 @@ describe("Mobile E2E", () => {
     await page.waitForSelector("#btn-return-room");
     expect(await page.locator(".room-shell").isVisible()).toBe(false);
     const canvas = page.locator("#game-canvas");
-    const before = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
     const box = (await canvas.boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.6, { steps: 8 });
     await page.mouse.up();
-    const inkAtStrokePoints = () => canvas.evaluate((element) => {
-      const canvas = element as HTMLCanvasElement;
+    const hasStrokeInk = () => {
+      const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
       const context = canvas.getContext("2d")!;
-      return [[0.4, 0.525], [0.5, 0.55], [0.6, 0.575]].map(([x, y]) => {
+      return [[0.4, 0.525], [0.5, 0.55], [0.6, 0.575]].every(([x, y]) => {
         const pixels = context.getImageData(Math.floor(canvas.width * x) - 2, Math.floor(canvas.height * y) - 2, 5, 5).data;
-        return pixels.some((value, index) => index % 4 === 3 && value > 0);
+        return pixels.some((value, index) => index % 4 !== 3 && value < 200);
       });
-    });
-    expect(await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())).not.toBe(before);
-    expect(await inkAtStrokePoints()).toEqual([true, true, true]);
+    };
+    // Only applied encrypted strokes are rendered, not speculative local ink.
+    await page.waitForFunction(hasStrokeInk);
+    expect(await page.evaluate(hasStrokeInk)).toBe(true);
 
     await page.click("#btn-return-room");
     await page.click("#btn-open-games");
@@ -1090,7 +1129,8 @@ describe("Mobile E2E", () => {
     await page.click("#btn-return-room");
     await page.click("#btn-open-games");
     await page.click("#btn-start-drawing");
-    expect(await inkAtStrokePoints()).toEqual([true, true, true]);
+    await page.waitForFunction(hasStrokeInk);
+    expect(await page.evaluate(hasStrokeInk)).toBe(true);
     await page.click("#btn-return-room");
     await page.fill("#msg-input", "saved my sketch");
     await page.click("#btn-send");

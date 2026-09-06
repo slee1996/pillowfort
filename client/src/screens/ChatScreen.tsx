@@ -214,7 +214,7 @@ export function ChatScreen() {
 
   return (
     <div className={`screen room-scene screen-chat theme-${roomTheme}`} data-room-mode={roomMode}>
-      <DrawCanvas />
+      <DrawCanvas active={drawing} />
       <BreakoutCanvas active={minimized && !drawing} />
 
       {focusedActivity && (

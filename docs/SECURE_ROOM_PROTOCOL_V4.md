@@ -67,6 +67,19 @@ still consume the raw budgets, but are not charged a second time as initiated
 operations. This bounds abuse without disconnecting passive recipients merely
 for completing mandatory protocol fanout.
 
+Drawing producers have a bounded ordered queue of 32 pending batches, each at
+most 128 points, plus the existing single in-flight batch. Separate stroke starts
+and color changes are not collapsed. Long batches preserve continuation endpoints
+when split. Producer saturation returns rejection before changing the accepted
+queue; membership cancellation and delivery errors are surfaced to the client.
+The existing 250ms submission interval and encrypted grant ordering remain.
+
+The sketchpad rasterizes only applied events onto a fixed 1200×800 logical paper,
+with independent path state per sender. A local pointer preview is not exported
+or treated as shared ink. PNG export contains only that participant's received
+paper. Neither the renderer nor its export changes the live-only/no-pre-join
+history boundary, and the drawing wire format remains unchanged.
+
 The first-party client defaults to a 26-character generated password: `pf3_`
 plus the canonical unpadded base64url encoding of 16 CSPRNG bytes (22 suffix
 characters, with the final character one of `A`, `Q`, `g`, or `w`). This has

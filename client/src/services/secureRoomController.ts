@@ -3,7 +3,7 @@ import type {
   SecureRpsPickV4,
   SecureRoomStateSnapshotV4,
 } from "../../../src/applicationEventsV4";
-import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
+import { isSecureDisplayNameV4, MAX_SECURE_DRAW_POINTS } from "../../../src/applicationEventsV4";
 import { decodeSecureAdmissionBundleV4, encodeSecureAdmissionBundleV4 } from "../../../src/admissionBundleV4";
 import { computeRpsCommitmentV4, computeSaboteurCommitmentV4, type SecureReducerEffectV4 } from "../../../src/secureGameReducer";
 import { normalizeRoomId } from "../../../src/entitlements";
@@ -92,6 +92,7 @@ const VOTE_DURATION_MS = 30_000;
 const SABOTEUR_VOTE_DURATION_MS = 30_000;
 const SABOTEUR_ENTROPY_DURATION_MS = 30_000;
 const DRAW_SUBMISSION_INTERVAL_MS = 250;
+const MAX_PENDING_DRAWING_BATCHES = 32;
 const MAX_PENDING_HOST_ADMISSIONS = 8;
 const MAX_TRACKED_TRANSIENT_CONTROLS = 256;
 const MAX_TRACKED_OUTBOUND_UI = MAX_QUEUED_ACTIONS + 8;
@@ -334,7 +335,7 @@ export class SecureRoomController {
   private saboteurEntropyTimerPhase: string | null = null;
   private pcsTimer: ReturnType<typeof setTimeout> | null = null;
   private drawTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingDrawing: { color: string; points: [number, number][]; strokeStart: boolean } | null = null;
+  private readonly pendingDrawings: { color: string; points: [number, number][]; strokeStart: boolean }[] = [];
   private lastDrawSubmissionAt = 0;
   private pcsDue = false;
   private readonly sentDurableControls = new Set<string>();
@@ -376,6 +377,9 @@ export class SecureRoomController {
 
   sendUiAction(type: string, payload: Record<string, unknown> = {}): boolean {
     if (this.stopped || this.terminal || !this.config || !plainRecord(payload)) return false;
+    // Bound producer traffic before it can accumulate behind asynchronous MLS work.
+    // Acceptance here means queued in memory, never relay acceptance or application.
+    if (type === "draw") return this.queueUiDrawing(payload);
     const generation = this.generation;
     this.enqueue(async () => this.mapUiAction(type, payload), generation);
     return true;
@@ -1774,6 +1778,7 @@ export class SecureRoomController {
       this.pendingGrant = null;
       let intent = pending.intent;
       if (this.hasMembershipBarrier() && !this.isIntentAllowedDuringMembershipBarrier(intent.key)) {
+        if (intent.key === "drawing") this.discardPendingDrawing(true);
         this.releaseIntentKey(intent.key);
         const replacementIndex = this.grantQueue.findIndex((candidate) =>
           this.isIntentAllowedDuringMembershipBarrier(candidate.key));
@@ -1794,6 +1799,7 @@ export class SecureRoomController {
       } catch (error) {
         this.releaseIntentKey(intent.key);
         this.showOperationError(error);
+        if (intent.key === "drawing") this.reportDrawingError("A drawing batch could not be shared. Try a new stroke.");
         this.pumpGrantQueue();
       }
       return;
@@ -1822,6 +1828,9 @@ export class SecureRoomController {
     const messageId = entry.messageId;
     try {
       const outcome = await engine.rejectOutbound(messageId);
+      if (this.messageIntentKeys.get(messageId) === "drawing") {
+        this.reportDrawingError("A drawing batch expired before it could be shared. Try a new stroke.");
+      }
       this.releaseMessageIntent(messageId);
       if (outcome === "retired") {
         await this.finishTerminal("connection-ended", "Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
@@ -1843,6 +1852,7 @@ export class SecureRoomController {
       this.pendingGrant = null;
       if ((reason === "removal-pending" || reason === "admission-pending") &&
           !this.isIntentAllowedDuringMembershipBarrier(intent.key)) {
+        if (intent.key === "drawing") this.discardPendingDrawing(true);
         this.releaseIntentKey(intent.key);
       } else {
         this.grantQueue.unshift(intent);
@@ -1863,6 +1873,9 @@ export class SecureRoomController {
     if (!entry) return;
     try {
       const outcome = await engine.rejectOutbound(entry.messageId);
+      if (this.messageIntentKeys.get(entry.messageId) === "drawing") {
+        this.reportDrawingError("A drawing batch was cancelled while the fort was being secured.");
+      }
       this.releaseMessageIntent(entry.messageId);
       if (outcome === "retired") {
         await this.finishTerminal(
@@ -1979,6 +1992,7 @@ export class SecureRoomController {
       await this.afterAppliedState(recoveredUi.state, recoveredUi.effects);
     } else {
       await engine.rejectOutbound(result.messageId);
+      if (content.type === "drawing") this.reportDrawingError("A drawing batch was rejected and was not shared.");
       this.ackDurableDelivery(result.messageId);
       this.outboundUi.delete(result.messageId);
       this.releaseMessageIntent(result.messageId);
@@ -2221,9 +2235,7 @@ export class SecureRoomController {
       this.sendAdmissionCancellation(pending.admissionId, pending.fromDeviceId);
     }
     this.clearPendingHostAdmissions();
-    if (this.drawTimer) clearTimeout(this.drawTimer);
-    this.drawTimer = null;
-    this.pendingDrawing = null;
+    this.discardPendingDrawing(true);
 
     for (let index = this.grantQueue.length - 1; index >= 0; index -= 1) {
       const intent = this.grantQueue[index];
@@ -2292,15 +2304,13 @@ export class SecureRoomController {
       this.sendAdmissionCancellation(pending.admissionId, pending.fromDeviceId);
       this.removePendingHostAdmission(pending.admissionId);
     }
+    this.discardPendingDrawing(true);
     for (let index = this.grantQueue.length - 1; index >= 0; index -= 1) {
       const intent = this.grantQueue[index];
       if (this.isIntentAllowedDuringMembershipBarrier(intent.key)) continue;
       this.grantQueue.splice(index, 1);
       this.releaseIntentKey(intent.key);
     }
-    if (this.drawTimer) clearTimeout(this.drawTimer);
-    this.drawTimer = null;
-    this.pendingDrawing = null;
     if (!this.isHost()) return;
     const retirement = this.currentRetirementBarrier();
     if (retirement) {
@@ -2871,20 +2881,6 @@ export class SecureRoomController {
       case "typing":
         this.enqueueApplication({ type: "typing" }, "typing");
         return;
-      case "draw": {
-        const color = stringField(payload, "color");
-        if (!color || !Array.isArray(payload.pts) || payload.pts.length < 1 || payload.pts.length > 128) return;
-        const points: [number, number][] = [];
-        for (const point of payload.pts) {
-          if (!Array.isArray(point) || point.length !== 2 ||
-              !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
-              (point[0] as number) < 0 || (point[0] as number) > 1 ||
-              (point[1] as number) < 0 || (point[1] as number) > 1) return;
-          points.push([point[0] as number, point[1] as number]);
-        }
-        this.queueDrawing(color, points, payload.s === 1);
-        return;
-      }
       case "set-status": {
         if (payload.status !== "available" && payload.status !== "away") return;
         const awayText = stringField(payload, "awayText")?.normalize("NFC").trim();
@@ -3047,20 +3043,86 @@ export class SecureRoomController {
     }, priority);
   }
 
-  private queueDrawing(color: string, points: [number, number][], strokeStart: boolean): void {
-    const pending = this.pendingDrawing;
-    if (pending && (pending.color !== color || strokeStart)) {
-      this.flushPendingDrawing();
-      if (this.pendingDrawing) return;
+  private queueUiDrawing(payload: Record<string, unknown>): boolean {
+    if (!this.authenticated || this.replayingBacklog || !this.engine?.isActive()) {
+      return this.reportDrawingError("Drawing is unavailable while the secure room reconnects.");
     }
-    if (!this.pendingDrawing) this.pendingDrawing = { color, points: [], strokeStart };
-    const capacity = 128 - this.pendingDrawing.points.length;
-    if (capacity > 0) this.pendingDrawing.points.push(...points.slice(0, capacity));
+    if (this.hasMembershipBarrier()) {
+      return this.reportDrawingError("Drawing is paused while the fort's membership is secured.");
+    }
+    const color = stringField(payload, "color");
+    if (!color || color.length > 24 || !Array.isArray(payload.pts) ||
+        payload.pts.length < 1 || payload.pts.length > MAX_SECURE_DRAW_POINTS ||
+        (payload.s !== undefined && payload.s !== 1)) {
+      return this.reportDrawingError("That drawing batch is invalid and was not queued.");
+    }
+    const points: [number, number][] = [];
+    for (const point of payload.pts) {
+      if (!Array.isArray(point) || point.length !== 2 ||
+          !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
+          (point[0] as number) < 0 || (point[0] as number) > 1 ||
+          (point[1] as number) < 0 || (point[1] as number) > 1) {
+        return this.reportDrawingError("That drawing batch is invalid and was not queued.");
+      }
+      points.push([point[0] as number, point[1] as number]);
+    }
+    return this.queueDrawing(color, points, payload.s === 1);
+  }
+
+  private queueDrawing(color: string, points: [number, number][], strokeStart: boolean): boolean {
+    let tail = this.pendingDrawings[this.pendingDrawings.length - 1];
+    const continuesTail = tail !== undefined && tail.color === color && !strokeStart;
+    const capacity = continuesTail ? MAX_SECURE_DRAW_POINTS - tail.points.length : 0;
+    const remainder = Math.max(0, points.length - capacity);
+    // Split continuations carry the preceding endpoint, leaving 127 new samples.
+    const newBatches = continuesTail
+      ? Math.ceil(remainder / (MAX_SECURE_DRAW_POINTS - 1))
+      : remainder === 0 ? 0 : 1 + Math.ceil(Math.max(0, remainder - MAX_SECURE_DRAW_POINTS) / (MAX_SECURE_DRAW_POINTS - 1));
+    if (this.pendingDrawings.length + newBatches > MAX_PENDING_DRAWING_BATCHES) {
+      return this.reportDrawingError("Drawing delivery is busy. This batch was not queued; wait before starting a new stroke.");
+    }
+    // Capacity is reserved for the entire input before mutating any accepted batch.
+    let offset = 0;
+    if (continuesTail) {
+      const count = Math.min(capacity, points.length);
+      tail.points.push(...points.slice(0, count));
+      offset = count;
+    }
+    while (offset < points.length) {
+      const continuation = continuesTail || offset > 0;
+      const batch = {
+        color,
+        points: continuation ? [tail.points[tail.points.length - 1]] : [],
+        strokeStart: !continuation && strokeStart,
+      };
+      const count = Math.min(MAX_SECURE_DRAW_POINTS - batch.points.length, points.length - offset);
+      batch.points.push(...points.slice(offset, offset + count));
+      this.pendingDrawings.push(batch);
+      tail = batch;
+      offset += count;
+    }
     this.scheduleDrawingFlush();
+    return true;
+  }
+
+  private reportDrawingError(message: string): false {
+    useGameStore.getState().showError(message);
+    window.dispatchEvent(new CustomEvent("pf-drawing-error", { detail: { message } }));
+    return false;
+  }
+
+  private discardPendingDrawing(notify: boolean): void {
+    const cancelled = this.pendingDrawings.length > 0 || this.intentKeys.has("drawing");
+    clearTimeout(this.drawTimer ?? undefined);
+    this.drawTimer = null;
+    this.pendingDrawings.length = 0;
+    if (notify && cancelled) {
+      this.reportDrawingError("Unshared drawing was cancelled because the fort's membership changed.");
+    }
   }
 
   private scheduleDrawingFlush(minimumDelay = 0): void {
-    if (!this.pendingDrawing || this.drawTimer || this.stopped || this.terminal) return;
+    if (this.pendingDrawings.length === 0 || this.drawTimer || this.stopped || this.terminal) return;
     const delay = Math.max(minimumDelay, this.lastDrawSubmissionAt + DRAW_SUBMISSION_INTERVAL_MS - Date.now());
     const generation = this.executingGeneration ?? this.generation;
     this.drawTimer = setTimeout(() => {
@@ -3070,24 +3132,29 @@ export class SecureRoomController {
   }
 
   private flushPendingDrawing(): void {
-    if (!this.pendingDrawing) return;
+    if (this.pendingDrawings.length === 0) return;
     if (this.hasMembershipBarrier()) {
-      this.pendingDrawing = null;
+      this.discardPendingDrawing(true);
       return;
     }
-    if (this.intentKeys.has("drawing") || this.stopped || this.terminal || !this.authenticated || this.replayingBacklog) {
+    if (this.intentKeys.has("drawing") || this.stopped || this.terminal || !this.authenticated || this.replayingBacklog ||
+        Date.now() < this.lastDrawSubmissionAt + DRAW_SUBMISSION_INTERVAL_MS) {
       this.scheduleDrawingFlush(DRAW_SUBMISSION_INTERVAL_MS);
       return;
     }
-    const drawing = this.pendingDrawing;
-    this.pendingDrawing = null;
-    this.lastDrawSubmissionAt = Date.now();
+    const drawing = this.pendingDrawings[0];
     this.enqueueApplication({
       type: "drawing",
       color: drawing.color,
       points: drawing.points,
       ...(drawing.strokeStart ? { strokeStart: true } : {}),
     }, "drawing");
+    // enqueueApplication may refuse a saturated grant queue; retain the geometry.
+    if (this.intentKeys.has("drawing")) {
+      this.pendingDrawings.shift();
+      this.lastDrawSubmissionAt = Date.now();
+    }
+    this.scheduleDrawingFlush(DRAW_SUBMISSION_INTERVAL_MS);
   }
 
   private async enqueueRpsCommit(gameId: string, pick: SecureRpsPickV4): Promise<void> {
@@ -3376,13 +3443,12 @@ export class SecureRoomController {
     if (this.saboteurVoteTimer) clearTimeout(this.saboteurVoteTimer);
     if (this.saboteurEntropyTimer) clearTimeout(this.saboteurEntropyTimer);
     if (this.pcsTimer) clearTimeout(this.pcsTimer);
-    if (this.drawTimer) clearTimeout(this.drawTimer);
+    this.discardPendingDrawing(false);
     this.voteTimer = null;
     this.saboteurVoteTimer = null;
     this.saboteurEntropyTimer = null;
     this.pcsTimer = null;
-    this.drawTimer = null;
-    this.pendingDrawing = null;
+    this.lastDrawSubmissionAt = 0;
     this.voteTimerGameId = null;
     this.saboteurVoteTimerGameId = null;
     this.saboteurEntropyTimerPhase = null;

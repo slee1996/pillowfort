@@ -52,7 +52,7 @@ When the fort is gone, the room is gone.
 
 ### Extras beyond plain chat
 
-- Shared drawing canvas
+- Shared 1200×800 sketchpad with selectable ink colors and PNG export
 - Pillow Fight vote-to-kick
 - Rock Paper Scissors
 - Tic-Tac-Toe
@@ -318,6 +318,18 @@ the Hill, and the real local Breakout game. Secret Saboteur needs four members;
 Pillow Fight needs three. Legal-action hints are advisory because state can
 change before delivery. Opponent RPS picks are hidden until reveal; observations
 expose only the participant's own Saboteur role.
+
+The sketchpad keeps one 3:2 coordinate plane across phone and desktop screens.
+Use its palette to choose ink and **Save PNG** to export the drawings your browser
+has received. Ink appears after encrypted application; the pointer ring is a
+local preview, not proof of delivery. Resize and switching to chat or Breakout
+preserve the current paper. New arrivals still do not receive earlier drawings.
+
+Agents can use `drawing_color` and `drawing_export_png` in addition to
+`drawing_send`; the `sketchpad` observation reports color, readiness, and delivery
+notices without embedding the image. Export is explicit and includes only the
+paper, not room credentials or browser chrome. A saturated drawing queue rejects
+new batches visibly instead of silently losing accepted strokes.
 
 Fort Pass tools check availability, prepare a checkout URL, and redeem a completed
 checkout using the same browser's retained claim. They never complete payment or

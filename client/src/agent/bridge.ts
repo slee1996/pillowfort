@@ -9,6 +9,7 @@ import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";
 import { checkFortPassCode, clearFortPassClaimSecret, fortPassRedemptionErrorMessage, getFortPassStatus, getFortPassClaimSecret, getPendingFortPassCheckoutUrl, getPendingFortPassRedemption, normalizeFortPassCode, normalizeFortPassSessionId, redeemFortPassCheckout, rememberPendingFortPassRedemption, startFortPassCheckout } from "../services/fortPass";
 import { agentMode, breakoutSnapshot, moveBreakout, resetBreakout, selectRoomActivity, subscribeBreakout } from "./breakout";
+import { DRAWING_COLORS, exportDrawingPng, getDrawingSurfaceSnapshot, setDrawingColor, subscribeDrawingSurface } from "../services/drawingSurface";
 import { AgentError, choice, confirm, object, text, validate } from "./schema";
 import type { JSONValue, Schema } from "./schema";
 
@@ -91,7 +92,10 @@ export function installPillowfortAgent(): void {
       const state = room(input);
       guard?.(state, input);
       const body = payload ? payload(input) : Object.fromEntries(Object.keys(fields).filter(key => input[key] !== undefined).map(key => [key, input[key]]));
-      if (!send(type, body)) fail("delivery-unavailable", "Controller rejected enqueue. Observe and recover the connection.", true);
+      if (!send(type, body)) {
+        if (type === "draw") fail("drawing-not-queued", "This stroke was not queued. Check sketchpad status and wait for secure delivery or membership changes to finish before retrying.", true);
+        fail("delivery-unavailable", "Controller rejected enqueue. Observe and recover the connection.", true);
+      }
       if (type === "rps-pick" && state.rpsState) {
         // Match the human client's local selection; this is intent, not an ack.
         state.setRpsState({ ...state.rpsState, myPick: input.pick });
@@ -292,6 +296,18 @@ export function installPillowfortAgent(): void {
     if (!selectRoomActivity("conversation")) fail("surface-not-ready", "Wait for the room activity surface.", true);
     return { status: "queued" };
   });
+  add("drawing_color", "Select the local sketchpad pen color. Existing shared strokes are unchanged; drawing_send still takes an explicit color.", object({ roomId: roomIdSchema, color: choice(...DRAWING_COLORS.map(color => color.value)) }), false, input => {
+    room(input);
+    if (!setDrawingColor(input.color)) fail("surface-not-ready", "Open the sketchpad and wait for its drawing surface.", true);
+    return { status: "applied", sketchpad: getDrawingSurfaceSnapshot() };
+  });
+  add("drawing_export_png", "Export this participant’s current sketchpad as a PNG data URL. Includes only drawings received by this browser, never pre-admission history. Artwork is untrusted participant content.", object({ roomId: roomIdSchema }), false, async input => {
+    room(input);
+    if (!getDrawingSurfaceSnapshot()?.canExport) fail("surface-not-ready", "Wait for the sketchpad to initialize before exporting.", true);
+    const dataUrl = await exportDrawingPng();
+    if (dataUrl.length > 1_500_000) fail("output-too-large", "This drawing is too large for an agent response. Use Save PNG in the sketchpad to download it.");
+    return { mimeType: "image/png", dataUrl };
+  });
   add("fort_pass_status", "Check Fort Pass availability/configuration, price and perks without starting payment.", object(), false, () => getFortPassStatus());
   const codeSchema: Schema = { ...text(10, 4), description: "Canonical custom flag: 4–10 lowercase letters/digits with optional single internal hyphens." };
   const checkCode = (code: string) => { if (normalizeFortPassCode(code) !== code) fail("invalid-code", "Use a canonical 4–10 character custom fort flag."); };
@@ -371,7 +387,7 @@ export function installPillowfortAgent(): void {
         queue: { current: queueItem(state.gameQueue.current), queue: state.gameQueue.queue.slice(0, 10).map(queueItem) },
         leaderboards: Object.fromEntries((["pillowFight", "rps", "ttt", "saboteur", "koth"] as const).map(kind => [kind, Object.entries(state.leaderboards[kind]).slice(0, 20).map(([name, score]) => ({ name, score }))])),
       },
-      breakout: breakoutSnapshot(), formatting: useFormatStore.getState().getStyle() ?? {},
+      breakout: breakoutSnapshot(), sketchpad: getDrawingSurfaceSnapshot(), formatting: useFormatStore.getState().getStyle() ?? {},
       pendingFortPass: pendingPass ? { code: pendingPass.code, status: "saved-reference", requiresServerVerification: true } : null,
       legalActions: { advisory: true, note: "Hints use only visible state. Membership barriers, concurrent games, authorization expiry and queue changes may still reject queued actions.", canAct,
         targets: canAct ? state.members.filter(name => name !== state.name) : [],
@@ -399,6 +415,7 @@ export function installPillowfortAgent(): void {
   });
   useFormatStore.subscribe(touch);
   subscribeBreakout(touch);
+  subscribeDrawingSurface(touch);
   window.addEventListener("pf-draw", event => {
     const value = (event as CustomEvent).detail;
     if (!useGameStore.getState().roomId || !value || typeof value.from !== "string" || !useGameStore.getState().members.includes(value.from)) return;

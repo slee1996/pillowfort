@@ -4,6 +4,37 @@ import { chromium, type Browser, type Page } from "playwright";
 import { createServer, type ViteDevServer } from "../client/node_modules/vite/dist/node/index.js";
 import { verifySecureDeviceResumeProofV4 } from "../src/deviceAuthV4";
 
+type DrawingControllerHarness = {
+  config: object;
+  stopped: boolean;
+  terminal: boolean;
+  authenticated: boolean;
+  serialQueue: Promise<void>;
+  lastDrawSubmissionAt: number;
+  intentKeys: Set<string>;
+  pendingGrant: { requestId: string } | null;
+  grantQueue: { key: string; run: () => Promise<null> }[];
+  engine: {
+    roomInstance: string;
+    deviceId: string;
+    state: Record<string, unknown>;
+    pendingOutbox: never[];
+    pendingAdmissionBarrier?: { admissionId: string } | null;
+    isActive: () => boolean;
+    encryptEvent?: (content: { color: string; points: [number, number][]; strokeStart?: true }) =>
+      Promise<{ messageId: string; state: Record<string, unknown>; effects: never[] }>;
+  };
+  sendClientFrame: () => void;
+  sendPendingEntry: () => void;
+  scheduleDrawingFlush: () => void;
+  flushPendingDrawing: () => void;
+  releaseIntentKey: (key: string) => void;
+  releaseMessageIntent: (messageId: string) => void;
+  handleGrant: (grant: { roomInstance: string; deviceId: string; requestId: string }) => Promise<void>;
+  activateMembershipBarrier: () => void;
+  clearTimers: () => void;
+};
+
 let vite: ViteDevServer;
 let browser: Browser;
 let page: Page;
@@ -1887,15 +1918,6 @@ describe("protocol-v4 durable secure room engine", () => {
       const intentKeysBounded = harness.intentKeys.size < 100;
       harness.intentKeys.clear();
 
-      let drawReschedules = 0;
-      harness.scheduleDrawingFlush = () => { drawReschedules += 1; };
-      for (const messageId of ["draw-accepted", "draw-rejected"]) {
-        harness.intentKeys.add("drawing");
-        harness.messageIntentKeys.set(messageId, "drawing");
-        harness.releaseMessageIntent(messageId);
-      }
-      const drawReschedulesAfterAcceptAndReject = drawReschedules === 2;
-
       harness.intentKeys.add("leftover");
       harness.messageIntentKeys.set("leftover", "leftover");
       harness.outboundUi.set("leftover", { state: applicationState, effects: [] });
@@ -1943,7 +1965,6 @@ describe("protocol-v4 durable secure room engine", () => {
         outboundUiCapEnforced,
         messageIntentCapEnforced,
         intentKeysBounded,
-        drawReschedulesAfterAcceptAndReject,
         clearTimersClearsTransientState,
         disconnectClearsTransientState,
       };
@@ -1971,9 +1992,239 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.outboundUiCapEnforced).toBe(true);
     expect(result.messageIntentCapEnforced).toBe(true);
     expect(result.intentKeysBounded).toBe(true);
-    expect(result.drawReschedulesAfterAcceptAndReject).toBe(true);
     expect(result.clearTimersClearsTransientState).toBe(true);
     expect(result.disconnectClearsTransientState).toBe(true);
+  });
+
+  it("preserves long gestures and rapid stroke boundaries behind in-flight drawing delivery", async () => {
+    const result = await page.evaluate(async () => {
+      // Browser realm imports are required: a Node import cannot supply the page's controller.
+      const { SecureRoomController } = await import("/src/services/secureRoomController.ts");
+      const controller = new SecureRoomController();
+      const harness = controller as unknown as DrawingControllerHarness;
+      const encrypted: { color: string; points: [number, number][]; strokeStart?: true }[] = [];
+      harness.config = {};
+      harness.stopped = false;
+      harness.authenticated = true;
+      harness.engine = {
+        roomInstance: "room", deviceId: "alice", state: {}, pendingOutbox: [],
+        isActive: () => true,
+        encryptEvent: async (content: typeof encrypted[number]) => {
+          encrypted.push(content);
+          return { messageId: `drawing-${encrypted.length}`, state: {}, effects: [] };
+        },
+      };
+      harness.sendClientFrame = () => {};
+      harness.sendPendingEntry = () => {};
+      // Drive submission time explicitly, without relying on browser timer precision.
+      harness.scheduleDrawingFlush = () => {};
+      const originalNow = Date.now;
+      let now = originalNow();
+      Date.now = () => now;
+      const points = Array.from({ length: 300 }, (_, i) => [i / 300, 0.25] as [number, number]);
+      try {
+        harness.intentKeys.add("drawing");
+        const accepted = [
+          controller.sendUiAction("draw", { color: "#000000", pts: points.slice(0, 128), s: 1 }),
+          controller.sendUiAction("draw", { color: "#000000", pts: points.slice(128, 256) }),
+          controller.sendUiAction("draw", { color: "#000000", pts: points.slice(256) }),
+          controller.sendUiAction("draw", { color: "#000000", pts: [[0.2, 0.8]], s: 1 }),
+          controller.sendUiAction("draw", { color: "#0000FF", pts: [[0.4, 0.8]], s: 1 }),
+          controller.sendUiAction("draw", { color: "#008000", pts: [[0.6, 0.8]] }),
+        ];
+        harness.flushPendingDrawing();
+        const whileBlocked = encrypted.length;
+        harness.releaseIntentKey("drawing");
+        // A full ordinary-action grant queue must defer, not consume, the first batch.
+        for (let i = 0; i < 64; i += 1) {
+          harness.grantQueue.push({ key: `busy-${i}`, run: async () => null });
+        }
+        harness.flushPendingDrawing();
+        harness.grantQueue.length = 0;
+        const drainOne = async () => {
+          harness.flushPendingDrawing();
+          const pending = harness.pendingGrant;
+          if (!pending) throw new Error("Expected a drawing order request");
+          await harness.handleGrant({
+            roomInstance: "room", deviceId: "alice", requestId: pending.requestId,
+          });
+          harness.releaseMessageIntent(`drawing-${encrypted.length}`);
+        };
+        await drainOne();
+        harness.flushPendingDrawing();
+        const submittedBeforeInterval = harness.pendingGrant !== null;
+        for (let i = 0; i < 5; i += 1) {
+          now += 250;
+          await drainOne();
+        }
+        now += 250;
+        harness.flushPendingDrawing();
+        return { accepted, whileBlocked, submittedBeforeInterval, encrypted, extraRequest: harness.pendingGrant !== null };
+      } finally {
+        Date.now = originalNow;
+        harness.clearTimers();
+      }
+    });
+    expect(result.accepted).toEqual([true, true, true, true, true, true]);
+    expect(result.whileBlocked).toBe(0);
+    expect(result.submittedBeforeInterval).toBe(false);
+    expect(result.extraRequest).toBe(false);
+    const points = Array.from({ length: 300 }, (_, i) => [i / 300, 0.25]);
+    expect(result.encrypted.map(batch => ({
+      color: batch.color, points: batch.points, strokeStart: batch.strokeStart ?? false,
+    }))).toEqual([
+      { color: "#000000", points: points.slice(0, 128), strokeStart: true },
+      { color: "#000000", points: points.slice(127, 255), strokeStart: false },
+      { color: "#000000", points: points.slice(254), strokeStart: false },
+      { color: "#000000", points: [[0.2, 0.8]], strokeStart: true },
+      { color: "#0000FF", points: [[0.4, 0.8]], strokeStart: true },
+      { color: "#008000", points: [[0.6, 0.8]], strokeStart: false },
+    ]);
+  });
+
+  it("rejects saturated drawing producers atomically without disconnecting or losing accepted geometry", async () => {
+    const result = await page.evaluate(async () => {
+      // Exercise the controller and its UI error store in the same browser realm.
+      const [{ SecureRoomController }, { useGameStore }] = await Promise.all([
+        import("/src/services/secureRoomController.ts"), import("/src/stores/gameStore.ts"),
+      ]);
+      const controller = new SecureRoomController();
+      const harness = controller as unknown as DrawingControllerHarness;
+      const encrypted: { points: [number, number][] }[] = [];
+      let errors = 0;
+      const onError = () => { errors += 1; };
+      window.addEventListener("pf-drawing-error", onError);
+      harness.config = {};
+      harness.stopped = false;
+      harness.authenticated = true;
+      harness.engine = {
+        roomInstance: "room", deviceId: "alice", state: {}, pendingOutbox: [],
+        isActive: () => true,
+        encryptEvent: async (content: { points: [number, number][] }) => {
+          encrypted.push(content);
+          return { messageId: `drawing-${encrypted.length}`, state: {}, effects: [] };
+        },
+      };
+      harness.sendClientFrame = () => {};
+      harness.sendPendingEntry = () => {};
+      harness.scheduleDrawingFlush = () => {};
+      // Producer admission must stay bounded even while unrelated crypto is awaiting.
+      let releaseSerial!: () => void;
+      harness.serialQueue = new Promise<void>(resolve => { releaseSerial = resolve; });
+      try {
+        const accepted = Array.from({ length: 31 }, (_, i) =>
+          controller.sendUiAction("draw", { color: "#000000", pts: [[i / 100, 0.1]], s: 1 }));
+        const lastPoints = Array.from({ length: 127 }, (_, i) => [i / 127, 0.2]);
+        accepted.push(controller.sendUiAction("draw", { color: "#000000", pts: lastPoints, s: 1 }));
+        const rejectedContinuation = controller.sendUiAction("draw", {
+          color: "#000000", pts: [[0.9, 0.9], [1, 1]],
+        });
+        let excessAccepted = 0;
+        for (let i = 0; i < 100; i += 1) {
+          if (controller.sendUiAction("draw", { color: "#0000FF", pts: [[1, 1]], s: 1 })) excessAccepted += 1;
+        }
+        const visibleError = errors > 0 && useGameStore.getState().errorMessage !== null;
+        for (let i = 0; i < 32; i += 1) {
+          harness.lastDrawSubmissionAt = Date.now() - 250;
+          harness.flushPendingDrawing();
+          const pending = harness.pendingGrant;
+          if (!pending) throw new Error("Accepted drawing disappeared");
+          await harness.handleGrant({ roomInstance: "room", deviceId: "alice", requestId: pending.requestId });
+          harness.releaseMessageIntent(`drawing-${encrypted.length}`);
+        }
+        harness.lastDrawSubmissionAt = Date.now() - 250;
+        harness.flushPendingDrawing();
+        const rejectedGeometryNotRetained = harness.pendingGrant === null;
+        const acceptsAfterDrain = controller.sendUiAction("draw", { color: "#0000FF", pts: [[0.5, 0.5]], s: 1 });
+        return {
+          accepted, rejectedContinuation, excessAccepted, visibleError, encrypted,
+          rejectedGeometryNotRetained, acceptsAfterDrain, disconnected: harness.stopped || harness.terminal,
+        };
+      } finally {
+        releaseSerial();
+        harness.clearTimers();
+        window.removeEventListener("pf-drawing-error", onError);
+      }
+    });
+    expect(result.accepted).toEqual(Array(32).fill(true));
+    expect(result.rejectedContinuation).toBe(false);
+    expect(result.excessAccepted).toBe(0);
+    expect(result.visibleError).toBe(true);
+    expect(result.disconnected).toBe(false);
+    expect(result.rejectedGeometryNotRetained).toBe(true);
+    expect(result.acceptsAfterDrain).toBe(true);
+    expect(result.encrypted.map(batch => batch.points)).toEqual([
+      ...Array.from({ length: 31 }, (_, i) => [[i / 100, 0.1]]),
+      Array.from({ length: 127 }, (_, i) => [i / 127, 0.2]),
+    ]);
+  });
+
+  it("cancels unshared drawing at membership and session boundaries instead of exposing it later", async () => {
+    const result = await page.evaluate(async () => {
+      // Browser realm imports keep membership and session effects on the actual page.
+      const { SecureRoomController } = await import("/src/services/secureRoomController.ts");
+      const controller = new SecureRoomController();
+      const harness = controller as unknown as DrawingControllerHarness;
+      let errors = 0;
+      const onError = () => { errors += 1; };
+      window.addEventListener("pf-drawing-error", onError);
+      harness.config = {};
+      harness.stopped = false;
+      harness.authenticated = true;
+      harness.engine = {
+        roomInstance: "room", deviceId: "alice", state: { hostDeviceId: "bob" }, pendingOutbox: [],
+        pendingAdmissionBarrier: null, isActive: () => true,
+      };
+      harness.sendClientFrame = () => {};
+      harness.scheduleDrawingFlush = () => {};
+      try {
+        const acceptedBeforeBarrier = controller.sendUiAction("draw", {
+          color: "#000000", pts: [[0.1, 0.1]], s: 1,
+        });
+        harness.flushPendingDrawing();
+        // The already-requested grant and all still-buffered geometry are old membership work.
+        controller.sendUiAction("draw", { color: "#0000FF", pts: [[0.2, 0.2]], s: 1 });
+        harness.engine.pendingAdmissionBarrier = { admissionId: "new-member" };
+        harness.activateMembershipBarrier();
+        const barrierReported = errors > 0;
+        const refusedDuringBarrier = controller.sendUiAction("draw", { color: "#000000", pts: [[0.3, 0.3]], s: 1 });
+        const pending = harness.pendingGrant;
+        if (!pending) throw new Error("Expected the pre-barrier drawing grant");
+        await harness.handleGrant({ roomInstance: "room", deviceId: "alice", requestId: pending.requestId });
+        harness.engine.pendingAdmissionBarrier = null;
+        harness.lastDrawSubmissionAt = Date.now() - 250;
+        harness.flushPendingDrawing();
+        const noOldMembershipRequest = harness.pendingGrant === null;
+        controller.sendUiAction("draw", { color: "#000000", pts: [[0.4, 0.4]], s: 1 });
+        harness.clearTimers();
+        harness.flushPendingDrawing();
+        const noOldSessionRequest = harness.pendingGrant === null;
+        const freshAccepted = controller.sendUiAction("draw", { color: "#008000", pts: [[0.5, 0.5]], s: 1 });
+        harness.flushPendingDrawing();
+        const encrypted: unknown[] = [];
+        harness.engine.encryptEvent = async (content: unknown) => {
+          encrypted.push(content);
+          return { messageId: "fresh", state: harness.engine.state, effects: [] };
+        };
+        harness.sendPendingEntry = () => {};
+        const freshGrant = harness.pendingGrant;
+        if (!freshGrant) throw new Error("Expected a fresh drawing grant");
+        await harness.handleGrant({
+          roomInstance: "room", deviceId: "alice", requestId: freshGrant.requestId,
+        });
+        return { acceptedBeforeBarrier, barrierReported, refusedDuringBarrier, noOldMembershipRequest, noOldSessionRequest, freshAccepted, encrypted };
+      } finally {
+        harness.clearTimers();
+        window.removeEventListener("pf-drawing-error", onError);
+      }
+    });
+    expect(result.acceptedBeforeBarrier).toBe(true);
+    expect(result.barrierReported).toBe(true);
+    expect(result.refusedDuringBarrier).toBe(false);
+    expect(result.noOldMembershipRequest).toBe(true);
+    expect(result.noOldSessionRequest).toBe(true);
+    expect(result.freshAccepted).toBe(true);
+    expect(result.encrypted).toEqual([{ type: "drawing", color: "#008000", points: [[0.5, 0.5]], strokeStart: true }]);
   });
 
   it("cancels queued and in-flight ordinary work at membership barriers and binds zombie removal exactly", async () => {
