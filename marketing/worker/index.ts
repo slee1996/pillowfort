@@ -29,18 +29,33 @@ const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+    if (url.protocol === "http:" && !local) {
+      url.protocol = "https:";
+      return Response.redirect(url, 308);
+    }
+    let response: Response;
 
     if (isImageOptimizationPath(url.pathname)) {
-      return handleImageOptimization(request, {
+      response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
       }, allowedWidths);
+    } else {
+      response = await handler.fetch(request, env, ctx);
     }
 
-    return handler.fetch(request, env, ctx);
+    const headers = new Headers(response.headers);
+    headers.set("x-content-type-options", "nosniff");
+    headers.set("x-frame-options", "DENY");
+    headers.set("content-security-policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
+    headers.set("referrer-policy", "no-referrer");
+    if (url.protocol === "https:") headers.set("strict-transport-security", "max-age=31536000");
+    if (url.pathname === "/admin" || url.pathname.startsWith("/api/")) headers.set("cache-control", "no-store");
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
 };
 
