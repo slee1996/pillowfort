@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(pathname = "/", headers = {}) {
+async function render(pathname = "/", headers = {}, origin = "http://localhost") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request(`http://localhost${pathname}`, { headers: { accept: "text/html", ...headers } }),
+    new Request(`${origin}${pathname}`, { headers: { accept: "text/html", ...headers } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
 
-async function postCms(headers = {}, pathname = "/api/cms", body = "action=delete-article&id=1") {
+async function postCms(headers = {}, pathname = "/api/cms", body = "action=delete-article&id=1", origin = "http://localhost") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-cms`);
   const { default: worker } = await import(workerUrl.href);
   return worker.fetch(
-    new Request(`http://localhost${pathname}`, {
+    new Request(`${origin}${pathname}`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
       body,
@@ -36,6 +36,16 @@ test("server-renders the Pillowfort landing page and product metadata", async ()
   const html = await response.text();
   assert.match(html, /https:\/\/pillowfort\.xyz/);
   assert.match(html, /property="og:image"[^>]+\/og\.png/i);
+});
+
+test("old marketing links move without forwarding credential-bearing requests", async () => {
+  const moved = await render("/technology?from=bookmark", {}, "https://www.pillowfort.xyz");
+  assert.equal(moved.status, 308);
+  assert.equal(moved.headers.get("location"), "https://about.pillowfort.xyz/technology?from=bookmark");
+  const login = await postCms({ origin: "https://www.pillowfort.xyz" }, "/api/admin/login", "password=not-a-secret", "https://www.pillowfort.xyz");
+  assert.equal(login.status, 409);
+  assert.equal(login.headers.get("location"), null);
+  assert.equal((await login.json()).error.code, "SITE_MOVED");
 });
 
 

@@ -1,9 +1,9 @@
 # Pillowfort marketing site
 
 Public marketing, privacy notes, and article publishing for Pillowfort.
-The site uses an ivory-and-ink editorial layout, original SVG artwork, and
-server-rendered document navigation. Product calls to action open
-`https://pillowfort.xyz`; marketing lives at `https://www.pillowfort.xyz`.
+The site uses early-2000s product-marketing layouts and an actual example-room
+screenshot. Product calls to action open `https://pillowfort.xyz`; marketing
+lives at `https://about.pillowfort.xyz`.
 
 ## Runtime and source
 
@@ -104,8 +104,27 @@ Capabilities: `cms_list_articles`, `cms_get_article`, `cms_get_frontpage`,
 paginated metadata; read a slug for its sanitized body. Forms and agents share the
 same mutation service.
 
-The parent MCP/CLI accepts `--cms-url https://www.pillowfort.xyz`. Use `--headed`
+The parent MCP/CLI accepts `--cms-url https://about.pillowfort.xyz`. Use `--headed`
 to sign in normally, or provide an explicitly selected authenticated
 `--cms-storage-state` file for headless access. That file is a login credential:
 protect it and never commit it. Logout revokes copied session cookies as well.
 Article and room text remains untrusted data, not instructions to an agent.
+
+## Design comparisons and hostname migration
+
+The default homepage follows Apple’s 2001–2003 product-marketing hierarchy.
+`/?look=apple` and `/?look=xp` expose independently composed comparison versions;
+explicit comparison views are noindex and canonicalize to the homepage.
+The XP/MSN version is a homepage comparison, while articles, privacy notes, and
+the editor retain the primary Apple-era design.
+
+Historical references: [Apple 2001](https://www.webdesignmuseum.org/gallery/apple-2001),
+[Apple 2003](https://www.webdesignmuseum.org/gallery/apple-in-2003),
+[Windows XP 2001](https://www.webdesignmuseum.org/gallery/windows-xp-home-page-in-2001),
+and [MSN Messenger 2003](https://www.webdesignmuseum.org/gallery/msn-messenger-in-2003).
+Reference screenshots are not distributed as production artwork.
+
+The old `www.pillowfort.xyz` hostname redirects read-only URLs to `about`.
+Old write requests are rejected rather than forwarding credentials across
+origins; the old logout endpoint remains available to revoke an existing session.
+Sign in again on `about` and update CMS client URLs; host-only cookies do not move.

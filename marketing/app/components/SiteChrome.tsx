@@ -5,24 +5,22 @@ export function SiteHeader() {
   return <>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <header className="site-header wrap">
-      <a className="brand" href="/" aria-label="Pillowfort home"><BrandIcon size={42} /><span>pillowfort</span></a>
       <nav className="site-nav" aria-label="Main navigation">
+        <a className="brand" href="/" aria-label="Pillowfort home"><BrandIcon size={31} /><span>pillowfort</span></a>
         <a href="/#how">How it works</a>
-        <a href="/technology">Privacy &amp; technology</a>
+        <a href="/#games">Talk, draw &amp; play</a>
+        <a href="/technology">Privacy</a>
         <a href="/articles">Field notes</a>
       </nav>
-      <a className="button header-cta" href="https://pillowfort.xyz">Make a fort <span aria-hidden="true">↗</span></a>
+      <div className="site-subnav"><span>A little room for your people.</span><a href="https://pillowfort.xyz">Open Pillowfort <span aria-hidden="true">→</span></a></div>
     </header>
   </>;
 }
 
 export function SiteFooter() {
   return <footer className="site-footer wrap">
-    <div className="footer-top">
-      <div><a className="brand" href="/"><BrandIcon size={42} /><span>pillowfort</span></a><p>A place for your friends.<br />Not another place to scroll.</p></div>
-      <nav aria-label="Footer navigation"><a href="/#how">How it works</a><a href="/technology">Privacy &amp; technology</a><a href="/articles">Field notes</a><a href="/admin">Editor sign in</a></nav>
-      <a className="text-link" href="https://pillowfort.xyz">Your friends are the good part. <span aria-hidden="true">↗</span></a>
-    </div>
-    <div className="footer-bottom"><span>Private rooms. Shared time.</span><span>Built for hanging out, then heading off.</span></div>
+    <nav aria-label="Footer navigation"><a href="/#how">How it works</a><a href="/#games">Talk, draw &amp; play</a><a href="/technology">Privacy &amp; technology</a><a href="/articles">Field notes</a><a href="/admin">Editor sign in</a></nav>
+    <p><strong>Pillowfort.</strong> Private rooms. Shared time.</p>
+    <p>Built for hanging out, then heading off.</p>
   </footer>;
 }

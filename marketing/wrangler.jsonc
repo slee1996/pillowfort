@@ -8,10 +8,11 @@
   "dev": { "host": "localhost" },
   "workers_dev": true,
   "routes": [
+    { "pattern": "about.pillowfort.xyz", "custom_domain": true },
     { "pattern": "www.pillowfort.xyz", "custom_domain": true }
   ],
   // Vite supplies the built client directory in dist/server/wrangler.json.
-  "assets": { "binding": "ASSETS" },
+  "assets": { "binding": "ASSETS", "run_worker_first": true },
   "images": { "binding": "IMAGES", "remote": false },
   "d1_databases": [
     {

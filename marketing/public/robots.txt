@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.pillowfort.xyz/sitemap.xml
+Sitemap: https://about.pillowfort.xyz/sitemap.xml

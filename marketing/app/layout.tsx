@@ -3,7 +3,7 @@ import { SiteFooter, SiteHeader } from "./components/SiteChrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.pillowfort.xyz"),
+  metadataBase: new URL("https://about.pillowfort.xyz"),
   title: "Pillowfort — bring your friends. Leave the feed.",
   description: "A private, temporary room for the friends you already have. Talk, draw together, and play. No account needed.",
   alternates: { canonical: "/" },
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
       url: "/og.png",
       width: 1200,
       height: 630,
-      alt: "Pillowfort’s gold cushion-shelter logo on warm ivory paper. Bring your friends. Leave the feed. A private room to talk, draw, and play.",
+      alt: "Pillowfort’s early-2000s product-site presentation with silver navigation, its gold fort logo, and an example conversation.",
     }],
   },
   twitter: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
       url: "/og.png",
       width: 1200,
       height: 630,
-      alt: "Pillowfort’s gold cushion-shelter logo on warm ivory paper. Bring your friends. Leave the feed. A private room to talk, draw, and play.",
+      alt: "Pillowfort’s early-2000s product-site presentation with silver navigation, its gold fort logo, and an example conversation.",
     }],
   },
   icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },

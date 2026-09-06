@@ -328,7 +328,7 @@ cursors, not pre-join history. Use `--headed` to inspect the actual room client.
 
 ### Optional publishing tools
 
-Add `--cms-url https://www.pillowfort.xyz` and, when needed,
+Add `--cms-url https://about.pillowfort.xyz` and, when needed,
 `--cms-storage-state /secure/path/editor-state.json`. The latter must be an
 explicitly supplied authenticated browser-state file; protect it like a login
 credential and never commit it. Use `--headed` to sign in with the owner password.
@@ -407,7 +407,7 @@ Production routing looks like this:
 - `/abc12345` -> SPA room link that resolves to `index.html`
 
 Marketing deploys independently as the `pillowfort-marketing` Cloudflare Worker
-at `https://www.pillowfort.xyz`. From this repository, run
+at `https://about.pillowfort.xyz`. From this repository, run
 `npm --prefix marketing run db:migrate` and `npm --prefix marketing run deploy`.
 The root deploy command publishes only the app at `https://pillowfort.xyz`.
 

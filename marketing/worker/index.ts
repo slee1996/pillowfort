@@ -29,6 +29,22 @@ const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.hostname === "www.pillowfort.xyz") {
+      if (request.method === "GET" || request.method === "HEAD") {
+        url.protocol = "https:";
+        url.hostname = "about.pillowfort.xyz";
+        url.port = "";
+        return Response.redirect(url, 308);
+      }
+      // Do not forward credentials or mutations across origins. Old sessions
+      // may still explicitly log out so their server-side token is revoked.
+      if (url.pathname !== "/api/admin/logout") {
+        return Response.json({
+          ok: false,
+          error: { code: "SITE_MOVED", message: "Open https://about.pillowfort.xyz/admin and sign in again before submitting.", retryable: false },
+        }, { status: 409, headers: { "cache-control": "no-store" } });
+      }
+    }
     const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
     if (url.protocol === "http:" && !local) {
       url.protocol = "https:";
@@ -45,7 +61,9 @@ const worker = {
         },
       }, allowedWidths);
     } else {
-      response = await handler.fetch(request, env, ctx);
+      const asset = request.method === "GET" || request.method === "HEAD"
+        ? await env.ASSETS.fetch(request) : null;
+      response = asset && asset.status !== 404 ? asset : await handler.fetch(request, env, ctx);
     }
 
     const headers = new Headers(response.headers);
