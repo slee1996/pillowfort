@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { installPillowfortAgent } from "./agent/bridge";
+import { captureRoomInvitation } from "./services/roomInvitation";
 import "./styles/app.css";
+
+captureRoomInvitation();
 
 function syncVisualViewportVars() {
   const vv = window.visualViewport;

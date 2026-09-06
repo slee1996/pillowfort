@@ -80,8 +80,11 @@ Run this against the deployed URL, not only local development:
 3. Deny clipboard permission and repeat creation. Confirm no room is silently
    created: manually copy the password and explicitly confirm it is saved
    before continuing.
-4. Copy the flag and password from Invite; confirm the password is masked
-   unless revealed.
+4. Copy the invitation from Invite and confirm it is one URL with the password
+   only in its `#invite=` fragment. The visible room address and masked password
+   must not reveal the full credential link. Open it in a fresh browser profile:
+   confirm the fragment is removed before rendering, no admission starts until
+   Join is submitted, and the guest need not type a separate password.
 5. Join from a second browser profile or device with each password. Confirm a
    wrong custom password is rejected before a host approval prompt and can be
    corrected in the same browser.
@@ -96,6 +99,8 @@ Run this against the deployed URL, not only local development:
    with the original invitation, then reload and recover an established device
    using that same password. Confirm the old room and device identities remain
    intact; do not substitute a newly generated `pf3_` password for the old one.
+   Also reopen the saved full invitation after reload and verify same-device
+   recovery uses the exact original credentials without an unintended new admission.
 9. Start one lightweight game from Play, preferably Rock Paper Scissors.
 10. Disconnect and reconnect one participant inside the grace window.
 11. Change presence to away and back.

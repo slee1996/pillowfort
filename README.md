@@ -2,7 +2,7 @@
 
 Small, private, disposable chat rooms with AIM / Windows XP energy.
 
-Set up a fort, share the code and password, hang out in real time, then knock it down. No accounts. No public room list. No durable chat history for late joiners.
+Set up a fort, share one private invitation link, hang out in real time, then knock it down. No accounts. No public room list. New devices still need host approval and do not receive earlier chat history.
 
 <p align="center">
   <img src="docs/screenshots/aim-home.png" width="360" alt="sign on screen">
@@ -19,9 +19,9 @@ Set up a fort, share the code and password, hang out in real time, then knock it
 
 The core product idea is simple:
 
-1. Pick a screen name and secret password.
-2. Create a fort and get an 8-character room code.
-3. Share the code and password out of band.
+1. Pick a screen name and save the generated room password.
+2. Create a fort and copy its invitation link.
+3. Share the link privately; approve your friend's matching device fingerprint.
 4. Chat, doodle, and play small games together.
 5. Knock the fort down, or let it expire.
 
@@ -269,6 +269,24 @@ and call `admission_approve` with the matching admission ID and fingerprint.
 Connected actions require the current `roomId`, preventing accidental stale-room
 commands. Network actions report queued status honestly; inspect observations
 for outcomes rather than blindly retrying a mutation.
+
+`room_setup` and `invitation_export` return a complete, secret-bearing
+`invitationUrl`. Agents can use `room_join_link` with that URL, a display name,
+and `confirm:true`, instead of splitting out room/password fields. Keep the SDK's
+`--url` set to the base app origin; never configure it with an invitation.
+
+Human invitations place the password in `#invite=…`, not a query or path. The
+browser does not send that fragment in the HTTP request. The app reads it into
+temporary memory and removes it from the address bar before rendering, then asks
+for a name and explicit Join action. Host approval is still required. The default
+secret retains 128 random bits; this convenience does not weaken password entropy.
+
+Treat the whole link as a bearer credential. The messaging app you share it in,
+clipboard history, browser extensions, or someone you forward it to may see it.
+URL scrubbing cannot retroactively erase those copies. Manual room/password
+entry remains available. Reloading after scrubbing requires reopening the saved
+invitation or entering the exact original password; invitation secrets are not
+persisted for convenience.
 
 ### Connect an MCP client
 

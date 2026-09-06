@@ -7,6 +7,7 @@ import { cancelSecureRoomConnection, getSecureRoomRecovery, joinSecureRoom } fro
 import { validateRoomSecret } from "../services/roomSecret";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";
+import { takeRoomInvitation } from "../services/roomInvitation";
 
 export function JoinScreen() {
   const name = useGameStore((s) => s.name);
@@ -17,6 +18,22 @@ export function JoinScreen() {
   const pendingJoinFingerprint = useGameStore((s) => s.pendingJoinFingerprint);
   const recoveryHint = useRef(getSecureRoomRecovery()).current;
   const joinRecovery = recoveryHint?.mode === "join" ? recoveryHint : null;
+  const [invitation] = useState(() => {
+    const incoming = takeRoomInvitation();
+    if (!incoming) return null;
+    const expectedRoom = joinRecovery?.roomId ?? pendingRoom;
+    if (incoming.roomId !== expectedRoom || (recoveryHint && !joinRecovery)) {
+      incoming.roomSecret = "";
+      return null;
+    }
+    return incoming;
+  });
+  const [linkMode, setLinkMode] = useState(!!invitation);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const activeRef = useRef(true);
+  const joiningRef = useRef(false);
+  const cancellingRef = useRef(false);
+  const attemptRef = useRef(0);
   const nameRef = useRef<HTMLInputElement>(null);
   const roomRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -30,26 +47,51 @@ export function JoinScreen() {
   const [recoveryCredentialLocked, setRecoveryCredentialLocked] = useState(false);
 
   useEffect(() => {
+    activeRef.current = true;
     if (joinRecovery) {
       if (nameRef.current) nameRef.current.value = joinRecovery.displayName;
       if (roomRef.current) roomRef.current.value = joinRecovery.roomId;
+    } else if (pendingRoom && roomRef.current) {
+      roomRef.current.value = pendingRoom;
+    }
+    useGameStore.getState().setPendingRoom(null);
+    if (invitation && passwordRef.current) {
+      passwordRef.current.value = invitation.roomSecret;
+      invitation.roomSecret = "";
+      if (!joinRecovery && !name) nameRef.current?.focus();
+      else document.getElementById("btn-enter")?.focus();
+    } else if (joinRecovery) {
       passwordRef.current?.focus();
-      return;
-    }
-    const room = pendingRoom;
-    if (room && roomRef.current) {
-      roomRef.current.value = room;
-      useGameStore.getState().setPendingRoom(null);
-      if (!name) nameRef.current?.focus();
-      else passwordRef.current?.focus();
+    } else if (!name) {
+      nameRef.current?.focus();
+    } else if (pendingRoom) {
+      passwordRef.current?.focus();
     } else {
-      if (!name) nameRef.current?.focus();
-      else roomRef.current?.focus();
+      roomRef.current?.focus();
     }
+    const passwordInput = passwordRef.current;
+    return () => {
+      activeRef.current = false;
+      attemptRef.current += 1;
+      if (invitation) invitation.roomSecret = "";
+      if (passwordInput) passwordInput.value = "";
+    };
   }, []);
 
+  useEffect(() => {
+    if (secretError || roomError) {
+      setDetailsOpen(true);
+      setShowSecret(false);
+    }
+  }, [secretError, roomError]);
+
+  useEffect(() => {
+    if (secretError) passwordRef.current?.focus();
+    else if (roomError) roomRef.current?.focus();
+  }, [detailsOpen, secretError, roomError]);
+
   const handleJoin = async () => {
-    if (connecting) return;
+    if (joiningRef.current || cancellingRef.current || pendingJoinFingerprint) return;
     const enteredName = (nameRef.current?.value ?? name).normalize("NFC").trim();
     const room = normalizeRoomId(roomRef.current?.value);
     const enteredSecret = passwordRef.current?.value || "";
@@ -78,10 +120,15 @@ export function JoinScreen() {
     const options = { roomId: room, roomSecret: pw, displayName: enteredName };
     if (recoveryRequired) setRecoveryCredentialLocked(true);
     setConnecting(true);
+    joiningRef.current = true;
+    const attempt = ++attemptRef.current;
+    const isCurrent = () => activeRef.current && attemptRef.current === attempt;
     try {
       let result = await joinSecureRoom(options);
+      if (!isCurrent()) return;
       if (result.status === "busy" && window.confirm("This secure fort is open in another tab. Move it here?")) {
         result = await joinSecureRoom({ ...options, lock: { takeover: true } });
+        if (!isCurrent()) return;
       }
       if (result.status !== "connected") {
         setPassword(null);
@@ -93,6 +140,7 @@ export function JoinScreen() {
           result.reason === "recovery-credential-mismatch";
         setRecoveryRequired(mustRecover);
         if (credentialMismatch) setRecoveryCredentialLocked(false);
+        if (credentialMismatch) setDetailsOpen(true);
         else if (mustRecover) setRecoveryCredentialLocked(true);
         const reportError = credentialMismatch ||
           (!mustRecover && result.status === "failed" && result.reason === "authentication-failed")
@@ -126,8 +174,12 @@ export function JoinScreen() {
       } else {
         setRecoveryRequired(false);
         setPassword(pw);
+        if (invitation) invitation.roomSecret = "";
+        if (passwordRef.current) passwordRef.current.value = "";
+        setShowSecret(false);
       }
     } catch {
+      if (!isCurrent()) return;
       setPassword(null);
       const mustRecover = recoveryRequired || getSecureRoomRecovery()?.mode === "join";
       setRecoveryRequired(mustRecover);
@@ -136,20 +188,39 @@ export function JoinScreen() {
         ? "This join may already be pending. Retry with these exact details to resolve it."
         : "Could not complete the join. Check your connection and try again.");
     } finally {
-      setConnecting(false);
+      options.roomSecret = "";
+      if (isCurrent()) {
+        joiningRef.current = false;
+        setConnecting(false);
+      }
     }
   };
 
   const handleCancel = async () => {
-    const canLeave = await cancelSecureRoomConnection();
-    setPassword(null);
-    setConnecting(false);
-    if (!canLeave) {
-      setRecoveryRequired(true);
-      setConnectionError("This join may already be pending. Retry with the same password to resolve it before leaving.");
-      return;
+    if (cancellingRef.current) return;
+    cancellingRef.current = true;
+    attemptRef.current += 1;
+    try {
+      const canLeave = await cancelSecureRoomConnection();
+      if (!activeRef.current) return;
+      setPassword(null);
+      joiningRef.current = false;
+      setConnecting(false);
+      if (!canLeave) {
+        setRecoveryRequired(true);
+        setRecoveryCredentialLocked(!!passwordRef.current?.value);
+        setDetailsOpen(true);
+        setShowSecret(false);
+        setConnectionError("This join may already be pending. Retry with the same password to resolve it before leaving.");
+        return;
+      }
+      if (invitation) invitation.roomSecret = "";
+      if (passwordRef.current) passwordRef.current.value = "";
+      takeRoomInvitation();
+      setScreen("home");
+    } finally {
+      cancellingRef.current = false;
     }
-    setScreen("home");
   };
 
   return (
@@ -158,7 +229,9 @@ export function JoinScreen() {
         <header className="entry-brand"><LogoIcon size={40} /><span>pillowfort</span></header>
         <h1 id="join-title" className="entry-title">{recoveryRequired ? "Return to your fort" : "Join your friends"}</h1>
         <p className="entry-description">
-          Use the fort code and password they sent you. The host approves you before you enter.
+          {linkMode
+            ? "Your invite includes the fort code and password. Choose your screen name, then request admission. The host still approves you."
+            : "Use the fort code and password they sent you. The host approves you before you enter."}
         </p>
         <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void handleJoin(); }}>
           {pendingJoinFingerprint && (
@@ -182,6 +255,14 @@ export function JoinScreen() {
             onChange={() => setNameError("")}
           />
           {nameError && <div id="join-name-error" className="secret-error" role="alert">{nameError}</div>}
+          <details
+            className={linkMode ? "entry-details" : undefined}
+            open={!linkMode || detailsOpen}
+            onToggle={(event) => {
+              if (linkMode) setDetailsOpen(event.currentTarget.open);
+            }}
+          >
+            <summary hidden={!linkMode}>Edit fort code or password</summary>
           <Input
             id="join-room"
             label="Fort code"
@@ -194,7 +275,15 @@ export function JoinScreen() {
             disabled={!!pendingJoinFingerprint || connecting || recoveryRequired}
             aria-invalid={!!roomError}
             aria-describedby={roomError ? "join-room-error" : undefined}
-            onChange={() => setRoomError("")}
+            onChange={() => {
+              setRoomError("");
+              if (linkMode && normalizeRoomId(roomRef.current?.value) !== invitation?.roomId) {
+                setLinkMode(false);
+                setShowSecret(false);
+                if (invitation) invitation.roomSecret = "";
+                if (passwordRef.current) passwordRef.current.value = "";
+              }
+            }}
           />
           {roomError && <div id="join-room-error" className="secret-error" role="alert">{roomError}</div>}
           <Input
@@ -232,6 +321,7 @@ export function JoinScreen() {
               : "Passwords are case-sensitive. Enter yours exactly as shared."}
           </div>
           {secretError && <div id="join-secret-error" className="secret-error" role="alert">{secretError}</div>}
+          </details>
           {connectionError && <div className="secret-error" role="alert">{connectionError}</div>}
           <div className="entry-actions">
             <Button id="btn-enter" type="submit" primary disabled={!!pendingJoinFingerprint || connecting}>

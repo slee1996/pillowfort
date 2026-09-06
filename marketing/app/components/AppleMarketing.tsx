@@ -45,7 +45,7 @@ export default function AppleMarketing({ frontpageMarkup, latestArticles }: { fr
           <article><FeatureIcon kind="chat" /><h3>A real catch-up.</h3><p>Tell the long story. A room for conversation, not a public post.</p><a href="https://pillowfort.xyz">Start talking <span aria-hidden="true">›</span></a></article>
           <article><FeatureIcon kind="draw" /><h3>A shared canvas.</h3><p>Draw together on the doodle board. Artistic ability entirely optional.</p><a href="https://pillowfort.xyz">Make a little mess <span aria-hidden="true">›</span></a></article>
           <article><FeatureIcon kind="play" /><h3>A little competition.</h3><p>Secret Saboteur. Rock paper scissors. Or a solo Breakout break.</p><a href="https://pillowfort.xyz">Find your game <span aria-hidden="true">›</span></a></article>
-          <article><FeatureIcon kind="lock" /><h3>By invitation.</h3><p>A private link, a password, and host approval for each device.</p><a href="/technology#secure-rooms">Look inside <span aria-hidden="true">›</span></a></article>
+          <article><FeatureIcon kind="lock" /><h3>By invitation.</h3><p>One private invitation link, with host approval for each device.</p><a href="/technology#secure-rooms">Look inside <span aria-hidden="true">›</span></a></article>
         </div>
       </section>
 
@@ -53,7 +53,7 @@ export default function AppleMarketing({ frontpageMarkup, latestArticles }: { fr
         <div className={styles.sectionHeading}><h2 id="how-heading">A link. A knock. You’re in.</h2><a href="https://pillowfort.xyz">Make your first fort <span aria-hidden="true">›</span></a></div>
         <ol className={styles.steps}>
           <li><span aria-hidden="true">1</span><div><h3>Make your fort.</h3><p>Choose a name, create a fort, and save its password. No account or profile needed.</p></div></li>
-          <li><span aria-hidden="true">2</span><div><h3>Send an invitation.</h3><p>Share the room link and password privately with your friends.</p></div></li>
+          <li><span aria-hidden="true">2</span><div><h3>Send an invitation.</h3><p>Copy one invitation link and share it privately. It includes the room password.</p></div></li>
           <li><span aria-hidden="true">3</span><div><h3>Answer the door.</h3><p>The host stays in the fort to approve each device. A link alone isn’t admission.</p></div></li>
           <li><span aria-hidden="true">4</span><div><h3>Enjoy the company.</h3><p>Talk, draw, or play. Friends can leave; the host can end the fort when you’re done.</p></div></li>
         </ol>
@@ -72,7 +72,7 @@ export default function AppleMarketing({ frontpageMarkup, latestArticles }: { fr
         </section>
         <section className={styles.faq} aria-labelledby="faq-heading">
           <div className={styles.sectionHeading}><h2 id="faq-heading">Before you come over</h2></div>
-          <details><summary>Is this a place to meet strangers?</summary><p>No. Pillowfort is for people you already know. Share the link and password privately. The host approves each device.</p></details>
+          <details><summary>Is this a place to meet strangers?</summary><p>No. Pillowfort is for people you already know. Share the full invitation link privately: anyone with it can request admission, and the host approves each device.</p></details>
           <details><summary>Does everyone need an account?</summary><p>No account is needed to hang out. Choose a name and use your invitation. The host keeps the room open to approve incoming devices.</p></details>
           <details><summary>Do we have to play a game?</summary><p>Not at all. Just talk, or draw together. Secret Saboteur and rock paper scissors are there when you feel like playing; Breakout is an optional solo game.</p></details>
           <details><summary>Can late arrivals read earlier chat?</summary><p>Newly admitted devices receive current room state, not earlier chat or drawing history. You can catch them up once they’re in.</p></details>

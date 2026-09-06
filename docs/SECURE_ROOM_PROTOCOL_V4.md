@@ -53,8 +53,10 @@ Cloudflare automatic invocation logs are disabled and the WebSocket edge/room
 path emits no custom console logs, preventing accepted room IDs or rejected
 secret-looking query values from being persisted through application logging.
 The hosting provider still necessarily processes request URLs and an authorized
-real-time trace can expose them, so clients never place credentials in a URL;
-the query rejection is defense in depth, not transport secrecy.
+real-time trace can expose them. Clients never place credentials in HTTP URL
+paths or queries; query rejection is defense in depth, not transport secrecy.
+Human invitation links carry the credential only in a URL fragment, which is
+not part of the HTTP request. See the invitation-link lifecycle below.
 
 Authenticated traffic has independent five-second budgets: 100 raw frames per
 socket, 256 raw frames across the room, and 30 client-initiated operations per
@@ -118,6 +120,27 @@ state are offline guess oracles. PBKDF2 raises the cost of each guess but cannot
 add entropy to a short or common phrase, so the UI recommends at least 16
 characters or four unrelated words and warns against password reuse. Explicit
 host approval of each device remains independently required.
+
+### Single-link invitation lifecycle
+
+The sharing UI emits an absolute same-origin `/<room>#invite=<encoded-secret>`
+link. Its fragment carries the existing generated, custom, or legacy credential;
+it is not a new authentication scheme or a lower-entropy password.
+
+Before rendering or agent bootstrap, the client captures the fragment into
+temporary module memory and removes it with `history.replaceState`. Malformed
+invitation fragments are scrubbed and rejected. A failed scrub must not retain
+or use the credential. The strict parser rejects other origins, query parameters,
+duplicate or unknown fragment fields, malformed encoding, and invalid room IDs.
+No invitation password is added to localStorage or sessionStorage.
+
+The guest explicitly submits Join; link navigation alone does not authenticate
+or approve a device. Host approval and matching fingerprints remain mandatory.
+Existing secure recovery takes precedence over a link for a different room.
+Fragments are not sent in HTTP requests or referrers, but the full original link
+is visible to recipients, sharing providers, clipboard managers and privileged
+browser extensions. Scrubbing cannot erase prior copies. A saved link must be
+protected like its password; use separate-channel manual sharing when appropriate.
 
 ## Setup, admission, and resume are different protocols
 

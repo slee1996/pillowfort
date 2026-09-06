@@ -4,6 +4,9 @@ import { copyTextWithFallback } from "../../services/clipboard";
 import { track } from "../../services/analytics";
 import { showToast } from "../xp/Toast";
 import { PeriodIcon } from "../xp/PeriodIcon";
+import { createRoomInvitationUrl } from "../../services/roomInvitation";
+import { Input } from "../xp/Input";
+import { Button } from "../xp/Button";
 
 interface InviteDialogProps {
   open: boolean;
@@ -55,7 +58,7 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
     onClose();
   };
 
-  const copyInvite = async () => {
+  const copyInvite = async (format: "link" | "manual" = "link") => {
     const state = useGameStore.getState();
     if (!activeRef.current || copyingRef.current || state.roomId !== roomId || !state.password) return;
     copyControllerRef.current?.abort();
@@ -65,7 +68,10 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
     setCopying(true);
     const secret = state.password;
     try {
-      const copied = await copyTextWithFallback(`${link}\npassword: ${secret}`, controller.signal);
+      const text = format === "link"
+        ? createRoomInvitationUrl(window.location.origin, roomId, secret)
+        : `${link}\npassword: ${secret}`;
+      const copied = await copyTextWithFallback(text, controller.signal);
       const current = useGameStore.getState();
       if (!copied || controller.signal.aborted || !activeRef.current || current.roomId !== roomId || current.password !== secret) return;
       showToast("Invite copied!");
@@ -99,30 +105,36 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
         <button type="button" id="btn-close-invite" onClick={close}>Close</button>
       </div>
       <div className="product-dialog-body">
-        <p id="invite-dialog-description">Send both to your friends. Keep this fort open to approve them.</p>
-        <label htmlFor="invite-room-id">Fort code</label>
-        <input id="invite-room-id" type="text" readOnly value={roomId} />
-        <label htmlFor="invite-link">Invite link</label>
+        <p id="invite-dialog-description">The invite link includes the password. Anyone with it can request admission; the host still approves each device. Keep this fort open.</p>
+        <label htmlFor="invite-link">Room address (without password)</label>
         <input id="invite-link" type="url" readOnly value={link} />
-        <label htmlFor="invite-password">Password</label>
-        <input
-          id="invite-password"
-          type={showSecret ? "text" : "password"}
-          readOnly
-          autoComplete="off"
-          spellCheck={false}
-          value={password || ""}
-        />
-        <button
-          type="button"
-          id="btn-toggle-invite-secret"
-          aria-controls="invite-password"
-          aria-pressed={showSecret}
-          disabled={!password}
-          onClick={() => setShowSecret((show) => !show)}
-        >
-          {showSecret ? "Hide password" : "Show password"}
-        </button>
+        <details className="entry-details">
+          <summary>Share the code and password separately</summary>
+          <p>Use separate channels if you prefer. Your friend will enter both to request admission.</p>
+          <Input id="invite-room-id" label="Fort code" type="text" readOnly value={roomId} />
+          <Input
+            id="invite-password"
+            label="Password"
+            type={showSecret ? "text" : "password"}
+            readOnly
+            autoComplete="off"
+            spellCheck={false}
+            value={password || ""}
+          />
+          <Button
+            type="button"
+            id="btn-toggle-invite-secret"
+            aria-controls="invite-password"
+            aria-pressed={showSecret}
+            disabled={!password}
+            onClick={() => setShowSecret((show) => !show)}
+          >
+            {showSecret ? "Hide password" : "Show password"}
+          </Button>
+          <Button type="button" id="btn-copy-manual-invite" disabled={!password || copying} onClick={() => void copyInvite("manual")}>
+            Copy room address and password
+          </Button>
+        </details>
         {!password && <p role="status">Your password is unavailable. Rejoin this fort to restore your invitation.</p>}
       </div>
       <div className="product-dialog-actions">

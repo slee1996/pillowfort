@@ -3,6 +3,8 @@ import type { GameStore } from "../stores/gameStore";
 import { useFormatStore } from "../stores/formatStore";
 import { setupSecureRoom, joinSecureRoom, cancelSecureRoomConnection, getSecureRoomRecovery, getWs, send } from "../services/ws";
 import { generateRoomId, generateRoomSecret, validateRoomSecret, validateCustomRoomSecret, isGeneratedRoomSecret, isCredentialSystemMessage } from "../services/roomSecret";
+import { createRoomInvitationUrl, parseRoomInvitationUrl } from "../services/roomInvitation";
+import { getDiscordActivityContext } from "../services/discordActivity";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";
 import { checkFortPassCode, clearFortPassClaimSecret, fortPassRedemptionErrorMessage, getFortPassStatus, getFortPassClaimSecret, getPendingFortPassCheckoutUrl, getPendingFortPassRedemption, normalizeFortPassCode, normalizeFortPassSessionId, redeemFortPassCheckout, rememberPendingFortPassRedemption, startFortPassCheckout } from "../services/fortPass";
@@ -117,6 +119,7 @@ export function installPillowfortAgent(): void {
     const checked = mode === "setup" && !recovery && !isGeneratedRoomSecret(roomSecret)
       ? validateCustomRoomSecret(roomSecret, { context: [displayName, roomId] }) : validateRoomSecret(roomSecret);
     if (!checked.valid) fail("invalid-secret", checked.message);
+    const invitationUrl = mode === "setup" && !recovery ? createRoomInvitationUrl(location.origin, roomId, checked.secret) : null;
     if (input.takeover && input.confirm !== true) fail("confirmation-required", "Taking over another tab requires confirm:true.");
     const pass = mode === "setup" && pendingPass?.code === roomId ? pendingPass : null;
     if (state.activitySource && pass) fail("unauthorized", "Fort Pass cannot be redeemed in an unverified Discord Activity.");
@@ -153,11 +156,21 @@ export function installPillowfortAgent(): void {
       record("connection-result", { operationId: id, status: "failed", code: "unavailable" });
     });
     touch();
-    return { status: "queued", operationId: id, roomId, ...(mode === "setup" && !recovery ? { roomSecret: checked.secret, invitationUrl: `${location.origin}/${roomId}` } : {}) };
+    return { status: "queued", operationId: id, roomId, ...(invitationUrl ? { roomSecret: checked.secret, invitationUrl } : {}) };
   };
   const connectionFields = { displayName: memberName, roomId: roomIdSchema, roomSecret: secretSchema, takeover: { type: "boolean" } as Schema, confirm };
   add("room_setup", "Create an actual MLS-encrypted room. Optional roomId/password are generated securely; returned creation credentials must be retained. Joiners still require host fingerprint approval. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "confirm"]), true, input => startConnection("setup", input));
   add("room_join", "Join with invitation credentials; observe pendingJoinFingerprint and ask the host to approve that exact fingerprint. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "roomId", "roomSecret", "confirm"]), true, input => startConnection("join", input));
+  add("room_join_link", "Join using a same-origin invitation link containing a sensitive bearer password in its fragment. Never navigate to the link or log it. Host approval is still required; pending authentication must use room_recover instead.", object({ invitationUrl: { ...text(2048), description: "Sensitive full invitation URL; never include it in observations or logs." }, displayName: memberName, takeover: { type: "boolean" }, confirm }, ["invitationUrl", "displayName", "confirm"]), true, async input => {
+    const invitation = parseRoomInvitationUrl(input.invitationUrl, location.origin);
+    delete input.invitationUrl;
+    if (!invitation) fail("invalid-invitation", "Use a complete invitation link from this origin, with its password in the fragment and no query parameters.");
+    const state = useGameStore.getState();
+    if (state.activitySource || new URLSearchParams(location.search).has("fort_pass") || await getDiscordActivityContext()) {
+      fail("incompatible-context", "Open invitations in a regular browser tab, separately from Discord Activities or payment returns.");
+    }
+    return startConnection("join", { roomId: invitation.roomId, roomSecret: invitation.roomSecret, displayName: input.displayName, takeover: input.takeover, confirm: input.confirm });
+  });
   add("room_recover", "Resume the exact pending setup/join identity, never mint a replacement. May take over another tab only when takeover:true.", object({ roomSecret: secretSchema, takeover: { type: "boolean" }, confirm }, ["roomSecret", "confirm"]), true, input => startConnection(getSecureRoomRecovery()?.mode ?? "join", input, true));
   add("room_cancel", "Cancel pending connection through secure cancellation; ambiguous authentication may require recovery and is not silently erased.", object({ confirm }), true, async () => {
     if (useGameStore.getState().roomId && useGameStore.getState().screen === "chat") fail("active-room", "Use room_leave or room_end rather than cancel an active room.");
@@ -167,10 +180,10 @@ export function installPillowfortAgent(): void {
     touch();
     return { status: cancelled ? "cancelled" : "recovery-required", recovery: getSecureRoomRecovery() };
   });
-  add("invitation_export", "Explicitly export the current room invitation password (bearer credential). Never include this in generic observations or logs.", object({ roomId: roomIdSchema, confirm }), true, input => {
+  add("invitation_export", "Explicitly export the current room invitation link and password (sensitive bearer credentials). Anyone with the link can request admission; the host must still approve. Never include either credential in generic observations or logs.", object({ roomId: roomIdSchema, confirm }), true, input => {
     const state = room(input);
     if (!state.password) fail("credential-unavailable", "This browser does not have an invitation password to export.");
-    return { roomId: state.roomId, roomSecret: state.password, invitationUrl: `${location.origin}/${state.roomId}` };
+    return { roomId: state.roomId, roomSecret: state.password, invitationUrl: createRoomInvitationUrl(location.origin, state.roomId!, state.password) };
   });
   for (const action of ["approve", "reject"] as const) sendAction(`admission_${action}`, `${action === "approve" ? "Approve" : "Reject"} precisely the pending admission matching both id and invitation-bound fingerprint. Approval is never automatic.`, { admissionId: text(128), deviceFingerprint: text(256) }, ["admissionId", "deviceFingerprint"], true, `admission-${action}`, (state, input) => {
     requireHost(state);

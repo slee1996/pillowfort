@@ -19,6 +19,7 @@ import {
 import { normalizeRoomId } from "../../../src/entitlements";
 import { getSecureRoomRecovery } from "../services/ws";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
+import { peekRoomInvitation, takeRoomInvitation, takeRoomInvitationError } from "../services/roomInvitation";
 
 export function HomeScreen() {
   const name = useGameStore((s) => s.name);
@@ -28,11 +29,35 @@ export function HomeScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [nameError, setNameError] = useState("");
   const [fortPassNotice, setFortPassNotice] = useState("");
+  const [invitationNotice, setInvitationNotice] = useState("");
 
   // Check for room link in URL on mount
   useEffect(() => {
+    const invitation = peekRoomInvitation();
+    const invitationError = takeRoomInvitationError();
+    const invitationAttempted = !!invitation || !!invitationError;
+    const params = new URLSearchParams(location.search);
+    const isFortPassReturn = params.get("fort_pass") === "success";
+    const isFortPassCancel = params.get("fort_pass") === "cancel";
+    const incompatiblePayment = invitationAttempted && (isFortPassReturn || isFortPassCancel);
+    const reportInvitation = (message: string) => {
+      setInvitationNotice(message);
+      useGameStore.getState().showError(message);
+    };
+    if (incompatiblePayment) {
+      takeRoomInvitation();
+      reportInvitation("This invite cannot be combined with a payment return. Finish your original checkout in this tab, then open the invite on its own.");
+    } else if (invitationError) {
+      reportInvitation(invitationError);
+    }
     const secureRoomRecovery = getSecureRoomRecovery();
-    if (secureRoomRecovery) {
+    const resumeRecovery = () => {
+      if (!secureRoomRecovery) return false;
+      if (invitation && !incompatiblePayment) history.replaceState(null, "", "/");
+      if (invitation && (secureRoomRecovery.mode !== "join" || secureRoomRecovery.roomId !== invitation.roomId)) {
+        takeRoomInvitation();
+        reportInvitation("Resume your original fort first. This invite was discarded so it cannot replace your saved secure identity.");
+      }
       // An authentication frame may have reached the relay even when its
       // response did not reach this tab. Resume that exact identity before
       // allowing a different setup/join flow to replace its UI context.
@@ -50,16 +75,17 @@ export function HomeScreen() {
         pendingFortPass?.code === secureRoomRecovery.roomId ? pendingFortPass : null,
       );
       setScreen(secureRoomRecovery.mode);
+      return true;
+    };
+    if (secureRoomRecovery && (!invitation || incompatiblePayment)) {
+      resumeRecovery();
       return;
     }
 
     let cancelled = false;
-    const params = new URLSearchParams(location.search);
     const fortPassCode = normalizeFortPassCode(params.get("code"));
     const fortPassSessionId = normalizeFortPassSessionId(params.get("session_id"));
     const fortPassClaimSecret = fortPassSessionId ? getFortPassClaimSecret(fortPassSessionId) : null;
-    const isFortPassReturn = params.get("fort_pass") === "success";
-    const isFortPassCancel = params.get("fort_pass") === "cancel";
     // A same-tab checkout reference is recovery context, never payment proof.
     // Restore it before any asynchronous work so setup cannot lose the purchase.
     if (isFortPassReturn && fortPassCode && fortPassSessionId && fortPassClaimSecret) {
@@ -85,7 +111,7 @@ export function HomeScreen() {
     }
     void (async () => {
       const activity = await getDiscordActivityContext().catch(() => null);
-      if (cancelled) return;
+      if (cancelled || useGameStore.getState().screen !== "home") return;
       if (activity) {
         // Until the Discord SDK launch and a server-issued instance token are
         // verified, Activity detection is presentation-only. Public route and
@@ -97,6 +123,11 @@ export function HomeScreen() {
           reason: activity.platform,
         });
       }
+      if (activity && invitationAttempted) {
+        takeRoomInvitation();
+        reportInvitation("Open this invite in a regular browser tab, outside Discord Activity. No invitation was joined here.");
+      }
+      if (resumeRecovery()) return;
 
       if (isFortPassReturn && (activity || !fortPassCode || !fortPassSessionId || !fortPassClaimSecret)) {
         track("fort_pass_checkout_failed", {
@@ -147,6 +178,15 @@ export function HomeScreen() {
         return;
       }
 
+      if (invitationAttempted) {
+        if (invitation && !activity && !incompatiblePayment) {
+          history.replaceState(null, "", "/");
+          useGameStore.getState().setPendingRoom(invitation.roomId);
+          setScreen("join");
+        }
+        return;
+      }
+
       const roomFromPath = activity ? null : normalizeRoomId(location.pathname.slice(1));
       if (roomFromPath) {
         history.replaceState(null, "", "/");
@@ -177,6 +217,7 @@ export function HomeScreen() {
     const enteredName = readScreenName();
     if (!enteredName) return;
     setName(enteredName);
+    takeRoomInvitation();
     useGameStore.getState().setPendingRoom(null);
     setScreen("setup");
   };
@@ -206,6 +247,7 @@ export function HomeScreen() {
           </p>
         )}
         {fortPassNotice && <p className="auth-note" role="status">{fortPassNotice}</p>}
+        {invitationNotice && <p className="auth-note" role="status">{invitationNotice}</p>}
         <form className="entry-form" onSubmit={(event) => { event.preventDefault(); handleSetup(); }}>
           <Input
             id="name-input"

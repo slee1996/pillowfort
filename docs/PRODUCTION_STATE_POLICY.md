@@ -180,7 +180,9 @@ As of this document:
   failure is terminal until a safe restore/rejoin.
 - Automatic Cloudflare invocation logs are disabled, and WebSocket edge/room
   handlers emit no custom provider logs. The provider still processes request
-  URLs in transit, so credentials are never placed in URLs.
+  URLs in transit, so credentials are never placed in HTTP URL paths or queries.
+  Invitation credentials may appear in a client-only URL fragment, scrubbed
+  before rendering; sharing providers and recipients can still see the full link.
 - All application plaintext, room/invitation secrets, MLS private state, and
   authentication proofs are Class D at the server boundary.
 - Idle destruction uses a Durable Object alarm and is Class C.

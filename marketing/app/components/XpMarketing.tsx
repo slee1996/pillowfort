@@ -79,7 +79,7 @@ export default function XpMarketing({ frontpageMarkup, latestArticles }: XpMarke
               <h2 className={styles.panelTitle} id="how-heading">Getting started is simple</h2>
               <ol className={styles.steps}>
                 <li><h3>Make your fort</h3><p>Choose a name, create a fort, and save its password. No account or profile needed.</p></li>
-                <li><h3>Send a private invite</h3><p>Share the room link and password privately with friends. There’s no public listing to join.</p></li>
+                <li><h3>Send a private invite</h3><p>Share one invitation link with friends. It includes the password; there’s no public listing to join.</p></li>
                 <li><h3>Answer the door</h3><p>The host stays in the fort to approve each device. The link alone doesn’t let someone in.</p></li>
                 <li><h3>Enjoy the company</h3><p>Talk, draw, play, or just catch up. Friends can leave; the host can end the fort when you’re done.</p></li>
               </ol>
@@ -110,7 +110,7 @@ export default function XpMarketing({ frontpageMarkup, latestArticles }: XpMarke
 
           <section className={styles.faq} id="questions" aria-labelledby="questions-heading">
             <h2 className={styles.sectionTitle} id="questions-heading">Questions &amp; answers</h2>
-            <details><summary>Is this a place to meet strangers?</summary><p>No. Pillowfort is for people you already know. Share your room link and password privately; the host approves each device before it joins.</p></details>
+            <details><summary>Is this a place to meet strangers?</summary><p>No. Pillowfort is for people you already know. Share the full invitation link privately. Anyone with it can request admission; the host approves each device before it joins.</p></details>
             <details><summary>Does everyone need an account?</summary><p>No account is needed to hang out. Choose a name and use your invitation. The host should keep the room open to approve incoming devices.</p></details>
             <details><summary>Do we have to play a game?</summary><p>Not at all. Just talk, or draw together. Secret Saboteur and rock paper scissors are there when you feel like playing; Breakout is an optional solo game.</p></details>
             <details><summary>Can late arrivals catch up on the chat?</summary><p>Newly admitted devices get the current room state, not earlier chat or drawing history. You can catch them up yourself once they’re in.</p></details>

@@ -659,7 +659,11 @@ describe("Mobile E2E", () => {
     await host.click("#btn-invite");
     await host.click("#btn-copy-invite");
     const copiedInvite = await host.evaluate(() => navigator.clipboard.readText());
-    expect(copiedInvite).toContain(`password: ${customPassword}`);
+    const parsedInvite = new URL(copiedInvite);
+    expect(parsedInvite.origin).toBe(new URL(host.url()).origin);
+    expect(parsedInvite.pathname).toBe(`/${code}`);
+    expect(parsedInvite.search).toBe("");
+    expect(new URLSearchParams(parsedInvite.hash.slice(1)).get("invite")).toBe(customPassword);
     await host.click("#btn-close-invite");
 
     const wrongGuest = await mobilePage();
@@ -687,6 +691,58 @@ describe("Mobile E2E", () => {
       { timeout: 15_000 },
     );
   });
+
+  it("scrubs a one-link invitation and waits for explicit join and matching host approval", async () => {
+    const host = await mobilePage();
+    const code = await createFort(host, "link-host");
+    await host.click("#btn-invite");
+    await host.click("#btn-copy-invite");
+    const invitationUrl = await host.evaluate(() => navigator.clipboard.readText());
+    expect(new URL(await host.inputValue("#invite-link")).hash).toBe("");
+    await host.click("#btn-close-invite");
+
+    const guest = await mobilePage();
+    let socketCount = 0;
+    let joinRequests = 0;
+    guest.on("websocket", (socket) => {
+      socketCount += 1;
+      socket.on("framesent", ({ payload }) => {
+        if (typeof payload !== "string") return;
+        const frame = JSON.parse(payload) as { kind?: string; mode?: string };
+        if (frame.kind === "secure-authenticate" && frame.mode === "join") joinRequests += 1;
+      });
+    });
+    await guest.goto(invitationUrl);
+    await guest.waitForSelector("#join-name");
+    expect(new URL(guest.url()).hash).toBe("");
+    expect(await guest.locator("#join-password").isVisible()).toBe(false);
+    expect(await guest.locator("#join-password").getAttribute("type")).toBe("password");
+    await guest.fill("#join-name", "link-guest");
+    expect(socketCount).toBe(0);
+    expect(joinRequests).toBe(0);
+    expect(await host.locator("#admission-approval-overlay").count()).toBe(0);
+
+    // Two activations before React renders must still produce only one request.
+    await guest.locator("#btn-enter").evaluate((element) => {
+      (element as HTMLButtonElement).click();
+      (element as HTMLButtonElement).click();
+    });
+    await host.waitForSelector("#admission-approval-overlay", { timeout: 30_000 });
+    const fingerprint = await guest.locator(".auth-note code").innerText();
+    expect(await host.locator("#admission-approval-overlay").innerText()).toContain(fingerprint);
+    expect(joinRequests).toBe(1);
+    expect(await guest.locator("#messages").count()).toBe(0);
+    await host.click("#btn-approve-admission");
+    await guest.waitForSelector("#messages", { timeout: 30_000 });
+    expect(await guest.locator("#room-code").innerText()).toBe(code);
+    await guest.fill("#msg-input", "one link, approved device");
+    await guest.click("#btn-send");
+    await host.waitForFunction(
+      (text) => document.getElementById("messages")?.textContent?.includes(text),
+      "one link, approved device",
+      { timeout: 15_000 },
+    );
+  }, 60_000);
 
   it("discovers games by player availability and returns to the draft on cancel", async () => {
     const alice = await mobilePage();
