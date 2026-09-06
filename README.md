@@ -185,17 +185,14 @@ npm install
 cd ..
 ```
 
-`marketing/` is a separate Sites repository, declared in `.gitmodules`, with its
-own package install. Initializing it on a fresh clone requires access to its
-private Sites Git remote:
+`marketing/` is part of this repository with its own package install:
 
 ```bash
-git submodule update --init marketing
 npm --prefix marketing ci
 ```
 
 See [`marketing/README.md`](marketing/README.md) for its editor, database, and
-build setup. The main app does not require the marketing submodule to build.
+build setup. The main app does not require the marketing package to build.
 
 ## Running Locally
 
@@ -331,11 +328,12 @@ cursors, not pre-join history. Use `--headed` to inspect the actual room client.
 
 ### Optional publishing tools
 
-Add `--cms-url https://your-sites-origin` and, when needed,
+Add `--cms-url https://www.pillowfort.xyz` and, when needed,
 `--cms-storage-state /secure/path/editor-state.json`. The latter must be an
-explicitly supplied authenticated Playwright browser-state file; protect it like
-a login credential and never commit it. CMS tools use a separate browser context
-and the existing Sites editor authorization, not forged identity headers.
+explicitly supplied authenticated browser-state file; protect it like a login
+credential and never commit it. Use `--headed` to sign in with the owner password.
+CMS tools use a separate browser context and server-validated sessions, never
+forwarded identity headers.
 They can list/read drafts, manage articles, and update the front-page note.
 Every write requires confirmation. See the marketing README for `/api/agent`.
 
@@ -408,10 +406,10 @@ Production routing looks like this:
 - `/*` -> static frontend assets
 - `/abc12345` -> SPA room link that resolves to `index.html`
 
-The marketing site publishes separately through its Sites project and
-`sites-origin` remote. Commit and publish marketing changes there first, then
-update the parent repository's `marketing` gitlink. The root deploy command does
-not publish marketing pages or CMS content.
+Marketing deploys independently as the `pillowfort-marketing` Cloudflare Worker
+at `https://www.pillowfort.xyz`. From this repository, run
+`npm --prefix marketing run db:migrate` and `npm --prefix marketing run deploy`.
+The root deploy command publishes only the app at `https://pillowfort.xyz`.
 
 ## Good First Places To Read
 

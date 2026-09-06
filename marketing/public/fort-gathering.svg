@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="700" viewBox="0 0 800 700" fill="none">
+  <title>A little world made of cushions</title>
+  <desc>An original illustration of friends drawing and playing beneath a golden blanket fort, with a sleepy cat, scattered pencils, and mugs.</desc>
+  <defs>
+    <pattern id="rug" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)"><path d="M0 1h22M1 0v22" stroke="#D9745B" stroke-width="1" opacity=".4"/></pattern>
+    <pattern id="stitch" width="12" height="12" patternUnits="userSpaceOnUse"><path d="m2 4 3 2m4 3 2 1" stroke="#CFA63D" stroke-width="1" opacity=".45"/></pattern>
+  </defs>
+  <g stroke="#17354A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M67 561C84 486 180 449 349 452c171-11 299 10 393 84l-37 83c-139 54-442 59-623-1Z" fill="#F3B09B" stroke="none"/>
+    <path d="M67 561C84 486 180 449 349 452c171-11 299 10 393 84l-37 83c-139 54-442 59-623-1Z" fill="url(#rug)" stroke="none"/>
+    <path d="m82 622-11 12m34-4-9 14m34-11-8 15m36-11-5 16m33-12-3 17m37-13-2 17m36-14-1 17m37-15v17m39-16 1 17m38-16 3 17m37-18 4 17m37-18 4 17m34-19 6 16m31-19 7 16m29-20 7 15m29-21 8 14m23-21 10 12m22-21 11 10m19-21 12 9" stroke="#C97961" stroke-width="2"/>
+    <path d="m382 137 3-88 74 25-73 24" fill="#E34B35"/>
+    <path d="M111 272c82-31 175-84 275-153 99 90 178 128 289 159l-41 262-496 15Z" fill="#FFE08A"/>
+    <path d="M386 119c-20 133-14 307-21 425l269-4 41-262c-110-31-190-68-289-159Z" fill="#F4C553"/>
+    <path d="M111 272c82-31 175-84 275-153 99 90 178 128 289 159l-41 262-496 15Z" fill="url(#stitch)" stroke="none"/>
+    <path d="M386 151c-43 137-95 241-169 383l356-3c-92-139-133-257-187-380Z" fill="#17354A"/>
+    <path d="M381 151c-23 175-10 281-85 358-28 27-62 32-93 27 76-117 133-257 178-385Z" fill="#FFE7A4"/>
+    <path d="M392 152c16 147 34 253 97 332 28 34 53 47 85 48-91-149-134-275-182-380Z" fill="#F8D269"/>
+    <path d="m215 506 52 6m246-19 43-9" stroke="#E34B35" stroke-width="8"/>
+    <path d="M122 283c116 36 363 40 541 5" stroke="#17354A" stroke-width="2"/>
+    <path d="m157 291 2 18m77-9 1 17m81-14v19m80-18-1 18m83-19-2 17m83-21-2 17m79-22-3 15" stroke-width="2"/>
+    <g fill="#FFF4CF"><ellipse cx="159" cy="315" rx="7" ry="10"/><ellipse cx="237" cy="323" rx="7" ry="10"/><ellipse cx="318" cy="328" rx="7" ry="10"/><ellipse cx="397" cy="328" rx="7" ry="10"/><ellipse cx="477" cy="326" rx="7" ry="10"/><ellipse cx="558" cy="322" rx="7" ry="10"/><ellipse cx="636" cy="315" rx="7" ry="10"/></g>
+    <path d="M76 473c21-21 52-21 88-4 18 8 30 34 23 56-8 25-9 37-6 51-44 16-86 6-109-13 17-25-14-66 4-90Z" fill="#B7C9B4"/>
+    <path d="M83 486c21-13 50-12 74-1m-72 66c27 16 50 17 77 9" stroke="#779D8B" stroke-width="2"/>
+    <path d="M607 487c28-25 66-21 101-12-1 18 19 25 19 49 0 22-11 28-11 44-29 10-67 16-108 1 10-25-15-55-1-82Z" fill="#F8EEDD"/>
+    <path d="m620 492 8 7m-4 56 8-5m69-61-7 7m11 54-9-5" stroke="#C5B7A0" stroke-width="2"/>
+    <path d="M289 469c-13 16-25 51-17 67 17 22 47 17 74 8l35-9-9-20-50 5 5-47" fill="#8FAC9B"/>
+    <path d="M277 424c-17 2-31 24-28 50l-24 29 16 14 35-30 8-18 38 13c18-15 22-38 12-55Z" fill="#E55C41"/>
+    <path d="m257 479-23 34c-10 10-19 10-22 4-5-8 10-15 13-16" fill="#CF8D68"/>
+    <path d="m323 461 31 32 28-5c11-2 18 6 11 11l-42 12-38-28" fill="#CF8D68"/>
+    <path d="M284 385c-3 24 4 39 19 43 16 1 28-11 27-31l-2-24-29-9Z" fill="#CF8D68"/>
+    <path d="M281 403c-9-9-12-28-4-39 5-12 21-20 32-13 13-6 29 9 24 21-4 9-13 14-29 11l-5 15-6-5-3 12Z" fill="#17354A"/>
+    <path d="m315 397 1 1m-6 15 8-1" stroke-width="2"/>
+    <path d="M474 468c19 15 41 43 34 59-11 14-32 21-50 23l-51 6-6-21 50-19-23-38" fill="#F7E7C9"/>
+    <path d="M450 418c-20 3-30 23-25 61l46 10 21-17-10-32-2-23Z" fill="#A8BED0"/>
+    <path d="m435 449-25 36-31 6c-12 3-9 14 0 15l41-6 28-32" fill="#EAA77E"/>
+    <path d="m479 449 28 37-9 34c-4 11-16 8-14-1l3-28-25-20" fill="#EAA77E"/>
+    <path d="M447 377c-13 14-10 40 5 49 18 8 33-9 35-26l-5-25Z" fill="#EAA77E"/>
+    <path d="M443 398c-17-9-11-32 3-38 17-12 39-5 43 15l-7 19c-10-2-24-13-27-21-2 9-5 18-12 25Z" fill="#9E5137"/>
+    <path d="m451 399 1 1m2 14 8 1" stroke-width="2"/>
+    <path d="m312 565 80-41 86 43-92 46Z" fill="#FFFCF3"/>
+    <path d="m355 568 31-24 37 24-40 17Zm31-24-3 41m-19-26 5-14m29 25 5 8" stroke="#E55C41" stroke-width="2"/>
+    <path d="m324 585-26 22m139-18 27 9m-118 28 19-10" stroke="#E55C41" stroke-width="7"/>
+    <path d="m293 611 5-4m171-8-5-1m-123 30 5-2" stroke-width="2"/>
+    <path d="m510 566 22-10 18 27-23 11Z" fill="#FFFCF3"/><path d="m539 548 27 2-2 34-27-3Z" fill="#FFFCF3"/><path d="m550 560 4 5 4-5-4-5Z" fill="#E55C41" stroke="none"/>
+    <path d="M198 559h30v27c-6 8-23 8-30 0Zm30 5c24-7 24 23 0 16" fill="#F8EEDD"/><path d="M202 548c-8-9 9-11 1-19m15 19c-8-9 9-11 1-19" stroke-width="2"/>
+    <path d="M598 603c-19-5-26-26-12-37l-2-15 18 9 16-4 11-15 7 26c24 13 27 33 12 40-14 9-34 7-50-4Z" fill="#E8B46D"/><path d="M643 605c33 4 37-24 22-27-10-2-14 11-4 14m-62-11 4 2m16-3 4-2m-14 11 4 1" stroke-width="2"/>
+    <path d="m130 187 7-19m-28 26-13-7m546-3 12-13m0 31 19-2M70 387l-12 7m20 12-3 12" stroke="#E55C41"/>
+    <path d="m576 107 5 13 14 4-14 5-5 13-4-13-14-5 14-4ZM194 127l3 9 10 3-10 4-3 9-3-9-9-4 9-3Z" fill="#F4C553" stroke="none"/>
+  </g>
+</svg>

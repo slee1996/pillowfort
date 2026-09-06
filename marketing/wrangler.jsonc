@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pillowfort-marketing",
+  "account_id": "e1c9d05ec6e9b5a196b358e3ea368aed",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "host": "localhost" },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "www.pillowfort.xyz", "custom_domain": true }
+  ],
+  // Vite supplies the built client directory in dist/server/wrangler.json.
+  "assets": { "binding": "ASSETS" },
+  "images": { "binding": "IMAGES", "remote": false },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pillowfort-marketing",
+      "database_id": "27e4abc3-4818-4a77-9ed4-af02f341d302",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "CMS_LOGIN_RATE_LIMITER",
+      "namespace_id": "927401",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
+  "vars": { "CMS_ADMIN_NAME": "Editor" }
+}

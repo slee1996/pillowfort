@@ -49,10 +49,10 @@ npx playwright install --with-deps chromium
 npm run check
 ```
 
-The release-check workflow runs the same gate on pushes and pull requests with
-read-only repository permissions, without deployment secrets or private
-submodule checkout. It never deploys. Optional marketing and UI suites remain
-separate from this gate.
+The release-check workflow runs the app gate and a separate marketing gate on
+pushes and pull requests, with read-only repository permissions and no deployment
+secrets. Both packages live in this repository. CI never deploys; optional
+long-form UI suites remain separate.
 
 Confirm Cloudflare auth before deploying:
 
