@@ -51,6 +51,10 @@ The downloadable npm package is separate from npm registry publication.
 `server.json` prepares MCP Registry metadata; its presence does not mean a listing
 has been published. The transport is local stdio, not a public HTTP `/mcp` endpoint.
 
+The same checksum-backed package is available from the
+[GitHub release mirror](https://github.com/slee1996/pillowfort/releases/tag/agent-v1.0.0)
+if your HTTP client encounters Cloudflare's browser-signature check.
+
 ## Current Feature Set
 
 ### Core room behavior

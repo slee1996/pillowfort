@@ -47,6 +47,10 @@ transport is local stdio with an operator-run browser.
   Markdown alternate metadata, accurate SoftwareApplication data, and sitemap.
 - Standalone `@slee1996/pillowfort-agent` 1.0.0 tarball and SHA-256 sidecar:
   https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz
+- Public checksum-identical GitHub mirror:
+  https://github.com/slee1996/pillowfort/releases/tag/agent-v1.0.0
+  Plain Python download from GitHub succeeded and matched SHA-256
+  `cc9d4b726a51f2a632448165367c0156c53277193af4272b89fd90e1a1e4271b`.
 - Explicit `install-browser`, nonmutating `doctor`, SDK exports, stdio MCP,
   JSON-lines interface, three MCP resources, and three workflow prompts.
 - `autonomous` creates a real room, privately invites its isolated agent peer,
@@ -67,14 +71,17 @@ Verification completed:
   fingerprint rejection, verified admission, received drawing, full RPS
   commit/reveal with private opponent picks, and observed room teardown passed.
 - Exact public `npm exec --package=<download URL>` autonomous command passed
-  against production with a fresh npm cache.
+  against production from an empty working directory and fresh npm cache.
 - Codex and VS Code CLI registration checked in isolated profiles. Live
   model-driven chat sessions in those applications remain unverified.
 - `server.json` passed the official MCP Registry JSON Schema.
+- Standalone installed runtime dependency audit: zero reported vulnerabilities.
+  GitHub still reports 57 open alerts; none matched the current local lockfile
+  versions at their reported paths. Alerts were not dismissed.
 
 ## Account and distribution actions remaining
 
-1. **npm publication:** current `npm whoami` returns401, with no alternate npm
+1. **npm publication:** current `npm whoami` returns 401, with no alternate npm
    token in the environment. Authenticate the intended package owner and confirm
    its scope before `npm publish marketing/public/downloads/pillowfort-agent-1.0.0.tgz
    --access public`. The existing public tarball works without that login.
@@ -82,7 +89,7 @@ Verification completed:
    publisher with root `server.json`. It must match package `mcpName` and version;
    the packer checks this. Metadata prepared does not mean a registry listing.
 3. **Cloudflare crawler compatibility:** plain Python urllib requests to public
-   docs/downloads receive edge403/error1010, while browser-style reads and the
+   docs/downloads receive edge 403/error 1010, while browser-style reads and the
    exact npm install/run path succeed. Existing Wrangler OAuth cannot read zone
    security settings/rulesets (9109/10000); dashboard relay access timed out.
    An owner session or appropriately scoped zone token is needed to inspect and
