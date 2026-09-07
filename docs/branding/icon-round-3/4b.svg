@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-label="Pillowfort Desktop clubhouse"><title>4B — Desktop clubhouse</title><defs>
+<linearGradient id="front" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#FFF2B1"/><stop offset=".4" stop-color="#FFDA61"/><stop offset="1" stop-color="#E4A329"/></linearGradient>
+<linearGradient id="right" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFDE78"/><stop offset="1" stop-color="#CA8A22"/></linearGradient>
+<linearGradient id="side" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E8AD31"/><stop offset="1" stop-color="#A86D1D"/></linearGradient>
+<linearGradient id="roof" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF8DA"/><stop offset=".5" stop-color="#FFE581"/><stop offset="1" stop-color="#E6AA30"/></linearGradient>
+<filter id="shadow" x="-30%" y="-30%" width="170%" height="180%"><feDropShadow dx="1" dy="3" stdDeviation="2" flood-color="#102A43" flood-opacity=".4"/></filter>
+</defs><rect width="128" height="128" rx="24" fill="#2459A6"/><g filter="url(#shadow)" stroke="#102A43" stroke-linejoin="round">
+<path d="M75 37V15l22 9-22 8" fill="#FFD34D" stroke-width="4.6"/>
+<path d="m43 63 15-10c-2 20-1 33 1 46l-14 11-11-11Z" fill="url(#side)" stroke-width="4.5"/>
+<path d="m94 64 15-11c-2 16 2 32 3 48l-17 12-12-14Z" fill="url(#side)" stroke-width="4.5"/>
+<path d="M25 61q10-2 21 2c-3 16-3 28 0 42q1 7-6 6l-16-2q-6 0-5-7c3-13 3-23 1-34q-1-6 5-6Z" fill="url(#front)" stroke-width="4.7"/>
+<path d="M80 63q9-1 18 2c-3 12-2 27 0 42q1 7-6 6l-15-3q-6-1-4-7c3-12 3-26 2-34q-1-6 5-6Z" fill="url(#right)" stroke-width="4.7"/>
+<path d="m97 48 14-12-2 21-11 11-8-10Z" fill="url(#side)" stroke-width="4.5"/>
+<path d="M21 47 38 34c17 4 45 3 64-2q8-2 9 4L98 48l-45 8Z" fill="#FFF0B3" stroke-width="4.5"/>
+<path d="M24 46c18 5 50 5 73-1q8-2 7 6l-2 11q0 8-7 6c-22-3-48-1-71 0q-7 1-6-6l2-9q-1-8 4-7Z" fill="url(#roof)" stroke-width="4.7"/>
+<path d="M30 53q30 3 64-1" fill="none" stroke="#FFFBEB" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M27 78q2 12 0 23m55-22q-1 12-1 22" fill="none" stroke="#FFF4C8" stroke-width="2.4" stroke-linecap="round"/>
+<path d="m104 68 1 29" fill="none" stroke="#EFBD48" stroke-width="2.3" stroke-linecap="round"/>
+</g></svg>

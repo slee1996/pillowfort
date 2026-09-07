@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-label="Pillowfort Soft light concept"><title>3A — Soft light</title><rect width="128" height="128" rx="24" fill="#2459A6"/>
+<defs>
+<linearGradient id="gold" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#FFF7D6"/><stop offset=".36" stop-color="#FFDF70"/><stop offset=".72" stop-color="#FFD34D"/><stop offset="1" stop-color="#D69724"/></linearGradient>
+<filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#102A43" flood-opacity=".35"/></filter>
+</defs>
+<g filter="url(#shadow)">
+<path d="M75 40V19l22 8-22 8" fill="#FFDD66" stroke="#102A43" stroke-width="4.5" stroke-linejoin="round"/>
+<path d="M27 41c13 4 21-4 37-4s24 8 37 4q9-3 7 7c-3 12 3 20 3 31s-6 19-3 29q2 7-6 5c-7-2-14-1-20-1q-5 0-5-5V90q0-16-13-16T51 90v17q0 5-5 5c-6 0-13-1-20 1q-8 2-6-5c3-10-3-18-3-29s6-19 3-31q-2-10 7-7Z" fill="url(#gold)" stroke="#102A43" stroke-width="5.5" stroke-linejoin="round"/>
+<path d="M29 51c13 2 21-4 35-4s23 7 34 5M29 60q-4 16-1 25" fill="none" stroke="#FFF8DF" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+<path d="M82 102V90q0-20-18-20" fill="none" stroke="#B5812B" stroke-width="2" stroke-linecap="round" opacity=".65"/>
+</g>
+</svg>

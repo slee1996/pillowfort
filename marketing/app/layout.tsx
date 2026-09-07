@@ -27,7 +27,7 @@ export const metadata: Metadata = {
       alt: "Pillowfort’s early-2000s product-site presentation with silver navigation, its gold fort logo, and an example conversation.",
     }],
   },
-  icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
+  icons: { icon: "/icon.svg?v=4b", shortcut: "/icon.svg?v=4b", apple: "/icon.svg?v=4b" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

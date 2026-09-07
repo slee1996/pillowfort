@@ -656,7 +656,12 @@
   text-shadow: 0 1px 1px rgb(0 24 73 / 65%);
 }
 
-.room-brand > svg {
+.pillowfort-logo {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.room-brand > .pillowfort-logo {
   width: 26px;
   height: 26px;
   flex: 0 0 auto;
@@ -1459,7 +1464,8 @@
 }
 
 .xp-title-icon,
-.xp-title-icon svg {
+.xp-title-icon svg,
+.xp-title-icon .pillowfort-logo {
   display: block;
   flex: 0 0 auto;
   width: 24px;
@@ -2834,7 +2840,7 @@ dialog.dialog-overlay:not([open]),
     font-size: 16px;
   }
 
-  .room-brand > svg {
+  .room-brand > .pillowfort-logo {
     width: 26px;
     height: 26px;
   }

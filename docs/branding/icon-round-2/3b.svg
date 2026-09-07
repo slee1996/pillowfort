@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-label="Pillowfort Desktop keepsake concept"><title>3B — Desktop keepsake</title><rect width="128" height="128" rx="24" fill="#2459A6"/>
+<defs>
+<linearGradient id="front" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#FFF7D6"/><stop offset=".38" stop-color="#FFDB60"/><stop offset="1" stop-color="#E4A329"/></linearGradient>
+<linearGradient id="side" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E8AD31"/><stop offset="1" stop-color="#A86D1D"/></linearGradient>
+<linearGradient id="roof" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF8DA"/><stop offset="1" stop-color="#FAD363"/></linearGradient>
+<filter id="shadow" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="1" dy="4" stdDeviation="2.3" flood-color="#102A43" flood-opacity=".5"/></filter>
+</defs>
+<g filter="url(#shadow)" stroke="#102A43" stroke-linejoin="round">
+<path d="M71 36V15l23 9-23 8" fill="#FFDD66" stroke-width="4.5"/>
+<path d="m88 48 20-11c-4 19 1 29 1 43q-1 17 1 22l-21 13-10-15Z" fill="url(#side)" stroke-width="4.5"/>
+<path d="M21 49 42 35c13 3 18-4 33-3s22 9 33 5L88 50 57 60Z" fill="url(#roof)" stroke-width="4.5"/>
+<path d="M23 48c12 4 17-3 31-2s20 8 34 4q6-2 5 6c-3 12 2 22 2 31s-5 17-2 23q2 6-5 5l-18-3q-4-1-4-5V92q0-14-10-15T46 91v14q0 5-5 5l-17-2q-6 0-4-6c3-10-2-18-2-28s5-17 2-21q-2-6 3-5Z" fill="url(#front)" stroke-width="4.5"/>
+<path d="M28 57c11 1 18-2 27-1s17 6 28 4M29 64q-4 14-1 26" fill="none" stroke="#FFF8DF" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>
+<path d="m101 51-1 43" stroke="#F2C14F" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+</svg>

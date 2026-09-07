@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-label="Pillowfort Soft clubhouse"><title>4A — Soft clubhouse</title><defs>
+<linearGradient id="front" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#FFF2B1"/><stop offset=".4" stop-color="#FFDA61"/><stop offset="1" stop-color="#E4A329"/></linearGradient>
+<linearGradient id="right" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFDE78"/><stop offset="1" stop-color="#CA8A22"/></linearGradient>
+<linearGradient id="side" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E8AD31"/><stop offset="1" stop-color="#A86D1D"/></linearGradient>
+<linearGradient id="roof" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF8DA"/><stop offset=".5" stop-color="#FFE581"/><stop offset="1" stop-color="#E6AA30"/></linearGradient>
+<filter id="shadow" x="-30%" y="-30%" width="170%" height="180%"><feDropShadow dx="1" dy="3" stdDeviation="2" flood-color="#102A43" flood-opacity=".4"/></filter>
+</defs><rect width="128" height="128" rx="24" fill="#2459A6"/><g filter="url(#shadow)" stroke="#102A43" stroke-linejoin="round">
+<path d="M76 38V17l22 8-22 8" fill="#FFD34D" stroke-width="4.7"/>
+<g transform="rotate(5 34 85)"><path d="M24 58q11-2 23 2c-2 14-3 31 0 46q1 7-6 7H24q-7 0-6-7c4-17 4-32 1-41q-2-7 5-7Z" fill="url(#front)" stroke-width="5"/><path d="M28 72q2 13 0 29" fill="none" stroke="#FFF5CE" stroke-width="2.5" stroke-linecap="round"/><path d="M40 76q-1 14 1 26" fill="none" stroke="#B58025" stroke-width="1.8" stroke-linecap="round"/></g>
+<g transform="rotate(-5 94 85)"><path d="M84 58q11-2 23 2c-2 14-3 31 0 46q1 7-6 7H84q-7 0-6-7c4-17 4-32 1-41q-2-7 5-7Z" fill="url(#right)" stroke-width="5"/><path d="M87 74q1 11 0 24" fill="none" stroke="#FFF1B5" stroke-width="2.5" stroke-linecap="round"/><path d="M99 75q-2 14 0 26" fill="none" stroke="#B58025" stroke-width="1.8" stroke-linecap="round"/></g>
+<path d="M24 37c19 3 57 3 78-2q8-2 7 6l-2 14q1 8-7 6c-20-3-55-2-76 2q-8 1-7-7l2-12q-2-9 5-7Z" fill="url(#roof)" stroke-width="5"/>
+<path d="M29 44q32 3 69-2" fill="none" stroke="#FFFBE9" stroke-width="2.8" stroke-linecap="round"/>
+<path d="M28 55q30-3 68-3" fill="none" stroke="#BC8629" stroke-width="1.7" stroke-linecap="round" opacity=".65"/>
+</g></svg>

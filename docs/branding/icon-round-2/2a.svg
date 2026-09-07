@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-label="Pillowfort Blanket hideout concept"><title>2A — Blanket hideout</title><rect width="128" height="128" rx="24" fill="#2459A6"/>
+<path d="M65 37V16l22 8-22 8" fill="#FFD34D" stroke="#102A43" stroke-width="5" stroke-linejoin="round"/>
+<path d="M29 61q10-4 22 1c-1 12-4 26-1 44q1 6-6 5H26q-7 0-5-7c3-15 3-27 2-37q-1-5 6-6Z" fill="#FFF0AB" stroke="#102A43" stroke-width="5"/>
+<path d="M81 62q11-5 21-1 5 1 4 7c-2 13-1 25 2 37q2 7-5 6H85q-7 0-6-6c2-17 1-32 2-43Z" fill="#FFD34D" stroke="#102A43" stroke-width="5"/>
+<path d="M20 62c13-6 27-22 40-29q5-3 10 1c12 10 24 22 39 29l-7 16c-15-2-25-13-38-25-11 12-24 23-38 24Z" fill="#FFD34D" stroke="#102A43" stroke-width="6" stroke-linejoin="round"/>
+<path d="M28 66c12-5 25-19 36-24 12 8 24 22 36 26" fill="none" stroke="#FFF7D6" stroke-width="3" stroke-linecap="round"/>
+<path d="m31 89-1 13m67-13 1 13" stroke="#C49028" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

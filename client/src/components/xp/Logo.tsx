@@ -1,22 +1,3 @@
 export function LogoIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      aria-hidden="true"
-    >
-      <path fill="#102A43" d="M17.8 9.2V2.8c0-.65.57-1.05 1.17-.8l6.05 2.1c.66.23.66 1.04 0 1.28L20 7.1v2.1Z" />
-      <path fill="#FFD34D" d="M19 3.3 24.4 5.1 19 6.8Z" />
-      <path
-        fill="#FFD34D"
-        stroke="#102A43"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-        d="M5.4 8.9C9 9.7 10.8 7.6 16 7.6s7.1 2.1 10.6 1.3c1.7-.4 2.5.45 2.05 2.05-.65 2.3.75 4.2.75 8.05s-1.4 5.85-.75 8.05c.45 1.6-.35 2.45-2.05 2.05-1.6-.35-3.5-.2-5.6-.2-.7 0-1.1-.4-1.1-1.1V23c0-2.5-1.35-4.1-3.9-4.1s-3.9 1.6-3.9 4.1v4.8c0 .7-.4 1.1-1.1 1.1-2.1 0-4-.15-5.6.2-1.7.4-2.5-.45-2.05-2.05C4 24.85 2.6 22.85 2.6 19s1.4-5.75.75-8.05C2.9 9.35 3.7 8.5 5.4 8.9Z"
-      />
-    </svg>
-  );
+  return <img className="pillowfort-logo" src="/logo-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
 }
