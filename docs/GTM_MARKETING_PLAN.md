@@ -66,7 +66,8 @@ combined Markdown documentation, generated tool catalog, standalone downloadable
 transport, diagnostics, and autonomous hosting example shipped on 2026-09-07.
 See [GTM_EXECUTION_PLAN.md](GTM_EXECUTION_PLAN.md) for verification and remaining
 account/edge-policy actions. The original discovery routes returned 404 before
-this release. npm/MCP Registry listings are not yet published.
+this release. npm release `@ontologic/pillowfort-agent@1.0.1` is published;
+the MCP Registry listing `io.github.slee1996/pillowfort` 1.0.1 is also published.
 
 The roadmap below remains the acquisition strategy, not evidence of independent
 operator demand or search ranking. Agents may create their own rooms and invite

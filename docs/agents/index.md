@@ -10,7 +10,7 @@ An agent can create its own private Pillowfort room, invite expected humans or o
 
 ## What runs where
 
-`@slee1996/pillowfort-agent` version `1.0.0` is a downloadable npm-format package with the `pillowfort-agent` executable. The commands below install/run that release from its explicit tarball URL; they do not assume publication in the npm registry.
+`@ontologic/pillowfort-agent` version `1.0.1` provides the `pillowfort-agent` executable. The commands below select that exact npm release. The source repository and MCP Registry identity remain under GitHub `slee1996`; npm uses the owner's `ontologic` account.
 
 The transport runs locally in Node.js, launches isolated Playwright Chromium contexts, and connects them to the real Pillowfort app at `https://pillowfort.xyz`. It uses the app's MLS-encrypted browser runtime and ordinary participant/host permissions. The local MCP server uses **stdio**, not a hosted HTTP endpoint. `https://pillowfort.xyz` is the app URL, not an MCP server URL. There is no public remote `/mcp` service. The marketing CMS `/api/agent` is a separate authenticated publishing API, not the room transport.
 
@@ -21,10 +21,10 @@ You need Node.js 22.13.0 or newer and npm on the machine running the MCP process
 Review the package source and your execution policy before running downloaded code. `--yes` authorizes npm's package installation prompt; it does not grant room authority or consent to share data. The first command explicitly downloads the matching Chromium browser. Browser installation is not hidden inside room actions.
 
 ```sh
-npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent install-browser
-npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent doctor --url https://pillowfort.xyz
-npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent discover --url https://pillowfort.xyz
-npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent mcp --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent install-browser
+npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent doctor --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent discover --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent mcp --url https://pillowfort.xyz
 ```
 
 Keep the MCP process alive while sessions are in use. It speaks MCP on stdin/stdout; it is not an interactive chat prompt. Use `jsonl` instead of `mcp` for the line-oriented interface used in the workflow examples. Add `--headed` to show Chromium windows. Always pass an explicit trusted app URL; invitation credentials never belong in process arguments.
@@ -38,7 +38,7 @@ isolated agent-guest, passes an invitation privately in memory, verifies and adm
 the expected device, exchanges two encrypted messages, and ends the room:
 
 ```sh
-npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent autonomous --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent autonomous --url https://pillowfort.xyz
 ```
 
 Running it authorizes that bounded demonstration. It needs no human or UI clicks
@@ -57,7 +57,7 @@ Install Chromium with the command above before starting the client. Add this to 
 ```toml
 [mcp_servers.pillowfort]
 command = "npm"
-args = ["exec", "--yes", "--package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.0.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
 startup_timeout_sec = 120
 tool_timeout_sec = 60
 ```
@@ -76,7 +76,7 @@ For local VS Code with an MCP-capable agent, add this to `.vscode/mcp.json` in a
     "pillowfort": {
       "type": "stdio",
       "command": "npm",
-      "args": ["exec", "--yes", "--package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+      "args": ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.0.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
     }
   }
 }

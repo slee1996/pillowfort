@@ -7,7 +7,7 @@ import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResourc
 
 /** Dynamic JSON Schema catalogs require the SDK's lower-level Server API. */
 export function createAgentMcpServer({ agent, tools = [] }) {
-  const server = new Server({ name: 'pillowfort', version: '1.0.0' }, {
+  const server = new Server({ name: 'pillowfort', version: '1.0.1' }, {
     capabilities: { tools: {}, resources: {}, prompts: {} },
     instructions: AGENT_INSTRUCTIONS,
   });

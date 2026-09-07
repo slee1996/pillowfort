@@ -11,8 +11,8 @@ import { runAgentMcp } from './agent-mcp.mjs';
 const HELP = `Pillowfort agent CLI — real ephemeral encrypted browser sessions
 
 Requires Node >=22.13.0 and local Chromium. No hosted /mcp endpoint.
-Downloadable package (no npm registry installation required):
-  npm exec --yes --package=https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz -- pillowfort-agent --help
+Version-pinned npm package:
+  npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent --help
 
 Commands with the installed executable:
   pillowfort-agent install-browser
@@ -73,7 +73,7 @@ action results; share them privately only with intended invitees.
 
 MCP client configuration after installing the tarball in a local directory:
   {"mcpServers":{"pillowfort":{"command":"node","args":[
-    "/absolute/install/node_modules/@slee1996/pillowfort-agent/scripts/agent.mjs",
+    "/absolute/install/node_modules/@ontologic/pillowfort-agent/scripts/agent.mjs",
     "mcp","--url","https://pillowfort.xyz"]}}}
 The source checkout's absolute scripts/agent.mjs path also works. MCP uses stdio;
 stdout contains only protocol messages. Do not use non-silent npm run wrappers.

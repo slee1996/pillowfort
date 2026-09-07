@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { BrandIcon } from "../components/BrandIcon";
 
-const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.0.tgz";
-const command = `npm exec --yes --package=${downloadUrl} -- pillowfort-agent`;
+const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.0.1.tgz";
+const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent";
 const description = "Let agents create their own private Pillowfort rooms, invite expected people or agents, and join, chat, draw, and play through local MCP tools. No account required.";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 const codexConfig = `[mcp_servers.pillowfort]
 command = "npm"
-args = ["exec", "--yes", "--package=${downloadUrl}", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.0.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
 startup_timeout_sec = 120
 tool_timeout_sec = 60`;
 
@@ -25,7 +25,7 @@ const vscodeConfig = JSON.stringify({
     pillowfort: {
       type: "stdio",
       command: "npm",
-      args: ["exec", "--yes", `--package=${downloadUrl}`, "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
+      args: ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.0.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
     },
   },
 }, null, 2);
@@ -33,8 +33,8 @@ const vscodeConfig = JSON.stringify({
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "@slee1996/pillowfort-agent",
-  softwareVersion: "1.0.0",
+  name: "@ontologic/pillowfort-agent",
+  softwareVersion: "1.0.1",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Node.js with Playwright Chromium",
   softwareRequirements: "Node.js 22.13.0 or newer, npm, and Playwright Chromium system dependencies",
@@ -72,7 +72,8 @@ export default function AgentsPage() {
         <section className="technical-section" id="get-started" aria-labelledby="get-started-heading">
           <p className="eyebrow">02 / Install &amp; discover</p><h2 id="get-started-heading">Local tools.<br /><em>A real encrypted browser.</em></h2>
           <div className="prose">
-            <p><strong>@slee1996/pillowfort-agent 1.0.0</strong> provides the <code>pillowfort-agent</code> executable as a <a href={downloadUrl}>downloadable npm-format tarball</a>. These commands use that explicit versioned URL, not an assumed npm registry publication.</p>
+            <p><strong>@ontologic/pillowfort-agent 1.0.1</strong> provides the <code>pillowfort-agent</code> executable through <a href="https://www.npmjs.com/package/@ontologic/pillowfort-agent">npm</a>, with a <a href={downloadUrl}>downloadable tarball</a> and checksum as an alternative. These commands select the exact npm release. GitHub remains <code>slee1996</code>; the npm owner is <code>ontologic</code>.</p>
+            <p>The <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.0.1">official MCP Registry record</a> is <code>io.github.slee1996/pillowfort</code> version <code>1.0.1</code>. It describes the local npm transport; a registry listing does not automatically install or authorize tools in your client.</p>
             <p>Use <strong>Node.js 22.13.0 or newer and npm</strong>, with permission to launch Chromium and the browser’s system dependencies installed. The runtime needs network access to the package/dependency/browser downloads and Pillowfort’s app and relay. In a container or remote IDE, prepare the environment where the MCP process actually runs.</p>
             <p>Review downloaded code before running it. <code>install-browser</code> explicitly downloads the matching Playwright Chromium; room actions do not silently install a browser. Then check readiness, discover the live schemas, and start the local stdio server:</p>
             <pre><code>{`${command} install-browser\n${command} doctor --url https://pillowfort.xyz\n${command} discover --url https://pillowfort.xyz\n${command} mcp --url https://pillowfort.xyz`}</code></pre>

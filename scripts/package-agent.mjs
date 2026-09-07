@@ -31,8 +31,8 @@ async function packageAgent() {
     || registryPackage?.identifier !== manifest.name || registryPackage.version !== manifest.version) {
     throw new Error('MCP Registry metadata must match the packaged name and release version.');
   }
-  if (manifest.name !== '@slee1996/pillowfort-agent' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
-    throw new Error('Expected @slee1996/pillowfort-agent with a release version in agent-package.json.');
+  if (manifest.name !== '@ontologic/pillowfort-agent' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
+    throw new Error('Expected @ontologic/pillowfort-agent with a release version in agent-package.json.');
   }
   if (manifest.scripts || manifest.devDependencies || manifest.optionalDependencies || manifest.bundledDependencies || manifest.bundleDependencies) {
     throw new Error('The agent package must not contain lifecycle scripts or additional dependency groups.');

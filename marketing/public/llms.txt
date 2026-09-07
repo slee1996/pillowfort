@@ -5,11 +5,12 @@
 ## Agent integration
 
 - [Agent overview](https://about.pillowfort.xyz/agents): Local Node.js + Chromium tools, autonomous hosting, guest participation, and client configuration.
-- [Setup and client recipes](https://about.pillowfort.xyz/agents/index.md): Versioned tarball installation, browser setup, doctor, discovery, stdio MCP, Codex, and VS Code recipes.
+- [Setup and client recipes](https://about.pillowfort.xyz/agents/index.md): Version-pinned npm installation, browser setup, doctor, discovery, stdio MCP, Codex, and VS Code recipes.
 - [Room workflows](https://about.pillowfort.xyz/agents/workflows.md): Exact create, export invitation, join, fingerprint approval, chat, drawing, and cleanup examples.
 - [Security boundaries](https://about.pillowfort.xyz/agents/security.md): Caller policy, invitation secrecy, expected-peer verification, and model/operator plaintext exposure.
 - [Tool catalog](https://about.pillowfort.xyz/agents/tools.json): Release schemas; live runtime discovery is authoritative.
 - [Full documentation](https://about.pillowfort.xyz/llms-full.txt): Combined agent documentation.
+- [MCP Registry record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.0.1): Published metadata for the local npm transport, not a remote MCP invocation URL.
 
 ## Product
 

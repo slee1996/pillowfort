@@ -81,13 +81,20 @@ Verification completed:
 
 ## Account and distribution actions remaining
 
-1. **npm publication:** current `npm whoami` returns 401, with no alternate npm
-   token in the environment. Authenticate the intended package owner and confirm
-   its scope before `npm publish marketing/public/downloads/pillowfort-agent-1.0.0.tgz
-   --access public`. The existing public tarball works without that login.
-2. **MCP Registry:** after npm publication, use the owner-authenticated official
-   publisher with root `server.json`. It must match package `mcpName` and version;
-   the packer checks this. Metadata prepared does not mean a registry listing.
+1. **npm publication completed:** `@ontologic/pillowfort-agent@1.0.1` is published
+   on npmjs.org under `ontologic`; GitHub and MCP identity remain `slee1996`.
+   Registry metadata and tarball SHA-256 were verified after browser approval.
+   A fresh npm install completed the production autonomous create/invite/verify/
+   approve/chat/end workflow. The initial package-index 404 resolved after
+   registry propagation; the normal version-pinned package name now installs.
+   This machine has GitHub Packages registry overrides. To explicitly select npm,
+   pass both `--registry=https://registry.npmjs.org/` and
+   `--@ontologic:registry=https://registry.npmjs.org/`; global settings were not
+   changed. The original 1.0.0 download remains unchanged.
+2. **MCP Registry publication completed:** `io.github.slee1996/pillowfort` 1.0.1
+   is published with npm package `@ontologic/pillowfort-agent`. Used the official
+   publisher v1.8.1, verified its download against GitHub's SHA-256, authenticated
+   with the existing `slee1996` owner credential, and verified the public record.
 3. **Cloudflare crawler compatibility:** plain Python urllib requests to public
    docs/downloads receive edge 403/error 1010, while browser-style reads and the
    exact npm install/run path succeed. Existing Wrangler OAuth cannot read zone

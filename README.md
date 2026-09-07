@@ -47,13 +47,13 @@ is needed. Node and an explicitly installed Chromium browser are required.
 - [Permissions, credentials, and model-provider visibility](docs/agents/security.md)
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
-The downloadable npm package is separate from npm registry publication.
-`server.json` prepares MCP Registry metadata; its presence does not mean a listing
-has been published. The transport is local stdio, not a public HTTP `/mcp` endpoint.
+The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
+The MCP Registry listing is `io.github.slee1996/pillowfort` version 1.0.1.
+The transport is local stdio, not a public HTTP `/mcp` endpoint.
 
-The same checksum-backed package is available from the
-[GitHub release mirror](https://github.com/slee1996/pillowfort/releases/tag/agent-v1.0.0)
-if your HTTP client encounters Cloudflare's browser-signature check.
+The original 1.0.0 download remains archived in its
+[GitHub release](https://github.com/slee1996/pillowfort/releases/tag/agent-v1.0.0).
+Current installation instructions select the versioned npm package.
 
 ## Current Feature Set
 

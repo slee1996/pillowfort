@@ -1,6 +1,6 @@
 {
-  "name": "@slee1996/pillowfort-agent",
-  "version": "1.0.0",
+  "name": "@ontologic/pillowfort-agent",
+  "version": "1.0.1",
   "description": "Local browser-backed Pillowfort agent SDK, JSON-lines CLI, and stdio MCP server for ephemeral encrypted rooms.",
   "type": "module",
   "license": "MIT",
@@ -44,7 +44,8 @@
     "playwright": "1.59.1"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "keywords": [
     "pillowfort",

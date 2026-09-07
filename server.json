@@ -6,12 +6,12 @@
     "url": "https://github.com/slee1996/pillowfort",
     "source": "github"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@slee1996/pillowfort-agent",
-      "version": "1.0.0",
+      "identifier": "@ontologic/pillowfort-agent",
+      "version": "1.0.1",
       "transport": { "type": "stdio" },
       "packageArguments": [
         { "type": "positional", "value": "mcp" },
