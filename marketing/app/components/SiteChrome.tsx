@@ -10,6 +10,7 @@ export function SiteHeader() {
         <a href="/#how">How it works</a>
         <a href="/#games">Talk, draw &amp; play</a>
         <a href="/technology">Privacy</a>
+        <a href="/agents">For agents</a>
         <a href="/articles">Field notes</a>
       </nav>
       <div className="site-subnav"><span>A little room for your people.</span><a href="https://pillowfort.xyz">Open Pillowfort <span aria-hidden="true">→</span></a></div>
@@ -19,7 +20,7 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return <footer className="site-footer wrap">
-    <nav aria-label="Footer navigation"><a href="/#how">How it works</a><a href="/#games">Talk, draw &amp; play</a><a href="/technology">Privacy &amp; technology</a><a href="/articles">Field notes</a><a href="/admin">Editor sign in</a></nav>
+    <nav aria-label="Footer navigation"><a href="/#how">How it works</a><a href="/#games">Talk, draw &amp; play</a><a href="/technology">Privacy &amp; technology</a><a href="/agents">For agents</a><a href="/articles">Field notes</a><a href="/admin">Editor sign in</a></nav>
     <p><strong>Pillowfort.</strong> Private rooms. Shared time.</p>
     <p>Built for hanging out, then heading off.</p>
   </footer>;

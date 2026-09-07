@@ -1,5 +1,13 @@
 # Metrics Review
 
+> Current protocol-v4 correction: protected room, invite, message and game events
+> are not emitted through public analytics. The room-funnel questions and ratios
+> below are historical and cannot be computed from current logs. The report is
+> useful only for events actually emitted, such as commerce/configuration and
+> permitted operations. For activation and repeat use, follow the consenting-host
+> cohort in [GTM_MARKETING_PLAN.md](GTM_MARKETING_PLAN.md); do not restore private
+> activity logging to populate this historical funnel.
+
 Pillowfort's beta metrics are intentionally lightweight. The app emits
 privacy-safe `[analytics]` log lines, and the weekly review summarizes those
 logs without storing room IDs, passwords, names, message text, or checkout IDs.

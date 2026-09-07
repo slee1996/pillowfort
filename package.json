@@ -17,7 +17,10 @@
     "metrics:report": "node scripts/analytics_report.mjs",
     "agent": "node scripts/agent.mjs",
     "agent:mcp": "node scripts/agent.mjs mcp",
-    "verify:openmls": "node scripts/verify-openmls-artifacts.mjs"
+    "verify:openmls": "node scripts/verify-openmls-artifacts.mjs",
+    "agent:catalog": "node scripts/update-agent-catalog.mjs",
+    "agent:docs": "node scripts/build-agent-docs.mjs",
+    "agent:pack": "node scripts/package-agent.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260906.1",

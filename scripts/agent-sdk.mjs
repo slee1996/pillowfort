@@ -100,7 +100,7 @@ export class PillowfortAgent {
         try {
           this.#browser = await chromium.launch({ headless: !this.#headed, timeout: this.#timeoutMs });
         } catch {
-          throw new AgentError('BROWSER_UNAVAILABLE', 'Chromium could not start. Run npx playwright install chromium and check headed display availability.', true);
+          throw new AgentError('BROWSER_UNAVAILABLE', 'Chromium could not start. Run pillowfort-agent install-browser (source: node scripts/agent.mjs install-browser) to install the matching browser, then check OS browser dependencies and headed display availability.', true);
         }
         if (this.#closed) {
           await this.#browser.close();

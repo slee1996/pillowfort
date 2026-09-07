@@ -27,6 +27,9 @@ video/
 video/out/
 demo-videos/
 *.tsbuildinfo
+/marketing/public/agents/
+/marketing/public/llms-full.txt
+/marketing/public/downloads/
 
 # Generated media / captures
 *.actual.png

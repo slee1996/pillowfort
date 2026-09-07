@@ -1,5 +1,14 @@
 # Beta Analytics
 
+> Current protocol-v4 correction: the browser and server intentionally exclude
+> room creation/joining, invitation, message, and game activity from public
+> analytics. The broader catalog below is historical, not a statement that those
+> events are emitted. Current allowed browser events are configuration/commerce
+> and Activity-detection events in `client/src/services/analytics.ts` and
+> `src/analytics.ts`. Use the opt-in cohort measurement plan in
+> [GTM_MARKETING_PLAN.md](GTM_MARKETING_PLAN.md), not room-funnel counts inferred
+> from absent events.
+
 Pillowfort beta analytics are same-origin, privacy-safe funnel events. They are
 intended to answer product questions without collecting chat content or user
 identity.

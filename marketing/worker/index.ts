@@ -67,6 +67,9 @@ const worker = {
     }
 
     const headers = new Headers(response.headers);
+    if (response.ok && /^\/agents\/(?:index|workflows|security|tools)\.md$/.test(url.pathname)) {
+      headers.set("content-type", "text/markdown; charset=utf-8");
+    }
     headers.set("x-content-type-options", "nosniff");
     headers.set("x-frame-options", "DENY");
     headers.set("content-security-policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");

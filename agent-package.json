@@ -1,0 +1,56 @@
+{
+  "name": "@slee1996/pillowfort-agent",
+  "version": "1.0.0",
+  "description": "Local browser-backed Pillowfort agent SDK, JSON-lines CLI, and stdio MCP server for ephemeral encrypted rooms.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Spencer Lee",
+  "homepage": "https://about.pillowfort.xyz/agents",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slee1996/pillowfort.git"
+  },
+  "bugs": {
+    "url": "https://github.com/slee1996/pillowfort/issues"
+  },
+  "mcpName": "io.github.slee1996/pillowfort",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "bin": {
+    "pillowfort-agent": "./scripts/agent.mjs"
+  },
+  "exports": {
+    ".": "./scripts/agent-sdk.mjs",
+    "./sdk": "./scripts/agent-sdk.mjs",
+    "./tools": "./scripts/agent-tools.mjs",
+    "./mcp": "./scripts/agent-mcp.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "scripts/agent.mjs",
+    "scripts/agent-sdk.mjs",
+    "scripts/agent-tools.mjs",
+    "scripts/agent-mcp.mjs",
+    "docs/agents/index.md",
+    "docs/agents/workflows.md",
+    "scripts/agent-guidance.mjs",
+    "scripts/agent-autonomous.mjs",
+    "docs/agents/security.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "playwright": "1.59.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "pillowfort",
+    "mcp",
+    "agents",
+    "end-to-end-encryption",
+    "playwright"
+  ]
+}

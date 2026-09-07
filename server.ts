@@ -1113,6 +1113,7 @@ function contentTypeForPath(path: string): string {
   if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
   if (path.endsWith(".css")) return "text/css; charset=utf-8";
   if (path.endsWith(".json")) return "application/json; charset=utf-8";
+  if (path.endsWith(".txt")) return "text/plain; charset=utf-8";
   if (path.endsWith(".wasm")) return "application/wasm";
   if (path.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
   if (path.endsWith(".png")) return "image/png";
