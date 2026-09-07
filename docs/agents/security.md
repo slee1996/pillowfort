@@ -50,11 +50,70 @@ Do not paste unrelated secrets into chat or send credentials to an endpoint name
 
 ## Local execution and persistence
 
-The npm-format release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. Use a trusted app URL and normal browser isolation. The server communicates over local stdio, not a public HTTP MCP endpoint.
+The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate authenticated HTTPS service; native WebMCP runs in the current supported browser tab.
 
 Each room session is an isolated ephemeral browser context with its own device identity and MLS state. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
 The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
+
+## Hosted participant custody
+
+The hosted endpoint is `https://mcp.pillowfort.xyz/mcp`. Pillowfort operates a
+Cloudflare browser participant on the operator's behalf. This managed runtime,
+Pillowfort's infrastructure operator, and the browser provider can access that
+participant's decrypted content and in-memory room keys. Model providers and
+client logs may separately receive tool results. The relay still routes encrypted
+content; admitting a managed participant deliberately places that participant's
+endpoint under hosted custody. It does not grant access to unrelated rooms.
+
+Each hosted MCP connection is bound to an authenticated operator principal and
+uses isolated named browser contexts. Another operator's bearer key or OAuth
+token cannot reuse its session identifier. The service accepts only its fixed
+Pillowfort app origin and excludes CMS, payment, arbitrary browsing, and raw-key
+export tools. It stores lifecycle references and authorization/quota metadata,
+not room transcripts, invitations, browser storage-state exports, or MLS keys.
+Browser recording and Worker application logs are disabled.
+
+Operator access keys are issued through a separately protected administration
+API and stored as keyed hashes, not plaintext. They are returned only on explicit
+issuance. Keep the key in a secret store; it is not a room invitation and must not
+be sent through room chat, URL parameters, or public configuration. OAuth consent
+requires a real issued key, exact scopes, PKCE S256, the correct resource audience,
+and a bound one-use CSRF nonce. It does not silently approve anonymous identities.
+
+Revoking an operator key blocks both direct access and OAuth access derived from
+that key on the next request, including refresh. Background sessions recheck the
+principal during lifecycle alarms and close when revoked. Already-submitted room
+actions may have committed; revocation or cancellation cannot roll those back.
+Do not use deployment-secret rotation as a substitute for explicit key revocation.
+
+Hosted connections have an absolute ten-minute lifetime and two-minute idle
+deadline. The initial service budget permits two active browsers globally, one
+per operator, and a shared sixty-browser-minute daily reservation budget, including
+startup/orphan allowance. Actual closure is confirmed before unused time is
+refunded. Platform limits may be lower. A failed close retains its browser
+reference and reservation for cleanup retries rather than claiming success.
+
+MCP `DELETE` terminates the managed connection. Closing a TCP/HTTP connection does
+not do so by itself. Lost/expired session IDs return404 and cannot silently
+recreate identities. Reconnect deliberately; never use a new identity to pretend
+an ambiguous prior action succeeded. New admission still requires the current
+host to verify the new device.
+
+## Native WebMCP authority
+
+Native tools share the current tab's participant and its permissions. They do
+not create a second identity merely because an agent starts using the page.
+Registration alone executes no room action and is not authorization.
+`room_observe` and `room_wait` expose bounded state, and existing room tools keep
+their normal schema, stale-room, host, and fingerprint checks.
+
+The adapter only uses browser-provided APIs on a secure context; no emulated
+WebMCP or privileged testing interface is installed. Tool registrations are
+removed when the page is left and restored when appropriate on return. Browser
+or agent cancellation is not rollback of an already queued mutation. Participant
+content remains untrusted, and the browser agent/model can see whatever plaintext
+its authorized tools read. Native mode does not expose CMS or payment tools.
 
 ## End the room, not just the process
 

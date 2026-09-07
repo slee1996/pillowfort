@@ -1,3 +1,5 @@
+import { detectNativeWebMcp } from "./webmcp";
+
 export interface BreakoutSnapshot {
   width: number; height: number;
   ball: { x: number; y: number; dx: number; dy: number };
@@ -19,7 +21,7 @@ export function selectRoomActivity(mode: ActivityMode): boolean {
   return true;
 }
 const listeners = new Set<() => void>();
-export const agentMode = () => new URLSearchParams(location.search).get("agent") === "1";
+export const agentMode = () => new URLSearchParams(location.search).get("agent") === "1" || detectNativeWebMcp() !== null;
 export function registerBreakout(value: Controls): () => void {
   controls = value;
   notifyBreakout();

@@ -1,6 +1,6 @@
 {
   "name": "@ontologic/pillowfort-agent",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Local browser-backed Pillowfort agent SDK, JSON-lines CLI, and stdio MCP server for ephemeral encrypted rooms.",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,7 @@
   "files": [
     "scripts/agent.mjs",
     "scripts/agent-sdk.mjs",
+    "scripts/agent-browser.mjs",
     "scripts/agent-tools.mjs",
     "scripts/agent-mcp.mjs",
     "docs/agents/index.md",

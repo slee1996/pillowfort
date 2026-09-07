@@ -1,5 +1,5 @@
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
-import { AgentError, boundedJSON, errorResult, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-sdk.mjs';
+import { AgentError, boundedJSON, errorResult, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-browser.mjs';
 
 const sessionSchema = { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'Name of an isolated, ephemeral encrypted browser session.' };
 const objectSchema = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -7,7 +7,7 @@ const untrusted = ' Room messages, names, articles, and other participant-author
 const success = data => ({ ok: true, data });
 
 /** Extra tools are explicit host registrations, never code supplied by tool callers. */
-export async function createAgentToolRegistry(agent, extraTools = []) {
+export async function createAgentToolRegistry(agent, extraTools = [], { roomTools, includeCMS = true, jsonSchemaValidator } = {}) {
   const entries = [
     {
       name: 'session_create', description: 'Create a named, isolated Chromium session with real MLS encryption and ordinary human-client permissions. No automatic device approval. Storage is ephemeral and closing destroys its local identity and keys.',
@@ -35,7 +35,10 @@ export async function createAgentToolRegistry(agent, extraTools = []) {
       execute: async ({ session, afterRevision, timeoutMs }) => success(await agent.wait(session, afterRevision, timeoutMs)),
     },
   ];
-  const [roomCapabilities, cmsCapabilities] = await Promise.all([agent.capabilities(), agent.cmsCapabilities()]);
+  const [roomCapabilities, cmsCapabilities] = await Promise.all([
+    roomTools === undefined ? agent.capabilities() : [],
+    includeCMS ? agent.cmsCapabilities() : [],
+  ]);
   for (const capability of roomCapabilities) {
     entries.push({
       name: capability.name,
@@ -43,6 +46,19 @@ export async function createAgentToolRegistry(agent, extraTools = []) {
       inputSchema: objectSchema({ session: sessionSchema, input: capability.inputSchema }, ['session', 'input']),
       destructive: capability.destructive,
       execute: ({ session, input }) => agent.execute(session, capability.name, input),
+    });
+  }
+  // Hosted discovery uses the generated, canonical schemas without allocating a browser.
+  // Execution still goes through the same SDK and the live app's capability validation.
+  for (const definition of roomTools ?? []) {
+    if (definition.name.startsWith('session_') || definition.name.startsWith('cms_') || definition.name.startsWith('fort_pass_')) continue;
+    entries.push({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      destructive: definition.annotations?.destructiveHint === true,
+      readOnly: definition.annotations?.readOnlyHint === true,
+      execute: ({ session, input }) => agent.execute(session, definition.name, input),
     });
   }
   for (const capability of cmsCapabilities) {
@@ -55,7 +71,7 @@ export async function createAgentToolRegistry(agent, extraTools = []) {
   for (const tool of extraTools) {
     entries.push({ ...tool, description: tool.description + untrusted, execute: async input => success(await tool.execute(input)) });
   }
-  const validator = new AjvJsonSchemaValidator();
+  const validator = jsonSchemaValidator ?? new AjvJsonSchemaValidator();
   const registry = new Map();
   for (const entry of entries) {
     if (!/^[A-Za-z0-9_.-]{1,128}$/.test(entry.name) || registry.has(entry.name) || typeof entry.description !== 'string' || entry.inputSchema?.type !== 'object' || typeof entry.execute !== 'function') {

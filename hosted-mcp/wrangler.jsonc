@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pillowfort-mcp",
+  "account_id": "e1c9d05ec6e9b5a196b358e3ea368aed",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "mcp.pillowfort.xyz",
+      "custom_domain": true
+    }
+  ],
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MCP_SESSIONS",
+        "class_name": "HostedMcpSession"
+      },
+      {
+        "name": "MCP_ACCESS_KEYS",
+        "class_name": "AccessKeyStore"
+      },
+      {
+        "name": "MCP_QUOTAS",
+        "class_name": "BrowserQuota"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "HostedMcpSession",
+        "AccessKeyStore",
+        "BrowserQuota"
+      ]
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "60b3fd14382a4718a6f588a400887f6c"
+    }
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.md"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "observability": {
+    "enabled": false
+  },
+  "limits": {
+    "cpu_ms": 1000
+  },
+  "vars": {
+    "PUBLIC_MCP_URL": "https://mcp.pillowfort.xyz/mcp",
+    "APP_URL": "https://pillowfort.xyz",
+    "ALLOWED_ORIGINS": "https://pillowfort.xyz,https://about.pillowfort.xyz,https://mcp.pillowfort.xyz,https://chatgpt.com,https://claude.ai",
+    "MAX_ACTIVE_BROWSERS": "2",
+    "MAX_DAILY_BROWSER_MINUTES": "60",
+    "MAX_SESSION_SECONDS": "600",
+    "IDLE_TIMEOUT_SECONDS": "120"
+  }
+}

@@ -35,9 +35,9 @@ assistant recommendations from operator-installed, authorized tool use.
 5. Share consented human+agent drawing/game demos and measure unassisted task
    completion and repeat operators, not raw tool calls or package downloads.
 
-First-party remote MCP hosting is a separate custody/security decision, not a
-shortcut hidden behind the existing end-to-end-encryption claim. The current
-transport is local stdio with an operator-run browser.
+The founder approved both hosted MCP and native WebMCP alongside local stdio.
+Hosted participation has an explicit managed-custody disclosure, issued operator
+keys/OAuth, tenant isolation, and bounded browser/session budgets.
 
 ## Agent release delivered on 2026-09-07
 
@@ -81,7 +81,7 @@ Verification completed:
 
 ## Account and distribution actions remaining
 
-1. **npm publication completed:** `@ontologic/pillowfort-agent@1.0.1` is published
+1. **npm publication completed:** `@ontologic/pillowfort-agent@1.1.0` is published
    on npmjs.org under `ontologic`; GitHub and MCP identity remain `slee1996`.
    Registry metadata and tarball SHA-256 were verified after browser approval.
    A fresh npm install completed the production autonomous create/invite/verify/
@@ -91,7 +91,7 @@ Verification completed:
    pass both `--registry=https://registry.npmjs.org/` and
    `--@ontologic:registry=https://registry.npmjs.org/`; global settings were not
    changed. The original 1.0.0 download remains unchanged.
-2. **MCP Registry publication completed:** `io.github.slee1996/pillowfort` 1.0.1
+2. **MCP Registry publication completed:** `io.github.slee1996/pillowfort` 1.1.0
    is published with npm package `@ontologic/pillowfort-agent`. Used the official
    publisher v1.8.1, verified its download against GitHub's SHA-256, authenticated
    with the existing `slee1996` owner credential, and verified the public record.
@@ -113,6 +113,50 @@ Verification completed:
 
 The downloadable version is a release: bump its version and registry metadata
 for changed runtime/docs instead of replacing an already published artifact.
+
+## Hosted MCP and WebMCP release
+
+- Hosted endpoint: `https://mcp.pillowfort.xyz/mcp`; Worker `pillowfort-mcp`.
+- Local package: `@ontologic/pillowfort-agent@1.1.0`; existing releases remain intact.
+- Native WebMCP: actual browser API registration, tested in Chrome152 with
+  experimental features enabled. No polyfill or testing interface in shipped code.
+- Authentication: revocable operator keys, OAuth consent, PKCE S256, exact
+  scope/audience checks, client metadata discovery, and bound CSRF protection.
+- Budget: two active browsers globally, one per operator, two named participant
+  contexts per connection, ten-minute absolute lifetime, two-minute idle expiry,
+  sixty-browser-minute daily reservation budget and bounded connection issuance.
+- No hosted/native CMS or payment tools; no arbitrary hosted navigation, raw-key
+  export, or persisted room transcripts. Hosted custody is disclosed in setup,
+  consent, and privacy documentation.
+
+Verification: local and published-package smoke; real native create/invite/
+fingerprint/admit/chat/draw/end; real Cloudflare managed-browser collaboration;
+global/per-operator/context limits; actual browser closure and quota reuse after
+DELETE, key revocation, and idle expiry; direct/OAuth tenant isolation; real browser
+OAuth consent and PKCE exchange; and absolute-session-expiry regression coverage.
+The app release gate passed 456 tests, marketing passed 6, and hosted security
+includes 4 real-Worker/browser regressions. These tests are not acquired users.
+
+Operator administration:
+
+- The private workstation file `~/.config/pillowfort/hosted-mcp.json` holds service
+  bootstrap secrets and issued owner-key material. Its permissions are 0600.
+  **Never share the whole file.** `adminToken` and `consentSecret` are deployment/
+  administration secrets; MCP clients receive only an intended operator key.
+- Issue a pilot key with authenticated `POST /admin/keys`, JSON
+  `{\"label\":\"pilot-alex\",\"expiresInDays\":30}`, and the administration bearer token.
+  The response returns the raw operator key once; save/share it privately.
+- Revoke with authenticated `DELETE /admin/keys/:id`. Direct and derived OAuth
+  access stop on subsequent requests; background browser cleanup follows lifecycle
+  checks. Do not rotate the HMAC/consent secret as a substitute for revocation.
+- Never publish operator keys in npm, registry metadata, examples, URLs, or logs.
+
+Development: install locked root and `hosted-mcp` dependencies, install Playwright
+Chromium for the browser-consent regression, then run
+`npm --prefix hosted-mcp run check`. The tests create isolated local Worker state
+and do not allocate production browsers. Real Browser Run smoke requires the
+deployed keyed service. Deployment uses `hosted-mcp/wrangler.jsonc`; preserve
+existing deployment secrets and inspect browser usage before raising budgets.
 
 Founder owns relationships, consent, scheduling, support, naming decisions and
 approved spending. Assistant work can prepare assets, copy and the scorecard;

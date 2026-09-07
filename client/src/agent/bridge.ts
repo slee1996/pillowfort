@@ -8,7 +8,7 @@ import { getDiscordActivityContext } from "../services/discordActivity";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";
 import { checkFortPassCode, clearFortPassClaimSecret, fortPassRedemptionErrorMessage, getFortPassStatus, getFortPassClaimSecret, getPendingFortPassCheckoutUrl, getPendingFortPassRedemption, normalizeFortPassCode, normalizeFortPassSessionId, redeemFortPassCheckout, rememberPendingFortPassRedemption, startFortPassCheckout } from "../services/fortPass";
-import { agentMode, breakoutSnapshot, moveBreakout, resetBreakout, selectRoomActivity, subscribeBreakout } from "./breakout";
+import { breakoutSnapshot, moveBreakout, resetBreakout, selectRoomActivity, subscribeBreakout } from "./breakout";
 import { DRAWING_COLORS, exportDrawingPng, getDrawingSurfaceSnapshot, setDrawingColor, subscribeDrawingSurface } from "../services/drawingSurface";
 import { AgentError, choice, confirm, object, text, validate } from "./schema";
 import type { JSONValue, Schema } from "./schema";
@@ -37,8 +37,18 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const json = (value: unknown): JSONValue => JSON.parse(JSON.stringify(value));
 function fail(code: string, message: string, retryable = false): never { throw new AgentError(code, message, retryable); }
 
-export function installPillowfortAgent(): void {
-  if (!agentMode() || window.pillowfortAgent) return;
+let participantBridge: PillowfortAgent | undefined;
+
+export function installPillowfortAgent({ exposeWindow = true } = {}): PillowfortAgent | undefined {
+  if (exposeWindow && new URLSearchParams(location.search).get("agent") !== "1") return;
+  const bridge = participantBridge ??= createPillowfortAgent();
+  if (exposeWindow && !window.pillowfortAgent) {
+    Object.defineProperty(window, "pillowfortAgent", { value: bridge, configurable: false, writable: false });
+  }
+  return bridge;
+}
+
+function createPillowfortAgent(): PillowfortAgent {
   let revision = 0;
   let sessionGeneration = 0;
   let operationId = 0;
@@ -470,5 +480,5 @@ export function installPillowfortAgent(): void {
       });
     },
   };
-  Object.defineProperty(window, "pillowfortAgent", { value: Object.freeze(bridge), configurable: false, writable: false });
+  return Object.freeze(bridge);
 }

@@ -12,6 +12,7 @@ const run = promisify(execFile);
 const runtimeFiles = [
   'scripts/agent.mjs',
   'scripts/agent-sdk.mjs',
+  'scripts/agent-browser.mjs',
   'scripts/agent-tools.mjs',
   'scripts/agent-mcp.mjs',
   'scripts/agent-guidance.mjs',

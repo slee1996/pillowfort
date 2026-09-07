@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { installPillowfortAgent } from "./agent/bridge";
+import { detectNativeWebMcp, installPillowfortWebMcp } from "./agent/webmcp";
 import { captureRoomInvitation } from "./services/roomInvitation";
 import "./styles/app.css";
 
@@ -24,10 +25,22 @@ if (window.visualViewport) {
 window.addEventListener("resize", syncVisualViewportVars);
 window.addEventListener("orientationchange", syncVisualViewportVars);
 
-// Opt-in transport surface, not a privilege boundary: same-origin JavaScript
-// already has the participant's authority. Preserve all normal URL handling.
-if (new URLSearchParams(location.search).get("agent") === "1") {
-  installPillowfortAgent();
+// Native tools share this tab's participant, not a new session or authorization.
+// Keep the public window bridge opt-in for the local SDK.
+const exposeWindow = new URLSearchParams(location.search).get("agent") === "1";
+const nativeWebMcp = detectNativeWebMcp();
+if (exposeWindow || nativeWebMcp) {
+  const agent = installPillowfortAgent({ exposeWindow })!;
+  if (nativeWebMcp) {
+    let registration = installPillowfortWebMcp(agent, nativeWebMcp);
+    void registration.ready.catch(() => console.error("Pillowfort native WebMCP registration failed; room UI remains available."));
+    window.addEventListener("pagehide", () => registration.dispose());
+    window.addEventListener("pageshow", event => {
+      if (!event.persisted) return;
+      registration = installPillowfortWebMcp(agent, nativeWebMcp);
+      void registration.ready.catch(() => console.error("Pillowfort native WebMCP registration failed; room UI remains available."));
+    });
+  }
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

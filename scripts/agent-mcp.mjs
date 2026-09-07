@@ -1,25 +1,30 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-sdk.mjs';
+import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-browser.mjs';
 import { createAgentToolRegistry } from './agent-tools.mjs';
 import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResource, getAgentPrompt } from './agent-guidance.mjs';
 
+/** @typedef {import('@modelcontextprotocol/sdk/server/index.js').Server} PillowfortMcpServer */
+
 /** Dynamic JSON Schema catalogs require the SDK's lower-level Server API. */
-export function createAgentMcpServer({ agent, tools = [] }) {
-  const server = new Server({ name: 'pillowfort', version: '1.0.1' }, {
+export function createAgentMcpServer({
+  agent, tools = [], instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
+  resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError,
+}) {
+  const server = new Server({ name: 'pillowfort', version: '1.1.0' }, {
     capabilities: { tools: {}, resources: {}, prompts: {} },
-    instructions: AGENT_INSTRUCTIONS,
+    instructions,
+    jsonSchemaValidator,
   });
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: AGENT_RESOURCES }));
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources }));
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
-  server.setRequestHandler(ReadResourceRequestSchema, async request => ({ contents: [await readAgentResource(request.params.uri)] }));
+  server.setRequestHandler(ReadResourceRequestSchema, async request => ({ contents: [await resourceLoader(request.params.uri)] }));
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listAgentPrompts() }));
-  server.setRequestHandler(GetPromptRequestSchema, async request => getAgentPrompt(request.params.name, request.params.arguments));
+  server.setRequestHandler(GetPromptRequestSchema, async request => getAgentPrompt(request.params.name, request.params.arguments, { resourceLoader, resourceDefinitions: resources }));
   let registryPromise;
   let activeCalls = 0;
   const registry = () => {
-    if (!registryPromise) registryPromise = createAgentToolRegistry(agent, tools).catch(error => { registryPromise = undefined; throw error; });
+    if (!registryPromise) registryPromise = createAgentToolRegistry(agent, tools, { roomTools, includeCMS, jsonSchemaValidator }).catch(error => { registryPromise = undefined; throw error; });
     return registryPromise;
   };
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -30,14 +35,16 @@ export function createAgentMcpServer({ agent, tools = [] }) {
     }
   });
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    if (activeCalls >= 64) return toolResult(errorResult(new AgentError('BUSY', 'Too many pending tool calls. Wait for existing calls to finish.', true)));
+    if (activeCalls >= maxActiveCalls) return toolResult(errorResult(new AgentError('BUSY', 'Too many pending tool calls. Wait for existing calls to finish.', true)));
     activeCalls++;
     try {
       let tool;
       try { tool = (await registry()).get(request.params.name); }
       catch (error) { return toolResult(errorResult(error)); }
       if (!tool) throw new McpError(ErrorCode.InvalidParams, 'Unknown tool. Call tools/list to discover available tools.');
-      return toolResult(await tool.invoke(request.params.arguments ?? {}));
+      const result = await tool.invoke(request.params.arguments ?? {});
+      if (result.ok === false) onToolError?.(result.error);
+      return toolResult(result);
     } finally { activeCalls--; }
   });
   return server;
@@ -49,6 +56,7 @@ function toolResult(result) {
 
 /** Owns stdio and signal handlers until EOF/close. Never writes diagnostics to stdout. */
 export async function runAgentMcp({ agent, tools = [], input = process.stdin, output = process.stdout, diagnostics = process.stderr }) {
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
   const server = createAgentMcpServer({ agent, tools });
   const transport = new StdioServerTransport(input, output, { maxBufferSize: MAX_INPUT_BYTES + 16 * 1024 });
   let closing;

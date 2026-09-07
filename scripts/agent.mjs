@@ -10,9 +10,9 @@ import { runAgentMcp } from './agent-mcp.mjs';
 
 const HELP = `Pillowfort agent CLI — real ephemeral encrypted browser sessions
 
-Requires Node >=22.13.0 and local Chromium. No hosted /mcp endpoint.
+This local CLI requires Node >=22.13.0 and Chromium. Hosted MCP and native WebMCP are separate connection choices: https://about.pillowfort.xyz/agents
 Version-pinned npm package:
-  npm exec --yes --package=@ontologic/pillowfort-agent@1.0.1 -- pillowfort-agent --help
+  npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent --help
 
 Commands with the installed executable:
   pillowfort-agent install-browser

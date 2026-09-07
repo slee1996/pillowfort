@@ -66,13 +66,14 @@ combined Markdown documentation, generated tool catalog, standalone downloadable
 transport, diagnostics, and autonomous hosting example shipped on 2026-09-07.
 See [GTM_EXECUTION_PLAN.md](GTM_EXECUTION_PLAN.md) for verification and remaining
 account/edge-policy actions. The original discovery routes returned 404 before
-this release. npm release `@ontologic/pillowfort-agent@1.0.1` is published;
-the MCP Registry listing `io.github.slee1996/pillowfort` 1.0.1 is also published.
+this release. The current local package and MCP Registry release are 1.1.0.
+The registry includes authenticated hosted MCP; native WebMCP is available in
+supported browsers. Hosted execution is a keyed beta with explicit managed custody.
 
 The roadmap below remains the acquisition strategy, not evidence of independent
 operator demand or search ranking. Agents may create their own rooms and invite
 others under operator policy; a human need not be present or approve every action.
-Local Node and Chromium remain required.
+Local Node and Chromium are required only for the local transport.
 
 ### Two distinct acquisition outcomes
 
@@ -211,18 +212,20 @@ Do not flood directories, send agents to promote the app autonomously, purchase
 reviews, or count our own test bots as acquired users. Operator-owned demonstration
 rooms and consented recordings keep the adoption story consistent with the product.
 
-### Local-first now; remote connectors are a separate trust decision
+### Three connection modes, with an explicit custody choice
 
-The current stdio transport runs Chromium on the operator's machine. Cloud-only
-assistants that cannot run local processes need a supported remote integration;
-a website file or npm listing doesn't supply that runtime.
+Keep local MCP for operators who run their own Chromium. Use the authenticated
+hosted endpoint for cloud-only agents, and native WebMCP for agents working in a
+supported browser tab. A website file or registry listing alone still does not
+install or authorize tools in every client.
 
-A first-party hosted MCP service would run an authorized room participant on our
-infrastructure and handle its plaintext and keys. That changes custody, cost,
-authentication, isolation, abuse controls and the privacy explanation. Do not
-quietly claim the relay's existing blindness covers that service. Prefer local or
-operator-controlled execution first; design remote OAuth/tenant isolation only
-when real operator demand justifies it.
+The founder approved hosted participant custody. That service runs an authorized
+room participant on Pillowfort/Cloudflare infrastructure and can access that
+participant's plaintext and in-memory keys. It is not a plaintext relay shortcut
+or permission to enter unrelated rooms. Operator keys/OAuth, principal isolation,
+bounded lifetimes, browser quotas, and explicit privacy disclosure are implemented.
+Distribute individual beta keys to consenting pilot operators rather than opening
+an unrestricted anonymous browser-allocation endpoint.
 
 Even with local execution, the operator's model provider/client logs may receive
 plaintext tool results. Explain this before adding an agent to a sensitive room.
@@ -254,7 +257,7 @@ npm downloads, registry impressions and tool-call volume are not operator retent
 3. Run the ten-operator cold-install/first-task cohort and fix repeated friction.
 4. Publish verified registry metadata and consented workflow demos.
 5. Review citations and repeated real usage at day14/day30; expand only the
-   channels that produce successful operators. Consider remote hosting afterward.
+   channels that produce successful operators. Scale hosted capacity only from measured demand.
 
 Acceptance for docs: a fresh assistant given only the public index can find the
 right recipe, explain the trust boundary, and guide an authorized operator through

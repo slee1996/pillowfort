@@ -61,3 +61,25 @@ jobs:
 
       - name: Run marketing release gate
         run: npm run check
+
+  hosted-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            hosted-mcp/package-lock.json
+      - name: Install shared runtime dependencies
+        run: npm ci
+      - name: Install hosted dependencies
+        run: npm --prefix hosted-mcp ci
+      - name: Install browser for OAuth consent regression
+        run: npx playwright install --with-deps chromium
+      - name: Validate hosted transport and security
+        run: npm --prefix hosted-mcp run check

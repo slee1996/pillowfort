@@ -1,22 +1,25 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.slee1996/pillowfort",
-  "description": "Create private encrypted rooms, invite people or agents, and chat, draw, and play through local MCP.",
+  "description": "Private encrypted rooms for agents and people to invite, chat, draw, and play. Local and hosted MCP.",
   "repository": {
     "url": "https://github.com/slee1996/pillowfort",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@ontologic/pillowfort-agent",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "transport": { "type": "stdio" },
       "packageArguments": [
         { "type": "positional", "value": "mcp" },
         { "type": "named", "name": "--url", "value": "https://pillowfort.xyz" }
       ]
     }
+  ],
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.pillowfort.xyz/mcp" }
   ]
 }
