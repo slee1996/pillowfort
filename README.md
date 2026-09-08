@@ -64,7 +64,7 @@ Current installation instructions select the versioned npm package.
 ### Core room behavior
 
 - Invite-only rooms with no lobby and no room discovery
-- Host-created forts with 8-character room codes
+- Host-created forts with opaque generated fort codes
 - Ephemeral room state with no user accounts
 - Auto-suffixed duplicate names like `spencer2`
 - Typing indicators
@@ -77,10 +77,10 @@ Current installation instructions select the versioned npm package.
 
 - AIM / Windows XP-inspired interface
 - Desktop and mobile layouts
-- Browser-side encrypted chat payloads using AES-GCM
+- Client-side MLS encryption for admitted room participants
 - Message formatting support
 - Save-chat export from the UI
-- Invite-copy flow with room link + password
+- Private invitation links; host approval still required for new devices
 
 ### Extras beyond plain chat
 
@@ -475,6 +475,58 @@ Marketing deploys independently as the `pillowfort-marketing` Cloudflare Worker
 at `https://about.pillowfort.xyz`. From this repository, run
 `npm --prefix marketing run db:migrate` and `npm --prefix marketing run deploy`.
 The root deploy command publishes only the app at `https://pillowfort.xyz`.
+
+## Operational telemetry
+
+`src/telemetry.ts` provides explicit, opt-in OpenTelemetry server spans for the
+app, marketing Worker, and hosted MCP. Production export is disabled until a
+stable authenticated collector endpoint is configured.
+
+Only allowlisted service/environment/version, operation category, HTTP method,
+status and duration are exported. No automatic instrumentation or incoming trace
+context is used. Room/WebSocket routes are excluded. URLs, room IDs, identities,
+IP addresses, credentials, request/response bodies, tool arguments/results,
+messages, drawings, exception messages and stacks are not exported.
+
+The pinned open-source stack in `observability/compose.yaml` uses Caddy,
+OpenTelemetry Collector, Tempo, Prometheus and Grafana. The collector applies an
+independent allowlist before storage and derives operational metrics from received
+spans. These are sampled request signals, **not** cohort, retention or room-usage
+analytics. Export is bounded and best-effort; collector failure must not fail a
+product request.
+
+This workstation's private configuration is in
+`~/.config/pillowfort/observability.json` and `observability.env`, mode 0600.
+The JSON contains distinct Grafana and ingestion passwords; never commit or share
+it. Compose requires `GRAFANA_ADMIN_PASSWORD` and
+`OTEL_INGEST_PASSWORD_HASH` (a bcrypt hash for the `otel` ingestion user).
+The environment file is outside the repository:
+
+```sh
+docker compose --env-file ~/.config/pillowfort/observability.env -f observability/compose.yaml up -d
+```
+
+Grafana is local-only at `http://127.0.0.1:13000`, username `admin`; its password
+is in the private JSON. OTLP ingress is local-only at `http://127.0.0.1:43180`.
+Named Docker volumes persist traces, metrics and dashboard state; configured
+trace/metric retention is seven days. Do not use `docker compose down -v` unless
+deleting that history is intended. A workstation deployment stops serving when
+the machine or Docker stops; use an always-on host for continuous monitoring.
+
+For Cloudflare Workers, put a **named Cloudflare Tunnel** in front of ingress,
+not Grafana. Tunnel authorization must complete before creating the stable DNS
+route. Temporary Quick Tunnel URLs are verification-only. Cloudflare Containers'
+ephemeral local disks are not a durable replacement for these named volumes.
+
+Configure each Worker with `OTEL_ENABLED=true`,
+`OTEL_EXPORTER_OTLP_ENDPOINT=https://<stable-ingress-host>` (base URL, without
+`/v1/traces`), `OTEL_DEPLOYMENT_ENVIRONMENT=production`, a release
+`OTEL_SERVICE_VERSION`, and `OTEL_SAMPLE_RATE` between 0 and 1.
+Set `OTEL_EXPORTER_OTLP_HEADERS` as a **Worker secret**:
+`Authorization=Basic%20<base64(otel:ingestion-password)>`. Never put it in tracked
+Wrangler vars. Missing/invalid configuration leaves export disabled.
+The Grafana dashboard defaults to production; select `test` for synthetic smoke
+data. Native Cloudflare automatic traces remain disabled.
 
 ## Good First Places To Read
 

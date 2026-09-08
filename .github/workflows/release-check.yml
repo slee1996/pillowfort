@@ -54,7 +54,13 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: marketing/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            marketing/package-lock.json
+
+      - name: Install shared operational telemetry dependencies
+        run: npm ci
+        working-directory: .
 
       - name: Install locked marketing dependencies
         run: npm ci

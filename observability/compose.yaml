@@ -1,0 +1,110 @@
+name: pillowfort-observability
+
+services:
+  ingress:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    restart: unless-stopped
+    environment:
+      OTEL_INGEST_PASSWORD_HASH: ${OTEL_INGEST_PASSWORD_HASH:?Supply a bcrypt hash for the otel ingestion user}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:43180:8080"
+    networks: [edge, telemetry]
+    depends_on: [collector]
+    read_only: true
+    tmpfs: [/config, /data]
+    cap_drop: [ALL]
+    # The upstream Caddy binary carries this file capability; dropping it from
+    # the bounding set prevents exec even though the listener is unprivileged.
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.160.0@sha256:799dc6cf12c96192af37b5bdba804da8c10b3bc563b43cb90c3f3c58d9572ad6
+    command:
+      - --config=/etc/otelcol/config.yaml
+      # Required for set(span.events/links, nil) to clear message slices.
+      - --feature-gates=+ottl.set.allowNil
+    restart: unless-stopped
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      GOMEMLIMIT: 384MiB
+    networks: [telemetry]
+    depends_on: [tempo]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+
+  tempo:
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    command: [-target=all, -config.file=/etc/tempo.yaml]
+    restart: unless-stopped
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks: [telemetry]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+
+  prometheus:
+    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --enable-feature=exemplar-storage
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    networks: [telemetry]
+    depends_on: [collector]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+
+  grafana:
+    image: grafana/grafana:13.2.1@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Supply a unique Grafana admin password}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LOG_LEVEL: warn
+      GF_SERVER_ROOT_URL: http://localhost:13000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:13000:3000"
+    networks: [edge, telemetry]
+    depends_on: [prometheus, tempo]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+
+networks:
+  edge:
+  telemetry:
+    internal: true
+
+volumes:
+  tempo-data:
+  prometheus-data:
+  grafana-data:

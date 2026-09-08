@@ -3,6 +3,7 @@ import { createAuthorizedWorker, AccessKeyStore } from './auth';
 import { HostedMcpSession } from './session';
 import { BrowserQuota } from './quota';
 import type { AuthenticatedProps, Env } from './env';
+import { withOperationalTelemetry } from '../../src/telemetry';
 
 export { AccessKeyStore, HostedMcpSession, BrowserQuota };
 
@@ -58,7 +59,7 @@ const apiHandler: ExportedHandler<Env, unknown, unknown, AuthenticatedProps> = {
 
 const authorizedWorker = createAuthorizedWorker(apiHandler);
 
-export default {
+const worker = {
   async fetch(request: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     let response: Response;
@@ -78,5 +79,12 @@ export default {
     headers.set('x-frame-options', 'DENY');
     if (url.protocol === 'https:') headers.set('strict-transport-security', 'max-age=31536000');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  },
+} satisfies ExportedHandler<Env>;
+
+
+export default {
+  fetch(request: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return withOperationalTelemetry('pillowfort.hosted-mcp', request, env, ctx, () => worker.fetch(request, env, ctx));
   },
 } satisfies ExportedHandler<Env>;

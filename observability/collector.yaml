@@ -1,0 +1,131 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /healthz
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 1048576
+        include_metadata: false
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 80
+
+  # Conditions are ORed: reject everything outside the operational contract.
+  # Propagate errors rather than letting an unsanitized payload continue.
+  filter/operational:
+    error_mode: propagate
+    trace_conditions:
+      - scope.name != "pillowfort.operational"
+      - resource.attributes["service.name"] != "pillowfort.app" and resource.attributes["service.name"] != "pillowfort.marketing" and resource.attributes["service.name"] != "pillowfort.hosted-mcp"
+      - resource.attributes["deployment.environment.name"] != "production" and resource.attributes["deployment.environment.name"] != "development" and resource.attributes["deployment.environment.name"] != "test"
+      - span.name != "http.server.request"
+      - span.kind != SPAN_KIND_SERVER
+      - span.attributes["pillowfort.operation"] != "page" and span.attributes["pillowfort.operation"] != "commerce" and span.attributes["pillowfort.operation"] != "mcp" and span.attributes["pillowfort.operation"] != "auth" and span.attributes["pillowfort.operation"] != "health"
+      - span.attributes["http.request.method"] != "GET" and span.attributes["http.request.method"] != "HEAD" and span.attributes["http.request.method"] != "POST" and span.attributes["http.request.method"] != "PUT" and span.attributes["http.request.method"] != "PATCH" and span.attributes["http.request.method"] != "DELETE" and span.attributes["http.request.method"] != "OPTIONS" and span.attributes["http.request.method"] != "CONNECT" and span.attributes["http.request.method"] != "TRACE" and span.attributes["http.request.method"] != "OTHER" and span.attributes["http.request.method"] != "_OTHER"
+      - not IsInt(span.attributes["http.response.status_code"])
+      - span.attributes["http.response.status_code"] < 100 or span.attributes["http.response.status_code"] > 599
+
+  transform/privacy:
+    error_mode: propagate
+    trace_statements:
+      - context: resource
+        statements:
+          - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "telemetry.sdk.name", "telemetry.sdk.language", "telemetry.sdk.version"])
+          - delete_key(resource.attributes, "service.version") where not IsString(resource.attributes["service.version"])
+          - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and not IsMatch(resource.attributes["service.version"], "^([0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9.-]+)?|[a-f0-9]{7,40})$")
+          - delete_key(resource.attributes, "telemetry.sdk.version") where not IsString(resource.attributes["telemetry.sdk.version"])
+          - delete_key(resource.attributes, "telemetry.sdk.version") where resource.attributes["telemetry.sdk.version"] != nil and not IsMatch(resource.attributes["telemetry.sdk.version"], "^[0-9]+[.][0-9]+[.][0-9]+$")
+          - delete_key(resource.attributes, "telemetry.sdk.name") where resource.attributes["telemetry.sdk.name"] != "opentelemetry"
+          - delete_key(resource.attributes, "telemetry.sdk.language") where resource.attributes["telemetry.sdk.language"] != "webjs" and resource.attributes["telemetry.sdk.language"] != "nodejs"
+      - context: scope
+        statements:
+          - keep_keys(scope.attributes, [])
+          - set(scope.version, "")
+      - context: span
+        statements:
+          - keep_keys(span.attributes, ["http.request.method", "http.response.status_code", "pillowfort.operation", "error.type"])
+          - delete_key(span.attributes, "error.type") where span.attributes["error.type"] != "internal_error"
+          - set(span.status.message, "")
+          - set(span.trace_state, "")
+          - set(span.parent_span_id, SpanID(0x0000000000000000))
+          # Collector is launched with +ottl.set.allowNil; [] is NOT a message slice.
+          - set(span.events, nil)
+          - set(span.links, nil)
+
+  batch/traces:
+    send_batch_size: 256
+    send_batch_max_size: 512
+    timeout: 1s
+  batch/metrics:
+    send_batch_size: 256
+    send_batch_max_size: 512
+    timeout: 1s
+
+connectors:
+  span_metrics:
+    namespace: pillowfort.operational
+    histogram:
+      unit: s
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s]
+    dimensions:
+      - name: pillowfort.operation
+      - name: deployment.environment.name
+      - name: http.response.status_code
+    # Exactly one collector writes this local stream. No per-process identity labels.
+    exclude_dimensions: [collector.instance.id]
+    resource_metrics_key_attributes: [service.name, deployment.environment.name]
+    resource_metrics_cache_size: 16
+    aggregation_cardinality_limit: 4096
+    aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+    metrics_flush_interval: 15s
+    metrics_expiration: 1h
+    series_expiration: 1h
+    include_instrumentation_scope: [pillowfort.operational]
+    exemplars:
+      enabled: true
+      max_per_data_point: 1
+
+exporters:
+  otlp_http/tempo:
+    endpoint: http://tempo:4318
+    timeout: 3s
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 128
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 30s
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    translation_strategy: UnderscoreEscapingWithSuffixes
+    enable_open_metrics: true
+    without_scope_info: true
+    metric_expiration: 5m
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: error
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/operational, transform/privacy, batch/traces]
+      exporters: [otlp_http/tempo, span_metrics]
+    metrics:
+      receivers: [span_metrics]
+      processors: [memory_limiter, batch/metrics]
+      exporters: [prometheus]

@@ -1,7 +1,7 @@
 # Pillowfort GTM execution
 
-Updated: 2026-09-07
-Status: agent code/docs/download release shipped; cohort recruitment, outreach, and ad spend have not been executed.
+Updated: 2026-09-08
+Status: agent release shipped; pilot materials and internal onboarding rehearsal completed. Cohort recruitment, outreach, and ad spend have not been executed.
 
 The current strategy, thirty-day calendar, cohort definitions, decision thresholds,
 spending limits, outreach drafts, and research sources are maintained in
@@ -12,7 +12,7 @@ logo/landing-page implementation work and assumed room-analytics funnel.
 
 1. Resolve the naming-review path and establish a reachable support contact.
 2. Recruit ten warm friend-group hosts for a fifteen-minute shared drawing session.
-3. Prepare three short product clips and one clear host invitation.
+3. Use the two reviewed human/agent product clips and the consent-based invitations.
 4. Track consenting hosts manually; do not collect room links, secrets, transcripts,
    or protected activity through analytics.
 5. Get twenty first sessions and measure confirmed seven-day repeats before buying
@@ -165,3 +165,82 @@ posting, contacting people and spending require explicit authorization.
 Paid promotion remains subject to the
 [Fort Pass promotion gate](FORT_PASS_SUPPORT_RUNBOOK.md#paid-promotion-gate).
 Technical deployment success is not evidence of audience demand or payment readiness.
+
+## Pilot preparation and discovery check — 2026-09-08
+
+- Invitations, onboarding, and separate agent/operator and friend-host scorecards
+  are under `docs/pilot/`. The CSVs contain headers only. Contact mappings belong
+  in a separate restricted store; no room links, content, keys, or identity
+  fingerprints belong in the scorecards.
+- A fresh individual hosted key and a freshly installed standard MCP client
+  fetched the public guide, discovered schemas, created a real production room,
+  invited a separate normal browser, checked the exact device fingerprint,
+  exchanged drawing in both directions, and observed room closure. The MCP
+  session was terminated and the temporary key revoked. The machine-readable
+  record is `docs/pilot/rehearsal.json`. This was a fourteen-second **synthetic
+  internal rehearsal**, not an unassisted external operator or cohort result.
+- Both reviewed demo clips use real local application/MLS flows with synthetic
+  content. Setup and admission are not shown; credential and room-code surfaces
+  remain masked. Each is 22 seconds, H.264, 1280×800. See
+  [capture details and public links](pilot-demos/README.md).
+- Public sitemap includes `/agents`; live robots directives allow search and
+  retain the managed training-bot restrictions. This does not establish Search
+  Console ownership or prove that every crawler can fetch every public path.
+
+Fixed search-enabled answer checks:
+
+| Query | Observed result |
+| --- | --- |
+| `Pillowfort private rooms MCP agents pillowfort.xyz` | Found the repository/registry and Glama, but incorrectly claimed the README lacked MCP setup instructions. Directly fetching the current README showed local, hosted, and native instructions plus managed-custody disclosure. |
+| `private browser drawing room friends no account` | Recommended Flockdraw, FizzPaint, Drawesome and other alternatives; no Pillowfort citation appeared in the returned answer. |
+
+The [Glama connector listing](https://glama.ai/mcp/connectors/io.github.slee1996/pillowfort)
+showed **Unhealthy**, **OAuth Works in Glama**, and no schema history at the time
+of this check. The actual failure details require a claimed author account.
+The authenticated rehearsal above passed; the badge's cause is **not yet known**.
+Do not weaken authentication to change it.
+
+Owner followups: claim the Glama listing and inspect its health-check failure;
+verify Search Console and submit
+`https://about.pillowfort.xyz/sitemap.xml`; inspect the previously observed
+Cloudflare plain-client 403 with an appropriately scoped zone session. Current
+[README](https://github.com/slee1996/pillowfort) and
+[agent guide](https://about.pillowfort.xyz/agents) already document connection
+requirements. Search summaries can lag or misread them; these checks are not
+search ranking, indexing, adoption, or retention measurements.
+
+## Operational telemetry release — 2026-09-08
+
+- Deployed explicit manual OTel instrumentation to app, marketing and hosted MCP,
+  with `OTEL_ENABLED=false` in every production Worker. Production export has
+  **not** been enabled.
+- Open-source Collector/Tempo/Prometheus/Grafana stack runs locally behind
+  authenticated Caddy ingress. Grafana is localhost-only. Configuration and
+  distinct credentials are in the private workstation files documented in the
+  root README; no credentials are checked in.
+- Real SDK export through a temporary Cloudflare Tunnel returned OTLP HTTP 200.
+  The resulting span was retrieved from Tempo; request-query and response-body
+  canaries were absent. A separately poisoned span verified collector-side
+  removal of disallowed resource/attribute/context/event/link/error-message data.
+  Operational counters and duration histograms were queried and visually
+  inspected in authenticated Grafana. A stored synthetic trace survived a Tempo
+  restart.
+- App release gate passed 466 tests including ten telemetry regressions; pinned
+  OpenMLS verification and production build passed. Marketing lint, typecheck,
+  build and six existing tests passed. Hosted typecheck and deployment passed.
+  Fresh-key production onboarding passed again after deployment.
+- Marketing builds now mirror the integrity-verified **published npm artifact**
+  instead of regenerating a previously published version from changed source.
+  Public 1.1.0 download bytes match that artifact; both public MP4s match the
+  reviewed local clips.
+- Deployment versions: app `ad965541-7774-41ce-9972-e317bcabb5bb`,
+  marketing `75effe25-a367-40a7-b581-851362941f5a`, hosted MCP
+  `0ba96998-ca7b-4b18-a3a3-0a3e992aa666`.
+
+**Remaining prerequisite:** Cloudflare named-tunnel authorization did not
+complete; no certificate was saved or found in Downloads. Existing credentials
+cannot administer the tunnel. Retry owner authorization, create a stable named
+tunnel/DNS route to authenticated ingress, configure the OTLP endpoint and
+authorization secret on each Worker, then enable export and verify a production
+span. Do not configure a temporary Quick Tunnel as the permanent destination.
+The current workstation stack is not an always-on hosted monitoring service.

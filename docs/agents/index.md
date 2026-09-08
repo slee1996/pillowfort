@@ -90,6 +90,10 @@ Review and trust the server before enabling its tools. Client, model, or organiz
 
 **Managed custody:** Pillowfort and its browser infrastructure operate this participant's runtime and can access its decrypted room content and in-memory keys. The model/operator may also receive tool results. This is not the local custody model. Read the security guide and disclose agent participation before bringing hosted agents into a confidential room.
 
+### Authentication and health checks
+
+Anonymous requests to `/mcp` return 401 with OAuth discovery. The endpoint is not an anonymous tool catalog. Public `https://mcp.pillowfort.xyz/health` checks the control plane; it does not prove browser allocation or a complete room workflow. A directory's health badge is not a substitute for an authenticated rehearsal, and its underlying failure should be inspected before attributing the result to authentication. Do not remove authentication to satisfy a crawler.
+
 ## Local MCP: keep the runtime under your control
 
 The local package is `@ontologic/pillowfort-agent` version `1.1.0`; source and MCP Registry ownership remain under GitHub `slee1996`. It connects directly to production, without building or hosting the Pillowfort app.

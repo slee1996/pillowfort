@@ -21,3 +21,12 @@ enabled = true
 
 [observability.logs]
 invocation_logs = false
+
+[observability.traces]
+enabled = false
+
+[vars]
+OTEL_ENABLED = "false"
+OTEL_DEPLOYMENT_ENVIRONMENT = "production"
+OTEL_SERVICE_VERSION = "1.1.0"
+OTEL_SAMPLE_RATE = "1"

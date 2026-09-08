@@ -1,0 +1,43 @@
+target: all
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+  log_source_ips_enabled: false
+  log_request_headers: false
+
+# This receiver is reachable only inside the private Docker network.
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+# Tempo 3 uses backend_scheduler/backend_worker, not the removed compactor.
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 168h
+backend_worker:
+  compaction:
+    block_retention: 168h
+
+# Span-derived metrics are generated once, by the collector, not by Tempo.
+overrides:
+  defaults:
+    metrics_generator:
+      processors: []
+
+usage_report:
+  reporting_enabled: false

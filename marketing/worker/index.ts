@@ -6,8 +6,9 @@ import {
   isImageOptimizationPath,
 } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { withOperationalTelemetry, type TelemetryEnv } from "../../src/telemetry";
 
-interface Env {
+interface Env extends TelemetryEnv {
   ASSETS: Fetcher;
   DB: D1Database;
   IMAGES: {
@@ -81,4 +82,10 @@ const worker = {
   },
 };
 
-export default worker;
+const instrumentedWorker = {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return withOperationalTelemetry("pillowfort.marketing", request, env, ctx, () => worker.fetch(request, env, ctx));
+  },
+};
+
+export default instrumentedWorker;

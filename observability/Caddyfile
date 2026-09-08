@@ -1,0 +1,53 @@
+{
+	admin off
+	auto_https off
+	# Runtime proxy errors may otherwise contain request headers or raw URLs.
+	log default {
+		output discard
+	}
+}
+
+:8080 {
+	@traces {
+		method POST
+		path /v1/traces
+	}
+	handle @traces {
+		basic_auth bcrypt {
+			otel {$OTEL_INGEST_PASSWORD_HASH}
+		}
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy collector:4318 {
+			header_up -Authorization
+			header_up -Cookie
+			header_up -User-Agent
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+			header_up -Forwarded
+			header_up -Traceparent
+			header_up -Tracestate
+			header_up -Baggage
+		}
+	}
+
+	@health {
+		method GET
+		path /healthz
+	}
+	handle @health {
+		basic_auth bcrypt {
+			otel {$OTEL_INGEST_PASSWORD_HASH}
+		}
+		reverse_proxy collector:13133 {
+			header_up -Authorization
+			header_up -Cookie
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

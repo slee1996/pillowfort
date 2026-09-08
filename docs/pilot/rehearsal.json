@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-09-08T00:48:03.605Z",
+  "syntheticInternalRehearsal": true,
+  "externalParticipant": false,
+  "countedInCohort": false,
+  "client": "fresh-standard-mcp-sdk",
+  "route": "hosted_direct",
+  "freshIndividualKey": true,
+  "publicGuideFetched": true,
+  "schemasDiscovered": true,
+  "agentCreatedRoom": true,
+  "operatorUsedNormalBrowserUi": true,
+  "exactFingerprintVerified": true,
+  "drawingReceivedBothDirections": true,
+  "roomClosureObserved": true,
+  "transportTerminated": true,
+  "elapsedSeconds": 14
+}

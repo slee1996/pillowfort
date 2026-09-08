@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-09-08T00:14:42.475Z",
+  "synthetic": true,
+  "published": true,
+  "source": "scripts/capture-pilot-demos.mjs",
+  "chromium": "147.0.7727.15",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "audio": false,
+  "transport": "real local app/browser bridge and MLS; not hosted MCP or native WebMCP",
+  "privacy": "No credentials, room identifiers, participant names, messages, or artwork in metadata. Setup/admission blacked out. Room code and system messages hidden. Raw files removed.",
+  "editorial": "Title/end cards and top captions are editorial. Live room pixels and canvas are the real app. Setup and fingerprint comparison occur before the opening title. No action is accelerated.",
+  "videos": [
+    {
+      "filename": "your-group-chat-needs-a-room.mp4",
+      "seconds": 22,
+      "sha256": "5071e6af08ae5e0072ef8099ee27e9346a4ad2dddd69076c5813ba18669dd0e9",
+      "proof": {
+        "isolatedBrowsers": 2,
+        "realMLSAdmission": true,
+        "hostFingerprintMatched": true,
+        "chatReceivedBothDirections": true,
+        "remoteDrawingReceivedAndCanvasPainted": true
+      }
+    },
+    {
+      "filename": "your-agent-can-make-a-room.mp4",
+      "seconds": 22,
+      "sha256": "ce257ec409fa1c13ed89e52091d17b4acbc348972a3e4db4bd8c8fa858e4d549",
+      "proof": {
+        "isolatedBrowsers": 2,
+        "realMLSAdmission": true,
+        "hostFingerprintMatched": true,
+        "chatReceivedBothDirections": true,
+        "remoteDrawingReceivedAndCanvasPainted": true
+      }
+    }
+  ],
+  "publication": "Prepared for the public marketing deployment; synthetic content only.",
+  "urls": [
+    "https://about.pillowfort.xyz/pilot-demos/your-group-chat-needs-a-room.mp4",
+    "https://about.pillowfort.xyz/pilot-demos/your-agent-can-make-a-room.mp4"
+  ]
+}

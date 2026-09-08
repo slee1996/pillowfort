@@ -66,6 +66,10 @@
     "cpu_ms": 1000
   },
   "vars": {
+    "OTEL_ENABLED": "false",
+    "OTEL_DEPLOYMENT_ENVIRONMENT": "production",
+    "OTEL_SERVICE_VERSION": "1.1.0",
+    "OTEL_SAMPLE_RATE": "1",
     "PUBLIC_MCP_URL": "https://mcp.pillowfort.xyz/mcp",
     "APP_URL": "https://pillowfort.xyz",
     "ALLOWED_ORIGINS": "https://pillowfort.xyz,https://about.pillowfort.xyz,https://mcp.pillowfort.xyz,https://chatgpt.com,https://claude.ai",

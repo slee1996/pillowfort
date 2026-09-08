@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: pillowfort-operational
+    static_configs:
+      - targets: [collector:8889]
+    # Only accepted operational span metrics; no process/host inventory.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: pillowfort_operational_(calls_total|duration_seconds_(bucket|sum|count))
+        action: keep

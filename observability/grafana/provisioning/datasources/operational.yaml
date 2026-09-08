@@ -1,0 +1,44 @@
+apiVersion: 1
+prune: true
+
+datasources:
+  - name: Operational metrics
+    uid: pillowfort-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: pillowfort-tempo
+
+  - name: Operational traces
+    uid: pillowfort-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      httpMethod: GET
+      nodeGraph:
+        enabled: false
+      streamingEnabled:
+        search: true
+      tracesToMetrics:
+        datasourceUid: pillowfort-prometheus
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        tags:
+          - key: service.name
+            value: service_name
+          - key: deployment.environment.name
+            value: deployment_environment_name
+          - key: pillowfort.operation
+            value: pillowfort_operation
+        queries:
+          - name: Received operational requests per second
+            query: 'sum(rate(pillowfort_operational_calls_total{$$__tags}[5m]))'

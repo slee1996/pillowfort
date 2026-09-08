@@ -2,8 +2,9 @@ import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 import type { HostedMcpSession } from './session';
 import type { AccessKeyStore } from './auth';
 import type { BrowserQuota } from './quota';
+import type { TelemetryEnv } from '../../src/telemetry';
 
-export interface Env {
+export interface Env extends TelemetryEnv {
   BROWSER: Fetcher;
   MCP_SESSIONS: DurableObjectNamespace<HostedMcpSession>;
   MCP_ACCESS_KEYS: DurableObjectNamespace<AccessKeyStore>;

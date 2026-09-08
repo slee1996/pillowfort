@@ -5,8 +5,9 @@ import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_REDEEM_PATH, FO
 import { readByteLimitedText } from "./requestBody";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./security";
 import { createFortPassStripeCheckoutSession, createStripeFulfillmentClaimToken, normalizeStripeCheckoutSessionId, normalizeStripeRedemptionRequest, resolveFortPassCheckoutSession, resolveFortPassEntitlementFromStripeEvent, resolveFortPassRevocationFromStripeEvent, stripeFulfillmentSessionKey, stripeRevocationEventKey, verifyStripeWebhookSignature, type StripeFortPassRevocationReason } from "./stripe";
+import { withOperationalTelemetry, type TelemetryEnv } from "./telemetry";
 
-export interface Env {
+export interface Env extends TelemetryEnv {
   ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   STRIPE_SECRET_KEY?: string;
@@ -894,8 +895,11 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const mode: SecurityHeaderMode = isDiscordActivityRequest(request) ? "discord-activity" : "default";
-    return withSecurityHeaders(await handleFetch(request, env), mode);
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+    const handle = async () => {
+      const mode: SecurityHeaderMode = isDiscordActivityRequest(request) ? "discord-activity" : "default";
+      return withSecurityHeaders(await handleFetch(request, env), mode);
+    };
+    return ctx ? withOperationalTelemetry("pillowfort.app", request, env, ctx, handle) : handle();
   },
 } satisfies ExportedHandler<Env>;
