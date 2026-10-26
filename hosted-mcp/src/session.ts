@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { ErrorCode, McpError, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
-import { AgentError, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES } from '../../scripts/agent-common.mjs';
+import { AgentError, MAX_OUTPUT_BYTES } from '../../scripts/agent-common.mjs';
 import { PillowfortHostedAgent } from '../../src/participant/hostedAgent';
 import { initializeMls } from '../../src/participant/mlsCrypto';
 import openMlsModule from '../../client/src/vendor/openmls/pillowfort_openmls_bg.wasm';
@@ -15,6 +15,7 @@ import overview from '../../docs/agents/index.md';
 import workflows from '../../docs/agents/workflows.md';
 import security from '../../docs/agents/security.md';
 import type { Env } from './env';
+import { hasBoundedMcpStructure, MAX_MCP_REQUEST_BYTES } from './requestLimits';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const resources = AGENT_RESOURCES;
@@ -167,7 +168,7 @@ export class HostedMcpSession extends DurableObject<Env> {
         }
       },
     });
-    this.transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: () => sessionId, enableJsonResponse: true });
+    this.transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: () => sessionId, enableJsonResponse: true, maxRequestBodySize: MAX_MCP_REQUEST_BYTES });
     this.server.onclose = () => { if (this.record?.status === 'active') this.ctx.waitUntil(this.shutdown()); };
     await this.server.connect(this.transport);
   }
@@ -187,8 +188,9 @@ export class HostedMcpSession extends DurableObject<Env> {
     let parsedBody: unknown;
     try {
       if (request.method === 'POST') {
-        try { parsedBody = JSON.parse(await boundedBody(request.body, MAX_INPUT_BYTES)); }
+        try { parsedBody = JSON.parse(await boundedBody(request.body, MAX_MCP_REQUEST_BYTES)); }
         catch (error) { return failure(error instanceof AgentError && error.code === 'SIZE_LIMIT' ? 413 : 400, 'Invalid, oversized, or incomplete MCP JSON request.'); }
+        if (!hasBoundedMcpStructure(parsedBody)) return failure(413, 'MCP request exceeds its structural limits.');
       }
       if (!this.record) {
         if (request.headers.has('MCP-Session-Id') || request.method !== 'POST' || !isInitializeRequest(parsedBody)) return failure(404, 'MCP session not found. Initialize a new connection.');

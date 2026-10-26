@@ -3351,6 +3351,10 @@ export interface LocalServerOptions {
 }
 
 export function startLocalServer(port = PORT, options: LocalServerOptions = {}) {
+  const [major, minor, patch] = Bun.version.split(".").map(Number);
+  if (!(major > 1 || (major === 1 && (minor > 4 || (minor === 4 && patch >= 4))))) {
+    throw new Error("Pillowfort requires Bun 1.4.4 or newer with the eMudhra TLS trust-store mitigation. Upgrade Bun before starting the server.");
+  }
   // Legacy transport exists solely to exercise compatibility tests. An env
   // flag or programmatic option must never reopen it in a deployed/dev server.
   const allowLegacyWebSockets = process.env.NODE_ENV === "test"

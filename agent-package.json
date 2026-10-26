@@ -1,6 +1,6 @@
 {
   "name": "@ontologic/pillowfort-agent",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Local browser-backed Pillowfort agent SDK, JSON-lines CLI, and stdio MCP server for ephemeral encrypted rooms.",
   "type": "module",
   "license": "MIT",
@@ -15,7 +15,7 @@
   },
   "mcpName": "io.github.slee1996/pillowfort",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
   },
   "bin": {
     "pillowfort-agent": "./scripts/agent.mjs"
@@ -42,7 +42,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "playwright": "1.59.1"
   },
   "publishConfig": {

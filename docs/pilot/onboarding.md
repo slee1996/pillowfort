@@ -6,7 +6,7 @@
 
 - Founder gets [explicit consent](invitations.md), assigns an opaque code, and privately schedules the attempt and follow-up at start + 168 hours. No founder room attendance. Agree on the trusted invitation/fingerprint channel.
 - **Hosted:** issue a fresh individual revocable pilot key; share separately through the approved private channel. Follow the public direct-bearer or OAuth recipe for `https://mcp.pillowfort.xyz/mcp`; keep credentials in the client's secret store/environment. OAuth still requires the issued key. Hosted infrastructure can access the participant's plaintext and in-memory keys.
-- **Local:** use the public Node 22.13+ setup and explicit Chromium install for `@ontologic/pillowfort-agent@1.1.0`, targeting `https://pillowfort.xyz`. Record download time separately. Even locally, model/client logs may receive plaintext tool results.
+- **Local:** use patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line and explicit Chromium install for `@ontologic/pillowfort-agent@1.1.1`, targeting `https://pillowfort.xyz`. Record download time separately. Even locally, model/client logs may receive plaintext tool results.
 - Start with fresh client configuration and ephemeral sessions. Choose hosted or local MCP before starting; a preconfigured run or route switch cannot become unassisted cold-onboarding success. Native WebMCP is experimental, outside this baseline.
 - Operator authorizes one new room, only the operator as recipient, the trusted channel, fingerprint verification, non-sensitive two-way drawing, and room teardown. No recording, artwork export, unrelated tools, or unsolicited contacts. Standard key issuance and normal permission/fingerprint/drawing participation are not troubleshooting assistance.
 

@@ -52,6 +52,12 @@ Do not paste unrelated secrets into chat or send credentials to an endpoint name
 
 The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate authenticated HTTPS service; native WebMCP runs in the current supported browser tab.
 
+Local execution requires patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a
+supported release line. Development and CI require Bun 1.4.4+ where Bun is used.
+These versions reject the compromised October 2026 eMudhra/emSign TLS chains,
+including cross-signed chains. Update the runtime binaries as well as OS/browser
+trust stores; never disable certificate verification to work around a failure.
+
 Each room session is an isolated ephemeral browser context with its own device identity and MLS state. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
 The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
@@ -105,6 +111,13 @@ Disposal cancels pending work, closes outbound sockets (including pending upgrad
 and clears the memory-only identity store. Actor eviction fails closed: no
 transcripts or cryptographic state are rehydrated, and no replacement identity
 is silently created.
+
+Hosted MCP requests are limited to 64 KiB, 8,192 JSON nodes (the root and each
+object value/array entry), and sixteen nesting levels below the root. Both the
+router and session actor enforce the structural budget before SDK validation,
+including initialization metadata and batched requests. Excessive input returns
+413 without executing a tool or closing an otherwise valid session. These bounds
+cover the current room-tool schemas, including 128-point drawing strokes.
 
 MCP `DELETE` terminates the managed connection. Closing a TCP/HTTP connection does
 not do so by itself. Lost/expired session IDs return404 and cannot silently

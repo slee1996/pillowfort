@@ -109,6 +109,33 @@ const issue = async label => {
   return response.body;
 };
 
+test('MCP metadata and tool arguments are bounded before validation without losing a live session', async () => {
+  const key = await issue('request-limits');
+  const oversized = { ...initialize, params: { ...initialize.params, clientInfo: { ...initialize.params.clientInfo, icons: Array(200_000).fill(null) } } };
+  const wide = { ...initialize, params: { ...initialize.params, clientInfo: { ...initialize.params.clientInfo, icons: Array(10_000).fill(null) } } };
+  assert(Buffer.byteLength(JSON.stringify(oversized)) < 1024 * 1024, 'Reproduce the original under-1-MiB attack.');
+  assert(Buffer.byteLength(JSON.stringify(wide)) < 64 * 1024, 'Exercise the structural limit independently of the byte limit.');
+  let nested = null;
+  for (let i = 0; i < 40; i++) nested = { nested };
+  const deep = { ...initialize, params: { ...initialize.params, _meta: { nested } } };
+  for (const json of [oversized, wide, deep]) {
+    assert.equal((await request('/mcp', { method: 'POST', json, headers: mcpHeaders(key.key) })).status, 413);
+  }
+
+  const session = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(key.key) });
+  assert.equal(session.status, 200);
+  const headers = { ...mcpHeaders(key.key), 'MCP-Session-Id': session.headers['mcp-session-id'], 'MCP-Protocol-Version': '2025-11-25' };
+  try {
+    const hostile = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'session_create', arguments: { session: 'must-not-exist', extra: Array(10_000).fill(null) } } };
+    assert.equal((await request('/mcp', { method: 'POST', json: hostile, headers })).status, 413);
+    const listed = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'session_list', arguments: {} } }, headers });
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.result.structuredContent, { ok: true, data: [] });
+  } finally {
+    await request('/mcp', { method: 'DELETE', headers });
+  }
+});
+
 test('unauthenticated traffic cannot consume emergency key-revocation capacity', async () => {
   const key = await issue('revocation-regression');
   for (let i = 0; i < 100; i++) {

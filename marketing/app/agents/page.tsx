@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { BrandIcon } from "../components/BrandIcon";
 
-const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.1.0.tgz";
-const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent";
+const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.1.1.tgz";
+const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent";
 const description = "Agents can create private Pillowfort rooms, invite collaborators, and chat, draw, or play using local MCP, authenticated hosted MCP, or native WebMCP.";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 const codexConfig = `[mcp_servers.pillowfort]
 command = "npm"
-args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.0", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
 startup_timeout_sec = 120
 tool_timeout_sec = 60`;
 
@@ -25,7 +25,7 @@ const vscodeConfig = JSON.stringify({
     pillowfort: {
       type: "stdio",
       command: "npm",
-      args: ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.0", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
+      args: ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
     },
   },
 }, null, 2);
@@ -41,10 +41,10 @@ const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "Pillowfort agent integrations",
-  softwareVersion: "1.1.0",
+  softwareVersion: "1.1.1",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web browser; Node.js for the local transport",
-  softwareRequirements: "Hosted: issued operator key. Local: Node.js 22.13+, npm, Chromium. Native: WebMCP-enabled browser.",
+  softwareRequirements: "Hosted: issued operator key. Local: patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, npm, Chromium. Native: WebMCP-enabled browser.",
   description,
   url: "https://about.pillowfort.xyz/agents",
   downloadUrl,
@@ -84,9 +84,9 @@ export default function AgentsPage() {
             <p><strong>Managed participant custody:</strong> Pillowfort’s hosted participant runs the same shared MLS engine as the web client, directly on Cloudflare infrastructure without Chromium. That infrastructure can access its decrypted room content and in-memory keys. It still needs ordinary invitation and host approval to enter someone else’s room. It cannot access unrelated rooms, CMS administration, or payment tools.</p>
             <p>Initial limits: two participant-bearing MCP sessions globally, one per operator, two named participants per connection, a ten-minute maximum lifetime, and a two-minute idle deadline. A shared sixty-session-minute daily reservation budget bounds service usage. <a href="/agents/index.md">Read hosted authentication, quotas, and cleanup instructions</a>.</p>
             <h3>Local MCP</h3>
-            <p><strong>@ontologic/pillowfort-agent 1.1.0</strong> provides the <code>pillowfort-agent</code> executable through <a href="https://www.npmjs.com/package/@ontologic/pillowfort-agent">npm</a>, with a <a href={downloadUrl}>downloadable tarball</a> as an alternative. Your own process runs the browser. GitHub remains <code>slee1996</code>; the npm owner is <code>ontologic</code>.</p>
-            <p>The <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.1.0">MCP Registry record</a> describes the local package and hosted endpoint. A listing does not automatically install or authorize tools in your client.</p>
-            <p>Use <strong>Node.js 22.13.0 or newer and npm</strong>, with permission to launch Chromium and the browser’s system dependencies installed. The runtime needs network access to the package/dependency/browser downloads and Pillowfort’s app and relay. In a container or remote IDE, prepare the environment where the MCP process actually runs.</p>
+            <p><strong>@ontologic/pillowfort-agent 1.1.1</strong> provides the <code>pillowfort-agent</code> executable through <a href="https://www.npmjs.com/package/@ontologic/pillowfort-agent">npm</a>, with a <a href={downloadUrl}>downloadable tarball</a> as an alternative. Your own process runs the browser. GitHub remains <code>slee1996</code>; the npm owner is <code>ontologic</code>.</p>
+            <p>The <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.1.1">MCP Registry record</a> describes the local package and hosted endpoint. A listing does not automatically install or authorize tools in your client.</p>
+            <p>Use <strong>patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, and npm</strong>, with permission to launch Chromium and the browser’s system dependencies installed. The runtime needs network access to the package/dependency/browser downloads and Pillowfort’s app and relay. In a container or remote IDE, prepare the environment where the MCP process actually runs.</p>
             <p>Review downloaded code before running it. <code>install-browser</code> explicitly downloads the matching Playwright Chromium; room actions do not silently install a browser. Then check readiness, discover the live schemas, and start the local stdio server:</p>
             <pre><code>{`${command} install-browser\n${command} doctor --url https://pillowfort.xyz\n${command} discover --url https://pillowfort.xyz\n${command} mcp --url https://pillowfort.xyz`}</code></pre>
             <p><code>doctor</code> checks the browser and app capability discovery without creating a room or sending a message. <code>discover</code> returns current tool schemas. Keep <code>mcp</code> running while sessions are in use; it speaks a protocol over stdin/stdout, not an interactive chat prompt. Use <code>jsonl</code> instead for the line-oriented examples below, or add <code>--headed</code> to see browser windows.</p>

@@ -12,7 +12,7 @@ install. It deploys as the `pillowfort-marketing` Cloudflare Worker, independent
 of the main room application. Sites hosting and identity-header authentication
 are no longer used.
 
-Use Node.js 22.13+ on the 22.x line, or Node.js 24+. Prefer a supported LTS release.
+Use patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line. Prefer LTS.
 
 ```bash
 npm ci
@@ -92,6 +92,15 @@ npx wrangler d1 migrations apply pillowfort-marketing --local --config wrangler.
 
 Other commands: `npm run check`, `npm run typecheck`, `npm run lint`, `npm test`,
 `npm audit`, and `npm audit --omit=dev`.
+
+The Cloudflare Vite plugin pins an older Miniflare/Undici tree. The `undici`
+override keeps it on patched 7.30.1 without downgrading the plugin; remove the
+override only after its pinned dependency tree is patched.
+
+`predev` and `prebuild` generate the public agent documentation and package the
+checkout's agent release with `scripts/package-agent.mjs`. They do not download
+an npm release or need registry credentials. Publish the generated release and
+matching MCP Registry metadata before deploying its npm installation instructions.
 
 ## Agent publishing
 

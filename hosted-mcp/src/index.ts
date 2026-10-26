@@ -4,11 +4,11 @@ import { HostedMcpSession } from './session';
 import { ParticipantQuota } from './quota';
 import type { AuthenticatedProps, Env } from './env';
 import { withOperationalTelemetry } from '../../src/telemetry';
+import { hasBoundedMcpStructure, MAX_MCP_REQUEST_BYTES } from './requestLimits';
 
 export { AccessKeyStore, HostedMcpSession, ParticipantQuota };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const MAX_BODY_BYTES = 1024 * 1024;
 
 function rpcError(status: number, message: string, code = -32600): Response {
   return Response.json({ jsonrpc: '2.0', id: null, error: { code, message } }, { status });
@@ -24,17 +24,23 @@ const apiHandler: ExportedHandler<Env, unknown, unknown, AuthenticatedProps> = {
     let sessionId = request.headers.get('MCP-Session-Id');
     if (sessionId !== null && !UUID.test(sessionId)) return rpcError(400, 'Invalid MCP session identifier.');
     let body: string | undefined;
+    let message: unknown;
     if (request.method === 'POST') {
       if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return rpcError(415, 'Expected application/json.');
-      const result = await readByteLimitedText(request, MAX_BODY_BYTES);
+      // Respond before cancelling a known-oversized upload: workerd can reset
+      // the client connection if its request body is cancelled first.
+      const declaredLength = request.headers.get('content-length');
+      if (declaredLength && /^(?:0|[1-9][0-9]*)$/.test(declaredLength)
+        && BigInt(declaredLength) > BigInt(MAX_MCP_REQUEST_BYTES)) return rpcError(413, 'MCP request exceeds its byte limit.');
+      const result = await readByteLimitedText(request, MAX_MCP_REQUEST_BYTES);
       if (!result.ok) return rpcError(result.reason === 'body_too_large' ? 413 : 400, 'Invalid or oversized MCP request body.');
       body = result.text;
+      try { message = JSON.parse(body); } catch { return rpcError(400, 'Invalid JSON.', -32700); }
+      if (!hasBoundedMcpStructure(message)) return rpcError(413, 'MCP request exceeds its structural limits.');
     }
     if (sessionId === null) {
       if (request.method === 'GET') return new Response('Initialize a session with POST first.', { status: 405, headers: { Allow: 'POST' } });
       if (request.method !== 'POST') return rpcError(400, 'Initialize an MCP session before using it.');
-      let message: unknown;
-      try { message = JSON.parse(body!); } catch { return rpcError(400, 'Invalid JSON.', -32700); }
       if (!message || typeof message !== 'object' || Array.isArray(message) || !('method' in message) || message.method !== 'initialize') return rpcError(400, 'Initialize an MCP session before using it.');
       sessionId = crypto.randomUUID();
     }
@@ -64,7 +70,7 @@ const worker = {
     const url = new URL(request.url);
     let response: Response;
     if (request.method === 'GET' && url.pathname === '/health') {
-      response = Response.json({ ok: true, version: '1.1.0', transport: 'streamable-http' });
+      response = Response.json({ ok: true, version: '1.1.1', transport: 'streamable-http' });
     } else if (request.method === 'GET' && url.pathname === '/') {
       response = new Response('Pillowfort hosted MCP\n\nEndpoint: https://mcp.pillowfort.xyz/mcp\nRequires an operator access key or OAuth authorization.\nThis managed participant runtime can see its admitted room content.\nSetup and privacy: https://about.pillowfort.xyz/agents\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     } else {
