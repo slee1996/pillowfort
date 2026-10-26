@@ -43,6 +43,12 @@ export type RoomCryptoLockAcquireResult =
   | { status: "unsupported"; reason: "web-locks-unavailable" | "takeover-channel-unavailable" }
   | { status: "failed"; reason: "aborted" | "takeover-timeout" | "request-failed" };
 
+export interface RoomCryptoLockCoordinatorLike {
+  acquire(roomInstance: string, options?: AcquireRoomCryptoLockOptions): Promise<RoomCryptoLockAcquireResult>;
+  hasActiveLease(roomInstance: string): boolean;
+  close(): void;
+}
+
 interface TakeoverMessage {
   v: 1;
   type: "takeover-request";
@@ -127,7 +133,7 @@ function makeLease(roomInstance: string, releaseLock: () => void): InternalLease
   };
 }
 
-export class RoomCryptoLockCoordinator {
+export class RoomCryptoLockCoordinator implements RoomCryptoLockCoordinatorLike {
   private readonly locks: WebLockManagerLike | null;
   private readonly channel: BroadcastChannelLike | null;
   private readonly active = new Map<string, InternalLease>();
@@ -271,5 +277,39 @@ export class RoomCryptoLockCoordinator {
     } catch {
       // Closing a failed channel is best-effort; lock leases are already released.
     }
+  }
+}
+
+/** Exclusive ownership within one isolated, ephemeral participant runtime. */
+export class MemoryRoomCryptoLockCoordinator implements RoomCryptoLockCoordinatorLike {
+  private readonly active = new Map<string, InternalLease>();
+  private closed = false;
+
+  async acquire(roomInstance: string, options: AcquireRoomCryptoLockOptions = {}): Promise<RoomCryptoLockAcquireResult> {
+    if (!isCryptoRoomInstance(roomInstance)) throw new TypeError("invalid cryptographic room instance");
+    const timeoutMs = options.timeoutMs ?? 5_000;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 60_000) {
+      throw new TypeError("invalid room-lock timeout");
+    }
+    if (this.closed || options.signal?.aborted) return { status: "failed", reason: "aborted" };
+    if (this.active.has(roomInstance)) return { status: "busy", reason: "held-in-this-context" };
+    const abort = () => lease.releaseWithReason("aborted");
+    const lease = makeLease(roomInstance, () => {
+      if (this.active.get(roomInstance) === lease) this.active.delete(roomInstance);
+      options.signal?.removeEventListener("abort", abort);
+    });
+    this.active.set(roomInstance, lease);
+    options.signal?.addEventListener("abort", abort, { once: true });
+    return { status: "acquired", lease };
+  }
+
+  hasActiveLease(roomInstance: string): boolean {
+    return this.active.get(roomInstance)?.isActive() === true;
+  }
+
+  close(): void {
+    this.closed = true;
+    for (const lease of this.active.values()) lease.releaseWithReason("coordinator-closed");
+    this.active.clear();
   }
 }

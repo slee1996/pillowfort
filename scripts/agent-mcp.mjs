@@ -1,6 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-browser.mjs';
+import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-common.mjs';
 import { createAgentToolRegistry } from './agent-tools.mjs';
 import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResource, getAgentPrompt } from './agent-guidance.mjs';
 

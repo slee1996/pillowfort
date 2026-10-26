@@ -14,7 +14,7 @@ import { chromium } from 'playwright';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 const admin = randomBytes(48).toString('base64url');
-let directory, child, origin;
+let directory, child, relay, origin;
 
 function request(path, { method = 'GET', json, form, headers = {} } = {}) {
   const body = form !== undefined ? Buffer.from(new URLSearchParams(form).toString()) : json === undefined ? undefined : Buffer.from(JSON.stringify(json));
@@ -43,11 +43,36 @@ before(async () => {
   const port = reservation.address().port;
   await new Promise(resolve => reservation.close(resolve));
   origin = `https://127.0.0.1:${port}`;
+  const relayReservation = createServer();
+  await new Promise(resolve => relayReservation.listen(0, '127.0.0.1', resolve));
+  const relayPort = relayReservation.address().port;
+  await new Promise(resolve => relayReservation.close(resolve));
+  const relayOrigin = `http://127.0.0.1:${relayPort}`;
+  relay = spawn('bun', ['server.ts'], {
+    cwd: join(project, '..'),
+    env: { ...process.env, PORT: String(relayPort), NODE_ENV: 'test' },
+    stdio: 'ignore',
+  });
+  let relayStartError;
+  relay.once('error', error => { relayStartError = error; });
+  const relayDeadline = Date.now() + 15000;
+  for (;;) {
+    if (relayStartError || relay.exitCode !== null) throw new Error('Local encrypted relay could not start.');
+    try {
+      const response = await fetch(relayOrigin, { signal: AbortSignal.timeout(1000) });
+      await response.body?.cancel();
+      break;
+    } catch {}
+    if (Date.now() >= relayDeadline) throw new Error('Local encrypted relay did not become ready.');
+    await delay(100);
+  }
   const config = JSON.parse(await readFile(join(project, 'wrangler.jsonc'), 'utf8'));
   config.name = 'pillowfort-auth-test';
   config.main = relative(directory, join(project, 'src/index.ts'));
   delete config.routes;
-  config.vars = { ...config.vars, PUBLIC_MCP_URL: origin + '/mcp', ADMIN_TOKEN: admin, CONSENT_SECRET: randomBytes(48).toString('base64url'), ALLOWED_ORIGINS: origin, MAX_SESSION_SECONDS: '30', IDLE_TIMEOUT_SECONDS: '120' };
+  // Only this temporary local fixture may connect to its own loopback relay.
+  config.compatibility_flags = config.compatibility_flags.filter(flag => flag !== 'global_fetch_strictly_public');
+  config.vars = { ...config.vars, PUBLIC_MCP_URL: origin + '/mcp', APP_URL: relayOrigin, ADMIN_TOKEN: admin, CONSENT_SECRET: randomBytes(48).toString('base64url'), ALLOWED_ORIGINS: origin, MAX_SESSION_SECONDS: '30', IDLE_TIMEOUT_SECONDS: '120' };
   const configPath = join(directory, 'wrangler.json');
   await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
   child = spawn(process.execPath, [join(project, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', configPath, '--local', '--ip', '127.0.0.1', '--port', String(port), '--local-protocol', 'https', '--local-upstream', `127.0.0.1:${port}`, '--upstream-protocol', 'https', '--persist-to', join(directory, 'state'), '--log-level', 'error'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -65,13 +90,14 @@ before(async () => {
 }, { timeout: 60000 });
 
 after(async () => {
-  if (child && child.exitCode === null && child.signalCode === null) {
+  await Promise.all([child, relay].map(async process => {
+    if (!process || !process.pid || process.exitCode !== null || process.signalCode !== null) return;
     await new Promise(resolve => {
-      const deadline = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 5000);
-      child.once('exit', () => { clearTimeout(deadline); resolve(); });
-      child.kill('SIGTERM');
+      const deadline = setTimeout(() => { process.kill('SIGKILL'); resolve(); }, 5000);
+      process.once('exit', () => { clearTimeout(deadline); resolve(); });
+      process.kill('SIGTERM');
     });
-  }
+  }));
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
@@ -94,7 +120,7 @@ test('unauthenticated traffic cannot consume emergency key-revocation capacity',
   assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(key.key) })).status, 401);
 });
 
-test('MCP sessions are principal-bound, reject foreign origins, and cannot revive after DELETE', async () => {
+test('native rooms preserve encrypted admission, exactly-once chat, principal isolation, and terminal session closure', { timeout: 45000 }, async () => {
   const first = await issue('first-principal');
   const second = await issue('second-principal');
   const session = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(first.key) });
@@ -108,6 +134,72 @@ test('MCP sessions are principal-bound, reject foreign origins, and cannot reviv
   assert(!tools.body.result.tools.some(tool => tool.name.startsWith('cms_') || tool.name.startsWith('fort_pass_')));
   assert.equal((await request('/mcp', { method: 'POST', json: list, headers: { ...sessionHeaders, Authorization: `Bearer ${second.key}` } })).status, 404);
   assert.equal((await request('/mcp', { method: 'POST', json: list, headers: { ...sessionHeaders, Origin: 'https://untrusted.example' } })).status, 403);
+  let callId = 4;
+  const call = async (name, args) => {
+    const response = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: callId++, method: 'tools/call', params: { name, arguments: args } }, headers: sessionHeaders });
+    assert.equal(response.status, 200);
+    return response.body.result.structuredContent;
+  };
+  assert.deepEqual(await call('session_create', { session: 'first' }), { ok: true, data: { name: 'first', state: 'ready' } });
+  assert.deepEqual(await call('session_create', { session: 'second' }), { ok: true, data: { name: 'second', state: 'ready' } });
+  assert.equal((await call('session_create', { session: 'third' })).error.code, 'SESSION_LIMIT');
+  assert.equal((await call('chat_format', { session: 'first', input: { bold: true } })).ok, true);
+  const firstSnapshot = (await call('session_observe', { session: 'first' })).data;
+  const secondSnapshot = (await call('session_observe', { session: 'second' })).data;
+  assert.equal(firstSnapshot.formatting.bold, true);
+  assert.notEqual(secondSnapshot.formatting.bold, true, 'Named participants must not share mutable formatting state.');
+  const execute = async (session, name, input) => {
+    const result = await call(name, { session, input });
+    assert.equal(result.ok, true, `${name} failed: ${result.error?.code ?? 'unknown'}`);
+    return result.data;
+  };
+  const observeUntil = async (session, predicate, description) => {
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      const result = await call('session_observe', { session });
+      assert.equal(result.ok, true, `Observation failed: ${result.error?.code ?? 'unknown'}`);
+      if (predicate(result.data)) return result.data;
+      assert(Date.now() < deadline, `Timed out waiting for ${description}.`);
+      await delay(100);
+    }
+  };
+  const creation = await execute('first', 'room_setup', { displayName: 'native-host', confirm: true });
+  const roomId = creation.roomId;
+  await observeUntil('first', snapshot => snapshot.legalActions.canAct && snapshot.connection.isHost, 'host setup');
+  const invitation = await execute('first', 'invitation_export', { roomId, confirm: true });
+  await execute('second', 'room_join_link', { invitationUrl: invitation.invitationUrl, displayName: 'native-guest', confirm: true });
+  const joining = await observeUntil('second', snapshot => typeof snapshot.room.pendingJoinFingerprint === 'string', 'guest fingerprint');
+  // Both independently controlled sessions are the trusted private channel.
+  const fingerprint = joining.room.pendingJoinFingerprint;
+  const admission = await observeUntil('first', snapshot => snapshot.room.pendingAdmissions.some(item => item.status === 'pending' && item.deviceFingerprint === fingerprint), 'matching host admission');
+  const matches = admission.room.pendingAdmissions.filter(item => item.status === 'pending' && item.deviceFingerprint === fingerprint);
+  assert.equal(matches.length, 1);
+  assert.equal((await call('session_observe', { session: 'second' })).data.room.pendingJoinFingerprint, fingerprint);
+  await execute('first', 'admission_approve', { roomId, admissionId: matches[0].admissionId, deviceFingerprint: fingerprint, confirm: true });
+  await observeUntil('second', snapshot => snapshot.legalActions.canAct && snapshot.room.members.some(member => member.name === 'native-host'), 'guest membership');
+  await observeUntil('first', snapshot => snapshot.legalActions.canAct && snapshot.room.members.some(member => member.name === 'native-guest'), 'host roster update');
+  const hostText = 'Native host encrypted regression message';
+  const guestText = 'Native guest encrypted regression response';
+  await execute('first', 'chat_send', { roomId, text: hostText });
+  await observeUntil('second', snapshot => snapshot.messages.some(message => message.from === 'native-host' && message.text === hostText), 'host message delivery');
+  await execute('second', 'chat_send', { roomId, text: guestText });
+  await observeUntil('first', snapshot => snapshot.messages.some(message => message.from === 'native-guest' && message.text === guestText), 'guest message delivery');
+  // Cross-direction delivery drains the previous encrypted control/ACK sequence.
+  // Check both transcripts, so duplicated socket events cannot masquerade as success.
+  for (const session of ['first', 'second']) {
+    const snapshot = (await call('session_observe', { session })).data;
+    assert.equal(snapshot.messages.filter(message => message.from === 'native-host' && message.text === hostText).length, 1);
+    assert.equal(snapshot.messages.filter(message => message.from === 'native-guest' && message.text === guestText).length, 1);
+  }
+  await execute('first', 'room_end', { roomId, confirm: true });
+  await Promise.all(['first', 'second'].map(session => observeUntil(session, snapshot => snapshot.connection.terminalPresentation === 'room-destroyed' && snapshot.connection.roomId === null, 'authenticated room retirement')));
+  const closedRoomSnapshot = (await call('session_observe', { session: 'first' })).data;
+  const waiting = call('session_wait', { session: 'first', afterRevision: closedRoomSnapshot.revision, timeoutMs: 30000 });
+  await delay(100);
+  assert.equal((await call('session_close', { session: 'first', confirm: true })).ok, true);
+  assert.equal((await waiting).error.code, 'SESSION_CLOSED');
+  assert.equal((await call('session_observe', { session: 'first' })).error.code, 'SESSION_NOT_FOUND');
+  assert.equal((await call('session_observe', { session: 'second' })).ok, true);
   assert.equal((await request('/mcp', { method: 'DELETE', headers: sessionHeaders })).status, 200);
   assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: sessionHeaders })).status, 404);
 });

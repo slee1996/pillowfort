@@ -21,7 +21,7 @@ import { TttOverlay } from "../components/games/TttOverlay";
 import { SabVoteBanner } from "../components/games/SabVoteBanner";
 import { DrawCanvas } from "../components/canvas/DrawCanvas";
 import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
-import type { GameQueueItem } from "../services/protocol";
+import type { GameQueueItem } from "../../../src/participant/protocol";
 import { agentMode, registerRoomActivities } from "../agent/breakout";
 
 type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | "sab-accuse" | null;

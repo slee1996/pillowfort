@@ -1,28 +1,28 @@
 import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
+import { deriveParticipantKey } from "./keyDerivation";
 import {
   ROOM_INVITATION_AUTH_PUBLIC_KEY_BYTES_V4,
   ROOM_INVITATION_AUTH_KDF_V4,
   roomInvitationAuthProofBytesV4,
   type RoomInvitationAuthContextV4,
   type RoomInvitationAuthPayloadV4,
-} from "../../../src/roomInvitationAuthV4";
-import { normalizeRoomId } from "../../../src/entitlements";
+} from "../roomInvitationAuthV4";
+import { normalizeRoomId } from "../entitlements";
 import {
   SECURE_ROOM_ID_BYTES,
   SECURE_ROOM_MLS_CIPHERSUITE,
   SECURE_ROOM_PROTOCOL_VERSION,
   canonicalBase64UrlByteLength,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 import {
   roomInvitationMemberBindingProofBytesV4,
   verifyRoomInvitationMemberBindingV4,
   type RoomInvitationMemberBindingContextV4,
   type RoomInvitationMemberBindingV4,
-} from "../../../src/roomInvitationMemberBindingV4";
-import { toBase64Url } from "../../../src/roomAuth";
+} from "../roomInvitationMemberBindingV4";
+import { toBase64Url } from "../roomAuth";
 
 const UTF8 = new TextEncoder();
-const PBKDF2_ITERATIONS = 600_000;
 const SAFETY_CODE_DOMAIN_V4 = "pillowfort:secure-room-safety-code:v4";
 
 async function deriveInvitationSeed(roomId: string, roomSecret: string): Promise<Uint8Array> {
@@ -32,14 +32,7 @@ async function deriveInvitationSeed(roomId: string, roomSecret: string): Promise
   // setup/admission challenge, then zeroed by the caller.
   const secretBytes = UTF8.encode(roomSecret);
   try {
-    const baseKey = await crypto.subtle.importKey("raw", secretBytes, "PBKDF2", false, ["deriveBits"]);
-    const bits = await crypto.subtle.deriveBits({
-      name: "PBKDF2",
-      hash: "SHA-256",
-      iterations: PBKDF2_ITERATIONS,
-      salt: UTF8.encode(`pillowfort:auth-sign-v4:${roomId}`),
-    }, baseKey, 256);
-    return new Uint8Array(bits);
+    return await deriveParticipantKey(secretBytes, UTF8.encode(`pillowfort:auth-sign-v4:${roomId}`));
   } finally {
     secretBytes.fill(0);
   }

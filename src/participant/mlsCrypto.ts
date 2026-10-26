@@ -2,7 +2,8 @@ import initOpenMls, {
   MlsSession as NativeMlsSession,
   type MlsTransition as NativeMlsTransition,
   type RosterEntry as NativeRosterEntry,
-} from "../vendor/openmls/pillowfort_openmls.js";
+  type InitInput,
+} from "../../client/src/vendor/openmls/pillowfort_openmls.js";
 
 const ROOM_SECRET_RE = /^pf2_([A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$/;
 const ROOM_BINDING_BYTES = 16;
@@ -204,6 +205,17 @@ function browserCrypto(): Crypto {
     throw new MlsCryptoError("unavailable", "WebCrypto is required for MLS state protection");
   }
   return candidate;
+}
+
+/** Supply a bundled module in Workers or bytes in Node before creating participants. */
+export async function initializeMls(module: WebAssembly.Module | Uint8Array): Promise<void> {
+  if (!openMlsInitialization) {
+    openMlsInitialization = initOpenMls({ module_or_path: module as InitInput }).catch((error) => {
+      openMlsInitialization = null;
+      throw new MlsCryptoError("unavailable", "OpenMLS WASM could not be initialized", error);
+    });
+  }
+  await openMlsInitialization;
 }
 
 async function initializeOpenMls(): Promise<void> {

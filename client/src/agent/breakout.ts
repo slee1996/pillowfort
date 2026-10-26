@@ -1,15 +1,9 @@
 import { detectNativeWebMcp } from "./webmcp";
 
-export interface BreakoutSnapshot {
-  width: number; height: number;
-  ball: { x: number; y: number; dx: number; dy: number };
-  paddle: { x: number; y: number; w: number; h: number };
-  bricks: { x: number; y: number; w: number; h: number; alive: boolean; color: string }[];
-  lives: number; score: number; won: boolean; lost: boolean; running: boolean;
-}
+import type { BreakoutSnapshot } from "../../../src/participant/breakout";
+import type { ActivityMode } from "../../../src/participant/activities";
 interface Controls { move(x: number): void; reset(): void; snapshot(): BreakoutSnapshot | null }
 let controls: Controls | null = null;
-export type ActivityMode = "conversation" | "drawing" | "breakout";
 let activity: { drawing(): void; breakout(): void; conversation(): void } | null = null;
 export function registerRoomActivities(value: NonNullable<typeof activity>): () => void {
   activity = value;

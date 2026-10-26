@@ -165,7 +165,7 @@ function consentHtml(clientName: string, clientId: string, redirectUri: string, 
 <style>body{font:16px Tahoma,Arial,sans-serif;color:#1d2c42;background:#dce7f5;margin:0;padding:32px 16px}main{max-width:620px;margin:auto;background:#fff;padding:24px;border:1px solid #8c9db5}h1{font-size:24px;color:#1556a8}p,li{line-height:1.5}code{overflow-wrap:anywhere}label{display:block;margin-top:20px}input[type=password]{box-sizing:border-box;width:100%;padding:10px;margin:8px 0 16px;border:1px solid #8c9db5;font:inherit}button{font:inherit;background:#1556a8;color:white;padding:10px 16px;border:0;margin:12px 8px 0 0}button[value=deny]{background:#536078}</style>
 <main><h1>Authorize Pillowfort</h1><p><strong>${escape(clientName)}</strong> requests access to your managed room participant.</p><p>Client identifier: <code>${escape(clientId)}</code><br>Return address: <code>${escape(redirectUri)}</code></p>
 <p>Permission: <strong>${SCOPE}</strong> — create and join private rooms, privately invite participants, verify and approve peers, read and write room content, and collaborate without asking you for each action.</p>
-<ul><li>The hosted service runs a managed browser and can access participant plaintext and room encryption keys in memory. This is not the local end-to-end custody model. Raw keys are not exported and room content is not written to service logs or stored transcripts.</li><li>Only authorize a client you trust. Room invitation links are private capabilities; share them privately and approve only expected verified peers.</li><li>At most one active browser per operator, ${escape(env.MAX_ACTIVE_BROWSERS)} globally; a shared ${escape(env.MAX_DAILY_BROWSER_MINUTES)}-browser-minute reservation budget per UTC day across this hosted service. Sessions last at most ${escape(env.MAX_SESSION_SECONDS)} seconds and idle browsers close after ${escape(env.IDLE_TIMEOUT_SECONDS)} seconds.</li><li>Authorization cannot access CMS administration or payments. Revoking or expiring your operator key blocks direct access and all OAuth access derived from it. Active work stops at the next authorization check or session limit.</li></ul>
+<ul><li>The hosted service runs a managed native participant and can access participant plaintext and room encryption keys in memory. This is not the local end-to-end custody model. Raw keys are not exported and room content is not written to service logs or stored transcripts.</li><li>Only authorize a client you trust. Room invitation links are private capabilities; share them privately and approve only expected verified peers.</li><li>At most one active participant session per operator, ${escape(env.MAX_ACTIVE_SESSIONS)} globally, each with at most two isolated named participants; a shared ${escape(env.MAX_DAILY_SESSION_MINUTES)}-session-minute reservation budget per UTC day across this hosted service. Sessions last at most ${escape(env.MAX_SESSION_SECONDS)} seconds and idle sessions close after ${escape(env.IDLE_TIMEOUT_SECONDS)} seconds.</li><li>Authorization cannot access CMS administration or payments. Revoking or expiring your operator key blocks direct access and all OAuth access derived from it. Active work stops at the next authorization check or session limit.</li></ul>
 <form action="/authorize" method="post"><input type="hidden" name="consent" value="${escape(token)}"><label for="operator-key">Operator access key</label><input id="operator-key" name="key" type="password" autocomplete="off" spellcheck="false" maxlength="128"><label><input type="checkbox" name="approve" value="yes"> I trust this client and approve the permissions and managed key custody described above.</label><button name="decision" value="allow">Authorize client</button><button name="decision" value="deny">Deny</button></form></main></html>`;
 }
 function consentHeaders(cookie: string, redirectUri: string): Record<string, string> {
@@ -328,6 +328,7 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
   }
   return {
     async fetch(request, env, ctx) {
+      let providerRequest: Request = request;
       try {
         const url = new URL(request.url);
         if (url.origin !== new URL(env.PUBLIC_MCP_URL).origin) return error(404, 'not_found');
@@ -351,10 +352,10 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
             const rate = await limited(request, env, url.pathname === '/oauth/token' ? 'token' : 'registration');
             if (rate) return rate;
             const body = await boundedBody(request);
-            request = new Request(request, { body });
+            providerRequest = new Request(request, { body });
           }
         }
-        const response = await providerFor(env).fetch(request, env, ctx);
+        const response = await providerFor(env).fetch(providerRequest, env, ctx);
         const headers = new Headers(response.headers);
         headers.delete('Access-Control-Allow-Credentials');
         headers.set('Cache-Control', 'no-store');

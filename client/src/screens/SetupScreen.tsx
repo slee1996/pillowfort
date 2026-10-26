@@ -11,7 +11,7 @@ import {
   generateRoomSecret,
   validateCustomRoomSecret,
   validateRoomSecret,
-} from "../services/roomSecret";
+} from "../../../src/participant/roomSecret";
 import { showToast } from "../components/xp/Toast";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";

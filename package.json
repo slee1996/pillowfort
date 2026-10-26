@@ -10,7 +10,7 @@
     "check": "npm run typecheck && npm test && npm run build",
     "deploy": "npm run check && npx wrangler deploy",
     "start": "bun server.ts",
-    "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/room-invitation.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts test/telemetry.test.ts && npm run test:security",
+    "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/room-invitation.test.ts test/participant-state.test.ts test/participant-key-derivation.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts test/telemetry.test.ts && npm run test:security",
     "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
     "test:ui": "bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 60000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 60000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 60000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 60000 --max-concurrency 1 test/game-night.test.ts",
@@ -32,12 +32,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
     "@noble/ed25519": "3.1.0",
+    "@noble/hashes": "2.4.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/core": "2.11.0",
     "@opentelemetry/otlp-transformer": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0",
-    "playwright": "1.59.1"
+    "playwright": "1.59.1",
+    "zustand": "5.0.11"
   },
   "overrides": {
     "sharp": "0.35.3"

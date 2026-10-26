@@ -5,7 +5,7 @@ import { Button } from "../components/xp/Button";
 import { Input } from "../components/xp/Input";
 import { PeriodIcon } from "../components/xp/PeriodIcon";
 import { cancelSecureRoomConnection, getSecureRoomRecovery, joinSecureRoom } from "../services/ws";
-import { validateRoomSecret } from "../services/roomSecret";
+import { validateRoomSecret } from "../../../src/participant/roomSecret";
 import { isSecureDisplayNameV4 } from "../../../src/applicationEventsV4";
 import { normalizeRoomId } from "../../../src/entitlements";
 import { takeRoomInvitation } from "../services/roomInvitation";

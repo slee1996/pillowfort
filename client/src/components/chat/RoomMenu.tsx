@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { showToast } from "../xp/Toast";
-import type { RoomTheme } from "../../services/protocol";
-import { isCredentialSystemMessage } from "../../services/roomSecret";
+import type { RoomTheme } from "../../../../src/participant/protocol";
+import { isCredentialSystemMessage } from "../../../../src/participant/roomSecret";
 import { copyTextWithFallback } from "../../services/clipboard";
 
 interface RoomMenuProps {

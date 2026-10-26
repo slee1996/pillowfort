@@ -8,14 +8,14 @@ import {
   type RoomAuthAction,
 } from "../../../src/roomAuth";
 import { STYLE_COLORS } from "../../../src/shared";
-import type { ChatStyle, EncryptedChatPayload, RoomAuthPayload } from "./protocol";
+import type { ChatStyle, EncryptedChatPayload, RoomAuthPayload } from "../../../src/participant/protocol";
 import {
   CryptoStateStore,
   deriveCryptoRoomInstance,
   type LegacyReplayMigrationInput,
   type ReplayAdvanceResult,
   type ReplayPosition,
-} from "./cryptoStateStore";
+} from "../../../src/participant/cryptoStateStore";
 
 const KEY_CACHE = new Map<string, Promise<CryptoKey>>();
 const AUTH_SEED_CACHE = new Map<string, Promise<Uint8Array>>();

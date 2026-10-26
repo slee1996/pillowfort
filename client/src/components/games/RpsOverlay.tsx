@@ -1,7 +1,7 @@
 import { useGameStore } from "../../stores/gameStore";
 import { send } from "../../services/ws";
 import { Button } from "../xp/Button";
-import type { RpsPick } from "../../services/protocol";
+import type { RpsPick } from "../../../../src/participant/protocol";
 import { PeriodIcon } from "../xp/PeriodIcon";
 
 export function RpsOverlay() {

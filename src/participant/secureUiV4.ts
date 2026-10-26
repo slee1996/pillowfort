@@ -1,8 +1,7 @@
-import type { SecureRoomStateSnapshotV4 } from "../../../src/applicationEventsV4";
-import type { SecureReducerEffectV4 } from "../../../src/secureGameReducer";
-import { playDoorClose, playDoorOpen, playMsgSound } from "../hooks/useSound";
-import { requestWakeLock } from "../hooks/useWakeLock";
-import { useGameStore, type RpsState, type TttState } from "../stores/gameStore";
+import type { SecureRoomStateSnapshotV4 } from "../applicationEventsV4";
+import type { SecureReducerEffectV4 } from "../secureGameReducer";
+import type { ParticipantEvents } from "./events";
+import type { ParticipantStore } from "./gameStore";
 import type { GameQueueItem, RoomGameQueue, RoomLeaderboards } from "./protocol";
 
 const VOTE_DURATION_MS = 30_000;
@@ -10,10 +9,6 @@ const SABOTEUR_VOTE_DURATION_MS = 30_000;
 const RPS_EMOJI: Record<string, string> = { rock: "✊", paper: "🖐️", scissors: "✌️" };
 const MAX_DISPLAYED_EVENT_IDS = 1_024;
 
-let currentRoomInstance: string | null = null;
-let knownDeviceIds = new Set<string>();
-let displayedMessageIds = new Set<string>();
-let displayedDrawingIds = new Set<string>();
 
 function rememberDisplayedId(ledger: Set<string>, eventId: string): boolean {
   if (ledger.has(eventId)) return false;
@@ -82,8 +77,29 @@ function gameQueue(state: SecureRoomStateSnapshotV4): RoomGameQueue {
   return { current: currentGame(state), queue: state.queue.map((item) => queueItem(state, item)) };
 }
 
+export interface SecureRoomUiV4 {
+  initializeSecureRoomUiV4(options: {
+    roomId: string;
+    ownDeviceId: string;
+    state: SecureRoomStateSnapshotV4;
+    resumed?: boolean;
+  }): void;
+  applySecureRoomUiV4(
+    state: SecureRoomStateSnapshotV4,
+    effects: readonly SecureReducerEffectV4[],
+    ownDeviceId: string,
+  ): void;
+  resetSecureRoomUiV4(): void;
+}
+
+export function createSecureRoomUiV4(participantStore: ParticipantStore, events: ParticipantEvents): SecureRoomUiV4 {
+let currentRoomInstance: string | null = null;
+let knownDeviceIds = new Set<string>();
+let displayedMessageIds = new Set<string>();
+let displayedDrawingIds = new Set<string>();
+
 function syncGames(state: SecureRoomStateSnapshotV4, ownDeviceId: string): void {
-  const store = useGameStore.getState();
+  const store = participantStore.getState();
   if (state.vote) {
     const target = nameFor(state, state.vote.targetDeviceId);
     const starter = nameFor(state, state.vote.starterDeviceId);
@@ -173,7 +189,7 @@ function syncGames(state: SecureRoomStateSnapshotV4, ownDeviceId: string): void 
 }
 
 function syncPersistent(state: SecureRoomStateSnapshotV4, ownDeviceId: string): void {
-  const store = useGameStore.getState();
+  const store = participantStore.getState();
   const host = state.hostDeviceId;
   const ordered = [...state.members].sort((left, right) =>
     left.deviceId === host ? -1 : right.deviceId === host ? 1 : left.displayName < right.displayName ? -1 : left.displayName > right.displayName ? 1 : 0
@@ -194,7 +210,7 @@ function syncPersistent(state: SecureRoomStateSnapshotV4, ownDeviceId: string): 
   syncGames(state, ownDeviceId);
 }
 
-export function initializeSecureRoomUiV4(options: {
+function initializeSecureRoomUiV4(options: {
   roomId: string;
   ownDeviceId: string;
   state: SecureRoomStateSnapshotV4;
@@ -205,35 +221,35 @@ export function initializeSecureRoomUiV4(options: {
   knownDeviceIds = new Set(state.members.map((member) => member.deviceId));
   displayedMessageIds = new Set();
   displayedDrawingIds = new Set();
-  const store = useGameStore.getState();
+  const store = participantStore.getState();
   store.setRoomId(roomId);
   store.clearMessages();
   syncPersistent(state, ownDeviceId);
   store.setScreen("chat");
   if (options.resumed) store.addSystemMessage("Reconnected securely.");
-  playDoorOpen();
-  void requestWakeLock();
+  events.emit("pf-sound", { kind: "door-open" });
+  events.emit("pf-wake-lock");
 }
 
-export function applySecureRoomUiV4(
+function applySecureRoomUiV4(
   state: SecureRoomStateSnapshotV4,
   effects: readonly SecureReducerEffectV4[],
   ownDeviceId: string,
 ): void {
   if (currentRoomInstance !== state.roomInstance) return;
-  const storeBefore = useGameStore.getState();
+  const storeBefore = participantStore.getState();
   const previousRps = storeBefore.rpsState;
   const previousTtt = storeBefore.tttState;
   const previousKnown = knownDeviceIds;
   syncPersistent(state, ownDeviceId);
-  const store = useGameStore.getState();
+  const store = participantStore.getState();
 
   for (const effect of effects) {
     switch (effect.type) {
       case "profile":
         if (effect.deviceId !== ownDeviceId && !previousKnown.has(effect.deviceId)) {
           store.addSystemMessage(`${effect.displayName} entered the fort.`);
-          playDoorOpen();
+          events.emit("pf-sound", { kind: "door-open" });
         }
         break;
       case "presence": {
@@ -247,20 +263,20 @@ export function applySecureRoomUiV4(
         if (rememberDisplayedId(displayedMessageIds, effect.eventId) && !store.mutedNames.has(effect.displayName)) {
           store.addChatMessage(effect.displayName, effect.text, effect.style ?? undefined);
           if (store.minimized) store.incrementUnread();
-          playMsgSound();
+          events.emit("pf-sound", { kind: "message" });
         }
         break;
       case "typing":
         if (effect.deviceId !== ownDeviceId) {
-          window.dispatchEvent(new CustomEvent("pf-typing", { detail: effect.displayName }));
+          events.emit("pf-typing", effect.displayName);
         }
         break;
       case "drawing": {
         if (rememberDisplayedId(displayedDrawingIds, effect.eventId)) {
-          window.dispatchEvent(new CustomEvent("pf-draw", { detail: {
+          events.emit("pf-draw", {
             from: effect.displayName, color: effect.color, pts: effect.points,
             ...(effect.strokeStart ? { s: 1 } : {}),
-          } }));
+          });
         }
         break;
       }
@@ -269,7 +285,7 @@ export function applySecureRoomUiV4(
           !state.members.some((member) => member.displayName === candidate)
         );
         if (oldName) store.addSystemMessage(`${oldName} left the fort.`);
-        playDoorClose();
+        events.emit("pf-sound", { kind: "door-close" });
         break;
       }
       case "host-offered":
@@ -385,9 +401,12 @@ export function applySecureRoomUiV4(
   knownDeviceIds = new Set(state.members.map((member) => member.deviceId));
 }
 
-export function resetSecureRoomUiV4(): void {
+function resetSecureRoomUiV4(): void {
   currentRoomInstance = null;
   knownDeviceIds.clear();
   displayedMessageIds.clear();
   displayedDrawingIds.clear();
+}
+
+return { initializeSecureRoomUiV4, applySecureRoomUiV4, resetSecureRoomUiV4 };
 }

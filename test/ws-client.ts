@@ -3,7 +3,7 @@
  * These mirror the local capture tooling without depending on ignored files.
  */
 import { createRoomAuthPayload, encryptChatPayload } from "../client/src/services/chatCrypto";
-import { generateRoomId } from "../client/src/services/roomSecret";
+import { generateRoomId } from "../src/participant/roomSecret";
 
 export type Client = {
   ws: WebSocket;

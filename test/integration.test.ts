@@ -4,7 +4,7 @@ import {
   connectClient, connectClientToRoom, createRoom, joinRoom, roomAuth, sendEncryptedChat,
   TEST_GRACE_MS,
 } from "./helpers";
-import { generateRoomId } from "../client/src/services/roomSecret";
+import { generateRoomId } from "../src/participant/roomSecret";
 
 beforeAll(startServer);
 afterEach(cleanupClients);

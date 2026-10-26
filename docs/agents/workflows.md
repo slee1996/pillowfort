@@ -136,7 +136,7 @@ Wait for closure/leave observations before `session_close`. `room_end` closes th
 For hosted MCP, send HTTP `DELETE` through your MCP client when the connection is
 finished, in addition to deliberate room/session cleanup. Closing the network
 connection alone leaves the server session alive until its idle/absolute limit.
-An expired ID returns404 and does not recreate its browser identity. Reinitialize
+An expired ID returns404 and does not recreate its participant identity. Reinitialize
 and establish fresh, verified room admission rather than assuming old state survived.
 
 ## Native WebMCP variation

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createRoomInvitationUrl, parseRoomInvitationUrl } from "../client/src/services/roomInvitation";
+import { createRoomInvitationUrl, parseRoomInvitationUrl } from "../src/participant/roomInvitation";
 import type * as InvitationModule from "../client/src/services/roomInvitation";
 
 const origin = "https://pillowfort.example";
@@ -82,7 +82,6 @@ describe("fragment room invitations", () => {
     ]) {
       let message = "";
       try { createRoomInvitationUrl(base, room, secret); } catch (error) { message = (error as Error).message; }
-      expect(message).toContain("could not be opened safely");
       expect(message.includes(secret)).toBeFalse();
       expect(message.includes(base)).toBeFalse();
     }

@@ -81,6 +81,10 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             hosted-mcp/package-lock.json
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
       - name: Install shared runtime dependencies
         run: npm ci
       - name: Install hosted dependencies

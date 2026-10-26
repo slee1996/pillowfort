@@ -42,7 +42,7 @@ import {
   isGeneratedRoomSecret,
   validateCustomRoomSecret,
   validateRoomSecret,
-} from "../client/src/services/roomSecret";
+} from "../src/participant/roomSecret";
 import {
   computeStripeWebhookSignature,
   createFortPassStripeCheckoutSession,

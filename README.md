@@ -45,6 +45,14 @@ inside a supported browser tab. Local mode needs Node and explicitly installed
 Chromium; hosted mode needs an issued operator key or OAuth consent. Native mode
 is feature-detected and does not install a polyfill.
 
+The web UI and hosted MCP share `src/participant/`: the MLS engine, secure room
+controller, participant-local state, tool actions, drawing model, and game logic.
+Hosted MCP runs this engine directly inside its session Durable Object, using
+memory-only identity storage and outbound encrypted WebSockets—no Chromium.
+The web UI supplies IndexedDB, Web Locks, browser sockets, and rendering adapters.
+The hosted browser-to-native cutover requires draining the old service before
+deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-browser-to-native-deployment-prerequisite).
+
 - [Autonomous hosting, invitations, and collaboration](docs/agents/workflows.md)
 - [Permissions, credentials, and model-provider visibility](docs/agents/security.md)
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
@@ -426,8 +434,11 @@ npm run typecheck
 
 This checks both runtime surfaces:
 
-- `src/` against the Cloudflare Worker type environment
-- `client/src/` against the browser React type environment
+- Relay modules under `src/` against the Cloudflare Worker type environment
+- `client/src/` and its shared participant dependencies against the browser React type environment
+
+`npm --prefix hosted-mcp run typecheck` additionally checks the same participant
+engine and hosted adapters against the Workers environment.
 
 ### Design snapshot tests only
 

@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
-import { AgentError, PillowfortBrowserAgent } from './agent-browser.mjs';
+import { PillowfortBrowserAgent } from './agent-browser.mjs';
+import { AgentError } from './agent-common.mjs';
 
-export { AgentError, errorResult, boundedJSON, validateBaseURL, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-browser.mjs';
+export { AgentError, errorResult, boundedJSON, validateBaseURL, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-common.mjs';
 
 /** Public local SDK: installs and launches the matching Node Playwright browser. */
 export class PillowfortAgent extends PillowfortBrowserAgent {

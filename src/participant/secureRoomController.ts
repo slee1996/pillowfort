@@ -2,38 +2,37 @@ import type {
   SecureApplicationContentV4,
   SecureRpsPickV4,
   SecureRoomStateSnapshotV4,
-} from "../../../src/applicationEventsV4";
-import { isSecureDisplayNameV4, MAX_SECURE_DRAW_POINTS } from "../../../src/applicationEventsV4";
-import { decodeSecureAdmissionBundleV4, encodeSecureAdmissionBundleV4 } from "../../../src/admissionBundleV4";
-import { computeRpsCommitmentV4, computeSaboteurCommitmentV4, type SecureReducerEffectV4 } from "../../../src/secureGameReducer";
-import { normalizeRoomId } from "../../../src/entitlements";
+} from "../applicationEventsV4";
+import { isSecureDisplayNameV4, MAX_SECURE_DRAW_POINTS } from "../applicationEventsV4";
+import { decodeSecureAdmissionBundleV4, encodeSecureAdmissionBundleV4 } from "../admissionBundleV4";
+import { computeRpsCommitmentV4, computeSaboteurCommitmentV4, type SecureReducerEffectV4 } from "../secureGameReducer";
+import { normalizeRoomId } from "../entitlements";
 import {
   parseRoomInvitationMemberBindingV4,
   secureKeyPackageDigestV4,
   type RoomInvitationMemberBindingV4,
-} from "../../../src/roomInvitationMemberBindingV4";
+} from "../roomInvitationMemberBindingV4";
 import {
   MAX_SECURE_WEBSOCKET_FRAME_BYTES,
   SECURE_ROOM_ID_BYTES,
   canonicalBase64UrlByteLength,
   type SecureMemberHelloV4,
   type SecureRelayEnvelopeV4,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 import {
   MAX_SECURE_ZOMBIE_REMOVALS_V4,
   SECURE_ADMISSION_TTL_MS_V4,
   type SecureClientFrameV4,
   type SecureLogicalOrderGrantV4,
   type SecureRelayFrameV4,
-} from "../../../src/secureRelayV4";
+} from "../secureRelayV4";
 /*
  * Keep all transport-bound admission metadata opaque. A display name is sent
  * only later, inside the encrypted join proof.
  */
-import type {
-  PendingAdmission,
-  TerminalPresentation,
-} from "../stores/gameStore";
+import type { PendingAdmission, ParticipantStore, TerminalPresentation } from "./gameStore";
+import type { ParticipantEvents } from "./events";
+import type { RoomCryptoStateStore } from "./cryptoStateStore";
 import {
   parseSecureAuthChallengeFrameV4,
   parseSecureAuthenticateFrameV4,
@@ -42,9 +41,9 @@ import {
   type SecureAuthChallengeFrameV4,
   type SecureAuthenticateFrameV4,
   type SecureServerFrameV4,
-} from "../../../src/secureTransportV4";
-import { fromBase64Url, toBase64Url } from "../../../src/roomAuth";
-import { useGameStore } from "../stores/gameStore";
+} from "../secureTransportV4";
+import { fromBase64Url, toBase64Url } from "../roomAuth";
+import type { RoomCryptoLockCoordinatorLike } from "./roomCryptoLock";
 import {
   createRoomInvitationAuthV4,
   createRoomInvitationMemberBindingV4,
@@ -65,15 +64,13 @@ import {
   type SecureRoomPendingOutboxEntryV1,
 } from "./secureRoomState";
 import {
-  RoomCryptoLockCoordinator,
   type AcquireRoomCryptoLockOptions,
   type RoomCryptoLockAcquireResult,
   type RoomCryptoLockLease,
 } from "./roomCryptoLock";
 import {
-  applySecureRoomUiV4,
-  initializeSecureRoomUiV4,
-  resetSecureRoomUiV4,
+  createSecureRoomUiV4,
+  type SecureRoomUiV4,
   secureDeviceIdForNameV4,
 } from "./secureUiV4";
 import {
@@ -84,6 +81,7 @@ import {
 } from "./roomSecret";
 
 const UTF8 = new TextEncoder();
+const WEBSOCKET_OPEN = 1;
 const RECOVERY_SESSION_KEY = "pillowfort:secure-room-recovery:v1";
 const RECOVERY_MAX_AGE_MS = 24 * 60 * 60_000;
 const MAX_QUEUED_ACTIONS = 64;
@@ -140,16 +138,9 @@ interface SecureRoomRecoveryContext extends SecureRoomRecoveryHint {
   savedAt: number;
 }
 
-function recoveryStorage(): Storage | null {
-  try {
-    return typeof sessionStorage === "undefined" ? null : sessionStorage;
-  } catch {
-    return null;
-  }
-}
+export type SecureRoomRecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-function loadRecoveryContext(): SecureRoomRecoveryContext | null {
-  const storage = recoveryStorage();
+function loadRecoveryContext(storage: SecureRoomRecoveryStorage | null): SecureRoomRecoveryContext | null {
   if (!storage) return null;
   try {
     const raw = storage.getItem(RECOVERY_SESSION_KEY);
@@ -173,8 +164,7 @@ function loadRecoveryContext(): SecureRoomRecoveryContext | null {
   }
 }
 
-function persistRecoveryContext(context: SecureRoomRecoveryContext | null): void {
-  const storage = recoveryStorage();
+function persistRecoveryContext(storage: SecureRoomRecoveryStorage | null, context: SecureRoomRecoveryContext | null): void {
   if (!storage) return;
   try {
     if (context) storage.setItem(RECOVERY_SESSION_KEY, JSON.stringify(context));
@@ -217,9 +207,19 @@ interface PendingHostAdmission {
   timeout: ReturnType<typeof setTimeout> | null;
 }
 
-interface LocationLike {
+export interface LocationLike {
   protocol: string;
   host: string;
+}
+
+export interface SecureRoomControllerOptions {
+  store: ParticipantStore;
+  events: ParticipantEvents;
+  cryptoStore: RoomCryptoStateStore;
+  lockCoordinator: RoomCryptoLockCoordinatorLike;
+  location: LocationLike;
+  createWebSocket: (url: string) => WebSocket;
+  recoveryStorage?: SecureRoomRecoveryStorage | null;
 }
 
 function plainRecord(value: unknown): value is Record<string, unknown> {
@@ -277,7 +277,7 @@ function inboundRelayContext(
   }
 }
 
-export function secureRoomWebSocketUrl(roomId: string, current: LocationLike = location): string {
+export function secureRoomWebSocketUrl(roomId: string, current: LocationLike): string {
   const canonical = normalizeRoomId(roomId);
   if (!canonical || canonical !== roomId) throw new TypeError("invalid canonical room id");
   const protocol = current.protocol === "https:" ? "wss:" : "ws:";
@@ -301,17 +301,16 @@ export class SecureRoomController {
   /** One-shot recovery override for a locally-active join that is still pending at the relay. */
   private nextAuthenticationMode: "join" | "resume" | null = null;
   /** Non-secret tab-scoped pointer needed to retry an ambiguous authentication. */
-  private recoveryContext: SecureRoomRecoveryContext | null = loadRecoveryContext();
-  private recoverySetup: { roomId: string; roomInstance: string } | null =
-    this.recoveryContext?.mode === "setup"
-      ? { roomId: this.recoveryContext.roomId, roomInstance: this.recoveryContext.roomInstance }
-      : null;
+  private recoveryContext: SecureRoomRecoveryContext | null;
+  private recoverySetup: { roomId: string; roomInstance: string } | null;
   /** Keeps Setup/Join mounted until a transmitted authentication attempt is resolved. */
   private unresolvedAuthentication = false;
   private authenticatedMode: "setup" | "join" | "resume" | null = null;
   private challengeHandled = false;
   private stopped = true;
   private terminal = false;
+  private disposed = false;
+  private disposal: Promise<void> | null = null;
   private uiInitialized = false;
   private replayingBacklog = false;
   private roomStateSnapshotReceived = false;
@@ -344,10 +343,22 @@ export class SecureRoomController {
   private readonly retirementBarriers = new Map<string, string>();
   private localMemberBinding: RoomInvitationMemberBindingV4 | null = null;
   private founderBinding: RoomInvitationMemberBindingV4 | null = null;
-  private lockCoordinator: RoomCryptoLockCoordinator;
+  private lockCoordinator: RoomCryptoLockCoordinatorLike;
+  private readonly store: ParticipantStore;
+  private readonly events: ParticipantEvents;
+  private readonly ui: SecureRoomUiV4;
+  private readonly recoveryStorage: SecureRoomRecoveryStorage | null;
 
-  constructor(lockCoordinator = new RoomCryptoLockCoordinator()) {
-    this.lockCoordinator = lockCoordinator;
+  constructor(private readonly options: SecureRoomControllerOptions) {
+    this.store = options.store;
+    this.events = options.events;
+    this.ui = createSecureRoomUiV4(options.store, options.events);
+    this.lockCoordinator = options.lockCoordinator;
+    this.recoveryStorage = options.recoveryStorage ?? null;
+    this.recoveryContext = loadRecoveryContext(this.recoveryStorage);
+    this.recoverySetup = this.recoveryContext?.mode === "setup"
+      ? { roomId: this.recoveryContext.roomId, roomInstance: this.recoveryContext.roomInstance }
+      : null;
   }
 
   get webSocket(): WebSocket | null {
@@ -376,7 +387,7 @@ export class SecureRoomController {
   }
 
   sendUiAction(type: string, payload: Record<string, unknown> = {}): boolean {
-    if (this.stopped || this.terminal || !this.config || !plainRecord(payload)) return false;
+    if (this.disposed || this.stopped || this.terminal || !this.config || !plainRecord(payload)) return false;
     // Bound producer traffic before it can accumulate behind asynchronous MLS work.
     // Acceptance here means queued in memory, never relay acceptance or application.
     if (type === "draw") return this.queueUiDrawing(payload);
@@ -386,8 +397,35 @@ export class SecureRoomController {
   }
 
   reconnectIfNeeded(): void {
-    if (this.stopped || this.terminal || !this.config || !this.lease?.isActive()) return;
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) this.scheduleReconnect();
+    if (this.disposed || this.stopped || this.terminal || !this.config || !this.lease?.isActive()) return;
+    if (!this.socket || this.socket.readyState !== WEBSOCKET_OPEN) this.scheduleReconnect();
+  }
+
+  /** Permanently closes this participant without sending a room leave or shutdown. */
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
+    this.disposed = true;
+    this.disposal = (async () => {
+      try {
+        await this.cancelPendingConnection();
+      } finally {
+        this.stopped = true;
+        this.terminal = true;
+        this.config = null;
+        this.recoveryContext = null;
+        this.recoverySetup = null;
+        this.unresolvedAuthentication = false;
+        this.authenticationMayHaveCommitted = false;
+        this.nextAuthenticationMode = null;
+        persistRecoveryContext(this.recoveryStorage, null);
+        this.closeSocket("participant disposed");
+        this.disposeCurrentEngine();
+        this.clearTimers();
+        this.resetUiSession();
+        this.releaseLease();
+      }
+    })();
+    return this.disposal;
   }
 
   async disconnect(): Promise<void> {
@@ -405,7 +443,7 @@ export class SecureRoomController {
     this.nextAuthenticationMode = null;
     this.recoverySetup = null;
     this.recoveryContext = null;
-    persistRecoveryContext(null);
+    persistRecoveryContext(this.recoveryStorage, null);
     this.unresolvedAuthentication = false;
     this.clearReconnectTimer();
     this.closeSocket("disconnected");
@@ -490,7 +528,7 @@ export class SecureRoomController {
     return !finalRecoveryRequired;
   }
 
-  async replaceLockCoordinatorForTests(coordinator: RoomCryptoLockCoordinator): Promise<void> {
+  async replaceLockCoordinatorForTests(coordinator: RoomCryptoLockCoordinatorLike): Promise<void> {
     await this.disconnect();
     this.lockCoordinator.close();
     this.lockCoordinator = coordinator;
@@ -500,6 +538,7 @@ export class SecureRoomController {
     mode: "setup" | "join",
     options: SecureRoomStartOptions,
   ): Promise<SecureRoomConnectResult> {
+    if (this.disposed) return { status: "failed", reason: "aborted" };
     const roomId = normalizeRoomId(options.roomId);
     const displayName = options.displayName.normalize("NFC").trim();
     const exactRecovery = this.recoveryContext?.mode === mode &&
@@ -522,6 +561,7 @@ export class SecureRoomController {
       return { status: "failed", reason: "recovery-required" };
     }
     const priorConnectionResolved = await this.cancelPendingConnection();
+    if (this.disposed) return { status: "failed", reason: "aborted" };
     if (!priorConnectionResolved && !exactRecovery) {
       return { status: "failed", reason: "recovery-required" };
     }
@@ -560,7 +600,7 @@ export class SecureRoomController {
       // durable storage work. Do not expose the replacement configuration or
       // socket until that old serial operation has drained.
       this.enqueue(async () => {
-        if (generation !== this.generation) {
+        if (this.disposed || generation !== this.generation) {
           handshake.settle({ status: "failed", reason: "aborted" });
           return;
         }
@@ -579,7 +619,7 @@ export class SecureRoomController {
         this.stopped = false;
         this.terminal = false;
         this.config = config;
-        useGameStore.getState().setIntentionalLeave(false);
+        this.store.getState().setIntentionalLeave(false);
         this.openSocket(generation, handshake, options.lock ?? {});
       }, generation, () => handshake.settle({ status: "failed", reason: "aborted" }));
     });
@@ -602,7 +642,7 @@ export class SecureRoomController {
     this.transientControlIds.clear();
     let socket: WebSocket;
     try {
-      socket = new WebSocket(secureRoomWebSocketUrl(config.roomId));
+      socket = this.options.createWebSocket(secureRoomWebSocketUrl(config.roomId, this.options.location));
     } catch {
       handshake?.settle({ status: "failed", reason: "socket-failed" });
       return;
@@ -838,6 +878,7 @@ export class SecureRoomController {
         let restored: SecureRoomEngine;
         try {
           restored = await SecureRoomEngine.restore({
+            store: this.options.cryptoStore,
             roomInstance,
             roomSecret: config.roomSecret,
             lease: this.lease!,
@@ -891,6 +932,7 @@ export class SecureRoomController {
         authMode = "setup";
       } else {
         const created = await SecureRoomEngine.createFounder({
+          store: this.options.cryptoStore,
           roomInstance,
           roomSecret: config.roomSecret,
           displayName: config.displayName,
@@ -908,6 +950,7 @@ export class SecureRoomController {
     } else {
       try {
         const restored = await SecureRoomEngine.restore({
+          store: this.options.cryptoStore,
           roomInstance,
           roomSecret: config.roomSecret,
           lease: this.lease!,
@@ -963,6 +1006,7 @@ export class SecureRoomController {
           return;
         }
         const created = await SecureRoomEngine.createJoiner({
+          store: this.options.cryptoStore,
           roomInstance,
           roomSecret: config.roomSecret,
           lease: this.lease!,
@@ -1069,6 +1113,7 @@ export class SecureRoomController {
     if (!this.engine) {
       try {
         this.engine = await SecureRoomEngine.restore({
+          store: this.options.cryptoStore,
           roomInstance,
           roomSecret: config.roomSecret,
           lease: this.lease!,
@@ -1111,7 +1156,7 @@ export class SecureRoomController {
       { status: "failed", reason: "authentication-failed" },
       false,
     );
-    useGameStore.getState().showError("That secure fort instance no longer exists. You can join or create another fort.");
+    this.store.getState().showError("That secure fort instance no longer exists. You can join or create another fort.");
   }
 
   private isCurrentSocket(socket: WebSocket, generation: number, socketEpoch: number): boolean {
@@ -1345,7 +1390,7 @@ export class SecureRoomController {
     this.nextAuthenticationMode = null;
     this.unresolvedAuthentication = frame.mode === "join";
     this.authenticated = true;
-    useGameStore.getState().setRoomSafetyCode(safetyCode);
+    this.store.getState().setRoomSafetyCode(safetyCode);
     // The paid-setup bearer is single-purpose. Drop the controller's only
     // reference immediately after the server accepts setup authentication.
     if (config.initialMode === "setup") {
@@ -1355,8 +1400,8 @@ export class SecureRoomController {
       this.clearRecoveryForCurrentConfig();
     }
     this.reconnectAttempts = 0;
-    useGameStore.getState().setReconnecting(false);
-    useGameStore.getState().setReconnectAttempts(0);
+    this.store.getState().setReconnecting(false);
+    this.store.getState().setReconnectAttempts(0);
     if (frame.mode === "setup" || frame.mode === "join") {
       const keyPackage = this.retainedJoinAuthEntry();
       if (!keyPackage) throw new Error("authenticated KeyPackage context disappeared");
@@ -1471,7 +1516,7 @@ export class SecureRoomController {
     if (this.hasMembershipBarrier() || activeGame(engine.state) || engine.state.pendingHostDeviceId !== null ||
         engine.state.pendingRemovalDeviceIds.length !== 0 || this.pendingGrant ||
         this.grantQueue.length !== 0 || this.hasBlockingOutbox()) {
-      useGameStore.getState().showError("Finish the current secure action before approving this device.");
+      this.store.getState().showError("Finish the current secure action before approving this device.");
       return;
     }
     if (Date.now() >= pending.expiresAt) {
@@ -1549,7 +1594,7 @@ export class SecureRoomController {
   }
 
   private sendAdmissionCancellation(admissionId: string, deviceId: string): void {
-    if (!this.authenticated || !this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    if (!this.authenticated || !this.socket || this.socket.readyState !== WEBSOCKET_OPEN) return;
     const requestId = randomSecureRoomIdV4(16);
     this.trackTransientControlId(requestId);
     this.sendClientFrame({
@@ -1580,7 +1625,7 @@ export class SecureRoomController {
   }
 
   private syncPendingHostAdmissions(): void {
-    useGameStore.getState().setPendingAdmissions([...this.pendingHostAdmissions.values()].map((pending) => ({
+    this.store.getState().setPendingAdmissions([...this.pendingHostAdmissions.values()].map((pending) => ({
       admissionId: pending.admissionId,
       deviceFingerprint: pending.deviceFingerprint,
       status: pending.status,
@@ -1588,7 +1633,7 @@ export class SecureRoomController {
   }
 
   private publishPendingJoinFingerprint(binding: RoomInvitationMemberBindingV4 | null): void {
-    useGameStore.getState().setPendingJoinFingerprint(binding === null
+    this.store.getState().setPendingJoinFingerprint(binding === null
       ? null
       : secureAdmissionBindingFingerprintV4(binding));
   }
@@ -1659,7 +1704,7 @@ export class SecureRoomController {
       relayContext,
     });
     if (result.kind !== "already-processed") {
-      applySecureRoomUiV4(result.state, result.effects, engine.deviceId);
+      this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId);
       if (result.kind === "inbound-commit" && relayContext.kind === "commit" &&
           relayContext.retirementDeviceId !== undefined) {
         this.consumeRetirementBarrier({
@@ -1836,7 +1881,7 @@ export class SecureRoomController {
         await this.finishTerminal("connection-ended", "Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
         return;
       }
-      applySecureRoomUiV4(engine.state, [], engine.deviceId);
+      this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
       this.pumpGrantQueue();
     } catch (error) {
       this.showOperationError(error);
@@ -1885,7 +1930,7 @@ export class SecureRoomController {
         );
         return;
       }
-      applySecureRoomUiV4(engine.state, [], engine.deviceId);
+      this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
       if (reason === "removal-pending" || reason === "admission-pending") {
         this.activateMembershipBarrier();
       }
@@ -1980,7 +2025,7 @@ export class SecureRoomController {
       this.ackDurableDelivery(result.messageId);
       this.applyAcceptedOutbound(recoveredUi);
       if (entry.relayContext.kind === "join-proof") {
-        useGameStore.getState().setPendingJoinFingerprint(null);
+        this.store.getState().setPendingJoinFingerprint(null);
         this.initializeUi(false);
       }
       this.releaseMessageIntent(result.messageId);
@@ -1996,9 +2041,9 @@ export class SecureRoomController {
       this.ackDurableDelivery(result.messageId);
       this.outboundUi.delete(result.messageId);
       this.releaseMessageIntent(result.messageId);
-      applySecureRoomUiV4(engine.state, [], engine.deviceId);
+      this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
       if (content.type === "member-leave" || content.type === "room-close") {
-        useGameStore.getState().setIntentionalLeave(false);
+        this.store.getState().setIntentionalLeave(false);
       }
     }
     this.pumpGrantQueue();
@@ -2019,7 +2064,7 @@ export class SecureRoomController {
       await this.finishTerminal("connection-ended", "Secure membership changed but the relay rejected it. Rejoin with a fresh invitation.", false);
       return;
     }
-    applySecureRoomUiV4(engine.state, [], engine.deviceId);
+    this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
     this.pumpGrantQueue();
   }
 
@@ -2049,7 +2094,7 @@ export class SecureRoomController {
       await engine.completeRelayControl({ kind: "host-transfer-expired", authorizationId });
       this.sentDurableControls.delete(authorizationId);
     }
-    applySecureRoomUiV4(engine.state, [], engine.deviceId);
+    this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
     await this.runAutomations();
     this.pumpGrantQueue();
   }
@@ -2192,7 +2237,7 @@ export class SecureRoomController {
     }
 
     this.roomStateSnapshotReceived = true;
-    applySecureRoomUiV4(engine.state, [], engine.deviceId);
+    this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
   }
 
   private async handleBacklogEnd(lastMessageId: string): Promise<void> {
@@ -2439,7 +2484,7 @@ export class SecureRoomController {
       await engine.completeRelayControl({ kind: "host-changed", deviceId });
       if (control.authorizationId) this.sentDurableControls.delete(control.authorizationId);
     }
-    applySecureRoomUiV4(engine.state, [], engine.deviceId);
+    this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
     await this.runAutomations();
   }
 
@@ -2455,7 +2500,7 @@ export class SecureRoomController {
     if (this.hasMembershipBarrier() && !this.isIntentAllowedDuringMembershipBarrier(intent.key)) return;
     if (this.intentKeys.has(intent.key)) return;
     if (this.grantQueue.length >= MAX_QUEUED_ACTIONS) {
-      useGameStore.getState().showError("Secure action queue is full. Try again in a moment.");
+      this.store.getState().showError("Secure action queue is full. Try again in a moment.");
       return;
     }
     if (!this.rememberIntentKey(intent.key)) return;
@@ -2509,7 +2554,7 @@ export class SecureRoomController {
   private rememberIntentKey(key: string): boolean {
     if (this.intentKeys.has(key)) return false;
     if (this.intentKeys.size >= MAX_TRACKED_OUTBOUND_UI) {
-      useGameStore.getState().showError("Secure action queue is full. Try again in a moment.");
+      this.store.getState().showError("Secure action queue is full. Try again in a moment.");
       return false;
     }
     this.intentKeys.add(key);
@@ -2556,7 +2601,7 @@ export class SecureRoomController {
 
   private applyAcceptedOutbound(ui: OutboundUiResult | null): void {
     const engine = this.requireEngine();
-    applySecureRoomUiV4(ui?.state ?? engine.state, ui?.effects ?? [], engine.deviceId);
+    this.ui.applySecureRoomUiV4(ui?.state ?? engine.state, ui?.effects ?? [], engine.deviceId);
   }
 
   private enqueueBootstrap(admissionId: string): void {
@@ -2763,7 +2808,7 @@ export class SecureRoomController {
     // If the socket closed after the local durable transaction, leave the
     // relay item pending. Resume's authoritative backlog cursor will clear it;
     // throwing here would skip local UI/automation reconciliation.
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    if (!this.socket || this.socket.readyState !== WEBSOCKET_OPEN) return;
     const requestId = randomSecureRoomIdV4(16);
     this.trackTransientControlId(requestId);
     this.sendClientFrame({
@@ -2781,7 +2826,7 @@ export class SecureRoomController {
 
   private sendWire(frame: SecureAuthenticateFrameV4 | SecureClientFrameV4): void {
     const socket = this.socket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("secure socket is not open");
+    if (!socket || socket.readyState !== WEBSOCKET_OPEN) throw new Error("secure socket is not open");
     const wire = JSON.stringify(frame);
     if (UTF8.encode(wire).byteLength > MAX_SECURE_WEBSOCKET_FRAME_BYTES) {
       throw new Error("constructed secure frame exceeds the protocol cap");
@@ -2822,11 +2867,11 @@ export class SecureRoomController {
   private async mapUiAction(type: string, payload: Record<string, unknown>): Promise<void> {
     const engine = this.requireEngine();
     if (!this.authenticated || this.replayingBacklog || !engine.isActive()) {
-      useGameStore.getState().showError("The secure room is reconnecting. Try again in a moment.");
+      this.store.getState().showError("The secure room is reconnecting. Try again in a moment.");
       return;
     }
     if (this.hasMembershipBarrier()) {
-      useGameStore.getState().showError("Securing the fort after a member disconnected. Try again in a moment.");
+      this.store.getState().showError("Securing the fort after a member disconnected. Try again in a moment.");
       return;
     }
     const state = engine.state;
@@ -2897,12 +2942,12 @@ export class SecureRoomController {
         return;
       case "leave":
         if (this.isHost()) return;
-        useGameStore.getState().setIntentionalLeave(true);
+        this.store.getState().setIntentionalLeave(true);
         this.enqueueApplication({ type: "member-leave" }, "member-leave", true);
         return;
       case "knock-down":
         if (!this.isHost()) return;
-        useGameStore.getState().setIntentionalLeave(true);
+        this.store.getState().setIntentionalLeave(true);
         this.enqueueApplication({ type: "room-close", reason: "The host knocked down the fort." }, "room-close", true);
         return;
       case "toss-pillow": {
@@ -2916,7 +2961,7 @@ export class SecureRoomController {
           candidate.targetDeviceId === engine.deviceId && candidate.authorizationId !== null &&
           candidate.acceptMessageId === null);
         if (!control || control.kind !== "transfer-host" || !control.authorizationId) {
-          useGameStore.getState().showError("That host offer is no longer valid.");
+          this.store.getState().showError("That host offer is no longer valid.");
           return;
         }
         this.enqueueApplication(
@@ -3106,8 +3151,8 @@ export class SecureRoomController {
   }
 
   private reportDrawingError(message: string): false {
-    useGameStore.getState().showError(message);
-    window.dispatchEvent(new CustomEvent("pf-drawing-error", { detail: { message } }));
+    this.store.getState().showError(message);
+    this.events.emit("pf-drawing-error", { message });
     return false;
   }
 
@@ -3161,7 +3206,7 @@ export class SecureRoomController {
     const engine = this.requireEngine();
     const existing = engine.pendingCommitSecret(gameId);
     if (existing && (existing.kind !== "rps" || existing.pick !== pick)) {
-      useGameStore.getState().showError("Your encrypted pick for this round is already locked in.");
+      this.store.getState().showError("Your encrypted pick for this round is already locked in.");
       return;
     }
     const nonce = existing?.kind === "rps" ? existing.nonce : randomSecureRoomIdV4(32);
@@ -3362,11 +3407,11 @@ export class SecureRoomController {
 
   private initializeUi(resumed: boolean): void {
     if (this.uiInitialized) {
-      applySecureRoomUiV4(this.requireEngine().state, [], this.requireEngine().deviceId);
+      this.ui.applySecureRoomUiV4(this.requireEngine().state, [], this.requireEngine().deviceId);
       return;
     }
     const engine = this.requireEngine();
-    initializeSecureRoomUiV4({
+    this.ui.initializeSecureRoomUiV4({
       roomId: this.config!.roomId,
       ownDeviceId: engine.deviceId,
       state: engine.state,
@@ -3402,10 +3447,10 @@ export class SecureRoomController {
         this.lease = null;
         this.clearTimers();
         this.resetUiSession();
-        const store = useGameStore.getState();
+        const store = this.store.getState();
         store.showError("This secure room moved to another tab.");
         store.cleanup();
-        useGameStore.getState().setScreen("home");
+        this.store.getState().setScreen("home");
       }, generation);
     }, { once: true });
   }
@@ -3414,7 +3459,7 @@ export class SecureRoomController {
     if (this.reconnectTimer || this.stopped || this.terminal || !this.config || !this.lease?.isActive()) return;
     const delay = Math.min(RECONNECT_MAX_DELAY_MS, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5));
     this.reconnectAttempts += 1;
-    const store = useGameStore.getState();
+    const store = this.store.getState();
     store.setReconnecting(true);
     store.setReconnectAttempts(this.reconnectAttempts);
     const generation = this.generation;
@@ -3468,7 +3513,7 @@ export class SecureRoomController {
     this.localMemberBinding = null;
     this.founderBinding = null;
     this.publishPendingJoinFingerprint(null);
-    useGameStore.getState().setRoomSafetyCode(null);
+    this.store.getState().setRoomSafetyCode(null);
   }
 
   private closeSocket(reason: string): void {
@@ -3507,7 +3552,7 @@ export class SecureRoomController {
         roomInstance: config.setupRoomInstance,
       };
     }
-    persistRecoveryContext(this.recoveryContext);
+    persistRecoveryContext(this.recoveryStorage, this.recoveryContext);
   }
 
   private clearRecoveryForCurrentConfig(config: SessionConfig | null = this.config): void {
@@ -3516,7 +3561,7 @@ export class SecureRoomController {
         this.recoveryContext.roomId === config.roomId &&
         this.recoveryContext.displayName === config.displayName) {
       this.recoveryContext = null;
-      persistRecoveryContext(null);
+      persistRecoveryContext(this.recoveryStorage, null);
     }
     if (config.initialMode === "setup" && this.recoverySetup?.roomId === config.roomId) {
       this.recoverySetup = null;
@@ -3574,7 +3619,7 @@ export class SecureRoomController {
       try { engine?.dispose(); } catch {}
       try { lease?.release(); } catch {}
       this.resetUiSession();
-      if (finalPreserveRecovery && config) useGameStore.getState().setScreen(config.initialMode);
+      if (finalPreserveRecovery && config) this.store.getState().setScreen(config.initialMode);
     }
   }
 
@@ -3602,10 +3647,10 @@ export class SecureRoomController {
   private resetUiSession(): void {
     this.uiInitialized = false;
     this.reconnectAttempts = 0;
-    const store = useGameStore.getState();
+    const store = this.store.getState();
     store.setReconnecting(false);
     store.setReconnectAttempts(0);
-    resetSecureRoomUiV4();
+    this.ui.resetSecureRoomUiV4();
   }
 
   private async protocolClose(_reason: string, userMessage = "The secure connection failed closed."): Promise<void> {
@@ -3616,7 +3661,7 @@ export class SecureRoomController {
         { status: "failed", reason: "recovery-required" },
         true,
       );
-      useGameStore.getState().showError(userMessage);
+      this.store.getState().showError(userMessage);
       return;
     }
     if (this.pendingHandshake || (!this.authenticated && this.engine?.isProvisional)) {
@@ -3625,7 +3670,7 @@ export class SecureRoomController {
         { status: "failed", reason: "authentication-failed" },
         false,
       );
-      useGameStore.getState().showError(userMessage);
+      this.store.getState().showError(userMessage);
       return;
     }
     this.pendingHandshake = null;
@@ -3643,10 +3688,10 @@ export class SecureRoomController {
     this.engine = null;
     this.releaseLease();
     this.clearTimers();
-    const store = useGameStore.getState();
+    const store = this.store.getState();
     store.showError(userMessage);
     store.cleanup();
-    useGameStore.getState().setScreen("home");
+    this.store.getState().setScreen("home");
     this.resetUiSession();
   }
 
@@ -3684,8 +3729,8 @@ export class SecureRoomController {
         { status: "failed", reason: "recovery-required" },
         true,
       );
-      if (config) useGameStore.getState().setScreen(config.initialMode);
-      useGameStore.getState().showError("Secure room cleanup could not finish. Retry with the same password.");
+      if (config) this.store.getState().setScreen(config.initialMode);
+      this.store.getState().showError("Secure room cleanup could not finish. Retry with the same password.");
       return;
     }
     this.clearRecoveryForCurrentConfig(config);
@@ -3694,11 +3739,11 @@ export class SecureRoomController {
     if (this.engine === engine) this.engine = null;
     this.releaseLease();
     this.resetUiSession();
-    const store = useGameStore.getState();
+    const store = this.store.getState();
     store.cleanup();
-    useGameStore.getState().setTerminalPresentation(presentation);
-    useGameStore.getState().setScreen(presentation === "left" ? "home" : "knocked");
-    useGameStore.getState().addSystemMessage(message);
+    this.store.getState().setTerminalPresentation(presentation);
+    this.store.getState().setScreen(presentation === "left" ? "home" : "knocked");
+    this.store.getState().addSystemMessage(message);
   }
 
   private async handleServerError(
@@ -3752,7 +3797,7 @@ export class SecureRoomController {
           !erased,
         );
         if (!erased) {
-          useGameStore.getState().showError(
+          this.store.getState().showError(
             "Secure room cleanup could not finish. Retry with the same password.",
           );
         }
@@ -3797,7 +3842,7 @@ export class SecureRoomController {
         { status: "failed", reason: preserveRecovery ? "recovery-required" : failure.reason },
         preserveRecovery,
       );
-      useGameStore.getState().showError(failure.message);
+      this.store.getState().showError(failure.message);
       return;
     }
     if (frame.code === "room-retired") {
@@ -3810,7 +3855,7 @@ export class SecureRoomController {
     }
     if (frame.code === "delivery-pending" || frame.code === "removal-pending" ||
         frame.code === "admission-pending") {
-      useGameStore.getState().showError(frame.code === "admission-pending"
+      this.store.getState().showError(frame.code === "admission-pending"
         ? "Finishing secure device admission."
         : frame.code === "removal-pending"
           ? "Securing the fort after a member disconnected."
@@ -3837,7 +3882,7 @@ export class SecureRoomController {
     const message = error instanceof SecureRoomEngineError && error.code === "pending-saturated"
       ? "Secure delivery is busy. Wait for pending messages to finish."
       : "That secure action could not be completed.";
-    useGameStore.getState().showError(message);
+    this.store.getState().showError(message);
   }
 
   private requireEngine(): SecureRoomEngine {

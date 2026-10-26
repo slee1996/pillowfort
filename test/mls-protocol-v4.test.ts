@@ -31,7 +31,7 @@ afterAll(async () => {
 describe("OpenMLS protocol-v4 browser adapter", () => {
   it("enforces admission, update, removal, and consumed-generation boundaries", async () => {
     const result = await page.evaluate(async () => {
-      const mls = await import("/src/services/mlsCrypto.ts");
+      const mls = await import("/participant/mlsCrypto.ts");
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       const bytes = (value: number) => new Uint8Array(16).fill(value);
@@ -239,7 +239,7 @@ describe("OpenMLS protocol-v4 browser adapter", () => {
 
   it("authenticates persisted state against tamper, wrong secrets, and room swaps", async () => {
     const result = await page.evaluate(async () => {
-      const mls = await import("/src/services/mlsCrypto.ts");
+      const mls = await import("/participant/mlsCrypto.ts");
       const bytes = (value: number, length = 16) => new Uint8Array(length).fill(value);
       const base64Url = (value: Uint8Array) => {
         let binary = "";
@@ -295,7 +295,7 @@ describe("OpenMLS protocol-v4 browser adapter", () => {
 
   it("rejects malformed and oversized protocol inputs without panicking", async () => {
     const result = await page.evaluate(async () => {
-      const mls = await import("/src/services/mlsCrypto.ts");
+      const mls = await import("/participant/mlsCrypto.ts");
       const bytes = (value: number, length = 16) => new Uint8Array(length).fill(value);
       const base64Url = (value: Uint8Array) => {
         let binary = "";

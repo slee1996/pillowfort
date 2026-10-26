@@ -14,13 +14,13 @@ export {
   isSecureRelayEnvelopeV4,
   parseSecureMemberHelloV4,
   parseSecureRelayEnvelopeV4,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 export type {
   SecureMemberHelloV4,
   SecureRelayEnvelopeV4,
   SecureRelayRouteV4,
   SecureRelayValidationOptions,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 
 // --- Outgoing messages (client → server) ---
 

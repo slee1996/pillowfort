@@ -5,10 +5,10 @@ import {
   type SecureApplicationEventV4,
   type SecureRpsPickV4,
   type SecureRoomStateSnapshotV4,
-} from "../../../src/applicationEventsV4";
+} from "../applicationEventsV4";
 import {
   SECURE_ADMISSION_BUNDLE_HEADER_BYTES_V4,
-} from "../../../src/admissionBundleV4";
+} from "../admissionBundleV4";
 import {
   MAX_MLS_RELAY_PAYLOAD_BYTES,
   SECURE_DEVICE_ID_BYTES,
@@ -17,9 +17,9 @@ import {
   SECURE_ROOM_MLS_CIPHERSUITE,
   SECURE_ROOM_PROTOCOL_VERSION,
   canonicalBase64UrlByteLength,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 import { deriveCryptoRoomInstanceV4 } from "./cryptoStateStore";
-import type { SecureLogicalOrderGrantV4 } from "../../../src/secureRelayV4";
+import type { SecureLogicalOrderGrantV4 } from "../secureRelayV4";
 
 const UTF8 = new TextEncoder();
 const FATAL_UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });

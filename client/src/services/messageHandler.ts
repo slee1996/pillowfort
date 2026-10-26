@@ -1,7 +1,7 @@
 import { useGameStore } from "../stores/gameStore";
 import { playDoorOpen, playDoorClose, playMsgSound } from "../hooks/useSound";
 import { requestWakeLock, releaseWakeLock } from "../hooks/useWakeLock";
-import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem, RoomTheme, FortPassRoomPerks } from "./protocol";
+import type { IncomingMessage, RoomLeaderboards, RoomGameQueue, GameQueueItem, RoomTheme, FortPassRoomPerks } from "../../../src/participant/protocol";
 import { ChatCryptoStateError, decryptChatPayload, roomSafetyCode } from "./chatCrypto";
 import { track, trackOnce } from "./analytics";
 

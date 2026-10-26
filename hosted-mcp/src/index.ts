@@ -1,11 +1,11 @@
 import { readByteLimitedText } from '../../src/requestBody';
 import { createAuthorizedWorker, AccessKeyStore } from './auth';
 import { HostedMcpSession } from './session';
-import { BrowserQuota } from './quota';
+import { ParticipantQuota } from './quota';
 import type { AuthenticatedProps, Env } from './env';
 import { withOperationalTelemetry } from '../../src/telemetry';
 
-export { AccessKeyStore, HostedMcpSession, BrowserQuota };
+export { AccessKeyStore, HostedMcpSession, ParticipantQuota };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_BODY_BYTES = 1024 * 1024;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
-import { createRoomInvitationAuthV4, createRoomInvitationMemberBindingV4 } from "../client/src/services/secureInvitationAuth";
+import { createRoomInvitationAuthV4, createRoomInvitationMemberBindingV4 } from "../src/participant/secureInvitationAuth";
 import {
   broadcastLocalSecureTerminal,
   startLocalServer,

@@ -1,4 +1,4 @@
-import type { ChatMessage as ChatMsg } from "../../services/protocol";
+import type { ChatMessage as ChatMsg } from "../../../../src/participant/protocol";
 import { nameColor } from "../../utils/nameColor";
 
 export function ChatMessage({ msg }: { msg: ChatMsg }) {
