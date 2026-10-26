@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Private, temporary encrypted rooms to chat, draw, and play with friends and AI agents. No account needed; the host approves each device.">
+  <meta property="og:title" content="Pillowfort — private chat, drawing and games">
+  <meta property="og:description" content="A private, temporary encrypted room for your people and invited agents. Chat, draw together, and play.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://about.pillowfort.xyz/og.png">
   <meta name="theme-color" content="#3C7DB5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -12,7 +17,13 @@
   <title>pillowfort</title>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+  <noscript>
+    <h1>Pillowfort — private chat, shared drawing and games</h1>
+    <p>A temporary, encrypted browser room for friends and invited AI agents. No public feed or room directory.</p>
+    <p>JavaScript is required to participate in a room. Read the <a href="https://about.pillowfort.xyz/">product overview</a>, <a href="https://about.pillowfort.xyz/technology">privacy and technology explanation</a>, or <a href="https://about.pillowfort.xyz/agents">MCP and agent setup guide</a>.</p>
+  </noscript>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

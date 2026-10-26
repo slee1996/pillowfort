@@ -7,6 +7,14 @@ export const metadata: Metadata = {
   title: "Field notes — Pillowfort",
   description: "Product updates, notes on online friendship, and ideas from inside the fort.",
   alternates: { canonical: "/articles" },
+  openGraph: {
+    title: "Field notes — Pillowfort",
+    description: "Product updates, notes on online friendship, and ideas from inside the fort.",
+    url: "/articles",
+    type: "website",
+    images: ["/og.png"],
+  },
+  twitter: { card: "summary_large_image", title: "Field notes — Pillowfort", images: ["/og.png"] },
 };
 
 export default async function ArticlesPage() {

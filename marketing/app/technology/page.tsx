@@ -5,6 +5,14 @@ export const metadata: Metadata = {
   title: "Privacy & technology — Pillowfort",
   description: "How Pillowfort’s encrypted, host-approved rooms work, what the relay can see, and what happens when a room closes.",
   alternates: { canonical: "/technology" },
+  openGraph: {
+    title: "Privacy & technology — Pillowfort",
+    description: "How encrypted, host-approved Pillowfort rooms work, what the relay can see, and what happens when a room closes.",
+    url: "/technology",
+    type: "website",
+    images: ["/og.png"],
+  },
+  twitter: { card: "summary_large_image", title: "Privacy & technology — Pillowfort", images: ["/og.png"] },
 };
 
 export default function TechnologyPage() {

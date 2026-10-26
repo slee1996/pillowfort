@@ -898,7 +898,7 @@ export default {
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const handle = async () => {
       const mode: SecurityHeaderMode = isDiscordActivityRequest(request) ? "discord-activity" : "default";
-      return withSecurityHeaders(await handleFetch(request, env), mode);
+      return withSecurityHeaders(await handleFetch(request, env), request, mode);
     };
     return ctx ? withOperationalTelemetry("pillowfort.app", request, env, ctx, handle) : handle();
   },

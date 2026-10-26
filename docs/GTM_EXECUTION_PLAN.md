@@ -114,6 +114,40 @@ Verification completed:
 The downloadable version is a release: bump its version and registry metadata
 for changed runtime/docs instead of replacing an already published artifact.
 
+## Agent discovery maintenance — 2026-10-26
+
+Research and the maintained implementation/provider recipe are in
+[Search and agent discovery](../marketing/README.md#search-and-agent-discovery).
+Google's current guidance treats crawlability, useful indexable content, and
+Search Console as the foundation; it explicitly does not use `llms.txt` as
+special ranking markup. The latter is an on-demand agent documentation index.
+
+The web indexes now derive release information from `server.json`, link to the
+Registry's `versions/latest` endpoint, expose `/agents/server.json`, and distinguish
+the app, hosted MCP, and editor-only CMS. Standard discovery headers, consistent
+site/application metadata, published-only article sitemaps, and private-document
+noindex policies complement the files. Published agent 1.1.1 bytes are unchanged.
+
+Actual local Worker/browser verification used an isolated D1 database with a
+published article and a private draft: only the publication appeared in the
+sitemap, its canonical/social metadata resolved to the article, and the draft
+returned 404. Database-unavailable sitemap responses return 503, not an empty
+success. Both application runtimes exclude room documents from indexing.
+
+The live baseline still has a provider-level gap: default Python `urllib`
+receives 403 / Cloudflare 1010 on public docs and public OAuth metadata, while
+identified Node requests and an OAI-SearchBot-style user-agent return 200.
+The latter does not prove access from real crawler IPs. The narrow BIC-only
+public-read exception documented above needs zone security write access;
+origin code and Wrangler's `zone:read` cannot apply it. Do not mark this resolved
+until default Python requests work and private/auth/training restrictions remain
+intact. Never disable those controls to improve a directory badge.
+
+Search Console ownership, sitemap processing, actual search/answer-engine
+citations, and the historical Glama health investigation remain unverified.
+Files, schema, synthetic fixtures, and successful package installs are not
+evidence of ranking, recommendations, or pilot adoption.
+
 ## Hosted MCP and WebMCP release
 
 The browserless cutover was deployed and verified in production on 2026-09-10:

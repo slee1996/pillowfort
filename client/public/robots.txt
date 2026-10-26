@@ -1,0 +1,8 @@
+# Room documents send noindex headers; robots.txt is not an authorization boundary.
+# Production Cloudflare-managed training-crawler restrictions remain separate.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /ws
+
+Sitemap: https://pillowfort.xyz/sitemap.xml

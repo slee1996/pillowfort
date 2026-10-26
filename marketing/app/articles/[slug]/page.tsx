@@ -12,6 +12,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: `${article.title} — Pillowfort`,
     description: article.summary,
     alternates: { canonical: `/articles/${article.slug}` },
+    openGraph: {
+      title: article.title,
+      description: article.summary,
+      url: `/articles/${article.slug}`,
+      type: "article",
+      publishedTime: article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined,
+      modifiedTime: new Date(article.updatedAt).toISOString(),
+      images: ["/og.png"],
+    },
+    twitter: { card: "summary_large_image", title: article.title, description: article.summary, images: ["/og.png"] },
   } : {};
 }
 

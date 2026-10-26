@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 
-async function render(pathname = "/", headers = {}, origin = "http://localhost") {
+async function render(pathname = "/", headers = {}, origin = "http://localhost", extraEnv = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
     new Request(`${origin}${pathname}`, { headers: { accept: "text/html", ...headers } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) }, ...extraEnv },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
@@ -28,14 +29,51 @@ async function postCms(headers = {}, pathname = "/api/cms", body = "action=delet
   );
 }
 
-test("server-renders the Pillowfort landing page and product metadata", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+test("public pages identify their own canonical URL and social preview instead of another page", async () => {
+  for (const path of ["/", "/technology", "/agents", "/articles"]) {
+    const response = await render(path);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const canonical = html.match(/<link\b[^>]*rel="canonical"[^>]*>/i)?.[0].match(/href="([^"]+)"/i)?.[1];
+    const preview = html.match(/<meta\b[^>]*property="og:url"[^>]*>/i)?.[0].match(/content="([^"]+)"/i)?.[1];
+    assert.equal(new URL(canonical).href, new URL(`https://about.pillowfort.xyz${path}`).href);
+    assert.equal(new URL(preview).href, new URL(canonical).href);
+  }
+  const comparison = await render("/?look=xp");
+  const html = await comparison.text();
+  assert.match(html, /<meta\b[^>]*name="robots"[^>]*content="[^"]*noindex/i);
+});
 
-  const html = await response.text();
-  assert.match(html, /https:\/\/pillowfort\.xyz/);
-  assert.match(html, /property="og:image"[^>]+\/og\.png/i);
+test("the sitemap includes published articles with real modification dates but never drafts", async () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("CREATE TABLE articles (slug TEXT, status TEXT, updated_at INTEGER)");
+    const updated = Date.UTC(2026, 9, 24, 12);
+    const insert = db.prepare("INSERT INTO articles VALUES (?, ?, ?)");
+    insert.run("published-note", "published", updated);
+    insert.run("draft-not-public", "draft", updated);
+    insert.run("legacy & note", "published", updated);
+    const response = await render("/sitemap.xml", {}, "http://localhost", {
+      DB: { prepare(sql) { return { async all() { return { results: db.prepare(sql).all() }; } }; } },
+    });
+    assert.equal(response.status, 200);
+    const xml = await response.text();
+    const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1]);
+    assert(locations.includes("https://about.pillowfort.xyz/articles/published-note"));
+    assert(locations.includes("https://about.pillowfort.xyz/articles/legacy%20%26%20note"));
+    assert(!xml.includes("draft-not-public"));
+    assert(xml.includes(`<lastmod>${new Date(updated).toISOString()}</lastmod>`));
+    for (const location of locations) assert.equal(new URL(location).origin, "https://about.pillowfort.xyz");
+  } finally {
+    db.close();
+  }
+});
+
+test("a database outage does not advertise a misleading empty article sitemap", async () => {
+  const response = await render("/sitemap.xml");
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert(!(await response.text()).includes("<urlset"));
 });
 
 test("old marketing links move without forwarding credential-bearing requests", async () => {
