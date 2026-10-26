@@ -208,6 +208,11 @@ As of this document:
 - Production room creation uses a Durable Object-backed five-per-minute source
   limit; local development applies the equivalent in-memory limit.
 - Premium room themes are available only through active Fort Pass entitlements.
+- Opt-in OTel may retain aggregate room-creation/retirement, admission and
+  encrypted-application-event counts in Prometheus for seven days. These have
+  fixed service/environment/activity labels, no room/device/member identifiers,
+  and no contents. Activity events are not stored as room traces in Tempo.
+  Counts are best-effort operational metadata, not durable per-room history.
 
 This is acceptable for beta only if product copy distinguishes encrypted room
 content from unavoidable relay metadata and does not promise transcript restore

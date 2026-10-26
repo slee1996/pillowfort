@@ -1,10 +1,10 @@
 {
   "uid": "pillowfort-operational",
-  "title": "Pillowfort · Operational RED",
-  "description": "Received, allowlisted server spans only. Sampling and collector availability affect these metrics. Room traffic, retention, billing, and product analytics are deliberately outside this dashboard.",
+  "title": "Pillowfort · Operations and room volume",
+  "description": "Allowlisted HTTP traces and unsampled aggregate room/application-event counts. Best-effort operational signals, not billing, unique-user, or chat-only analytics.",
   "tags": ["pillowfort", "operational"],
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "refresh": "30s",
   "timezone": "browser",
@@ -41,7 +41,7 @@
       "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
       "options": {
         "mode": "markdown",
-        "content": "**Received operational spans—not total product activity.** Room/WebSocket traffic is excluded. Sampling is not extrapolated; empty charts do not prove zero traffic. Errors mean HTTP 5xx. Test data is isolated by environment. Retention: approximately 7 days. Collector counters reset on restart."
+        "content": "**Received HTTP spans—not total product activity.** These HTTP panels exclude Room/WebSocket traffic; aggregate room volume is shown separately below. HTTP sampling is not extrapolated; empty charts do not prove zero traffic. Errors mean HTTP 5xx. Test data is isolated by environment. Retention: approximately 7 days. Collector counters reset on restart."
       }
     },
     {
@@ -108,6 +108,62 @@
         "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20,
         "query": "{ resource.service.name =~ \"$service\" && resource.deployment.environment.name = \"$environment\" && name = \"http.server.request\" }"
       }]
+    },
+    {
+      "id": 7, "type": "text", "title": "Room and encrypted-message volume",
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 4},
+      "options": {
+        "mode": "markdown",
+        "content": "**App-only, unsampled count events—not chat transcripts.** Encrypted application events include chat, presence, typing, drawing and games; the relay cannot distinguish their contents. New admissions exclude founders and resumes. Retries, delivery ACKs, replay backlogs and recipient fanout do not add message counts. Stat totals are received events since the collector reset, not all-time totals or selected-range totals. Rate charts use the time picker. Export can drop events; missing data is not zero. No historical backfill, per-room identities, or active-room estimates."
+      }
+    },
+    {
+      "id": 8, "type": "stat", "title": "Rooms created · collector total",
+      "gridPos": {"x": 0, "y": 33, "w": 6, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"colorMode": "none", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"refId": "A", "instant": true, "expr": "sum(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=\"room.created\"})"}]
+    },
+    {
+      "id": 9, "type": "stat", "title": "Rooms retired · collector total",
+      "gridPos": {"x": 6, "y": 33, "w": 6, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"colorMode": "none", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"refId": "A", "instant": true, "expr": "sum(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=\"room.retired\"})"}]
+    },
+    {
+      "id": 10, "type": "stat", "title": "New member admissions · collector total",
+      "gridPos": {"x": 12, "y": 33, "w": 6, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"colorMode": "none", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"refId": "A", "instant": true, "expr": "sum(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=\"member.admitted\"})"}]
+    },
+    {
+      "id": 11, "type": "stat", "title": "Encrypted application events · collector total",
+      "gridPos": {"x": 18, "y": 33, "w": 6, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"colorMode": "none", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}},
+      "targets": [{"refId": "A", "instant": true, "expr": "sum(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=\"application.accepted\"})"}]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Accepted encrypted application events / second",
+      "gridPos": {"x": 0, "y": 38, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"refId": "A", "expr": "sum(rate(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=\"application.accepted\"}[$__rate_interval]))", "legendFormat": "accepted encrypted application events"}]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Room lifecycle and admissions / second",
+      "gridPos": {"x": 12, "y": 38, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"refId": "A", "expr": "sum by (pillowfort_activity) (rate(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=~\"room[.](created|retired)|member[.]admitted\"}[$__rate_interval]))", "legendFormat": "{{pillowfort_activity}}"}]
     }
   ],
   "links": [{"title": "Trace lookup in Explore", "url": "/explore?left=%7B%22datasource%22%3A%22pillowfort-tempo%22%7D", "targetBlank": false}]

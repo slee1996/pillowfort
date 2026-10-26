@@ -306,3 +306,30 @@ tunnel/DNS route to authenticated ingress, configure the OTLP endpoint and
 authorization secret on each Worker, then enable export and verify a production
 span. Do not configure a temporary Quick Tunnel as the permanent destination.
 The current workstation stack is not an always-on hosted monitoring service.
+
+## Room-volume observability — 2026-10-26
+
+- Added opt-in, unsampled room-created/retired, new-member-admitted and accepted
+  encrypted-application counts to the Worker DO and local Bun runtime. These
+  contain no room/device/member identity or content and do not claim chat-only,
+  all-time, active-room or unique-user totals.
+- A separate collector pipeline aggregates the count events without storing
+  activity traces in Tempo. Prometheus and the existing Grafana dashboard now
+  include the volume counters; HTTP sampling does not reduce them.
+- Real workerd execution reproduced a silent export failure: its fetch API
+  rejects `redirect: "error"`. Manual redirect handling preserves the existing
+  no-credential-forwarding policy while allowing export.
+- Real Grafana 13.2.1 reproduced a bundled-plugin auto-update failure against the
+  read-only filesystem. Disabling background plugin auto-updates keeps the
+  reviewed image's Prometheus/Tempo plugins registered without making the image
+  writable or weakening authentication.
+- An isolated authenticated stack received a real encrypted host/guest workflow
+  from the app Worker at HTTP trace sample rate zero: one room creation, one
+  retirement, one new admission and three ordinary encrypted application events.
+  These synthetic `test` counts were queried through Grafana and visually
+  checked. They are not production adoption or historical usage measurements.
+- Production activation still requires the existing stable authenticated-ingress
+  prerequisite. Wrangler login is not named-tunnel authorization; the local
+  `cloudflared` command found no origin certificate. Do not use a Quick Tunnel
+  as a permanent production destination.
+

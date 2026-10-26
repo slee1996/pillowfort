@@ -498,22 +498,35 @@ Building or testing locally does not publish npm packages or deploy Workers.
 
 ## Operational telemetry
 
-`src/telemetry.ts` provides explicit, opt-in OpenTelemetry server spans for the
-app, marketing Worker, and hosted MCP. Production export is disabled until a
-stable authenticated collector endpoint is configured.
+`src/telemetry.ts` provides opt-in HTTP server traces for the app, marketing and
+hosted MCP, plus unsampled aggregate room-volume events in the app Worker and
+local Bun runtime. Production export stays disabled until a stable authenticated
+collector endpoint is configured.
 
-Only allowlisted service/environment/version, operation category, HTTP method,
-status and duration are exported. No automatic instrumentation or incoming trace
-context is used. Room/WebSocket routes are excluded. URLs, room IDs, identities,
-IP addresses, credentials, request/response bodies, tool arguments/results,
-messages, drawings, exception messages and stacks are not exported.
+HTTP traces contain only allowlisted service/environment/version, operation
+category, method, status and duration. Room/WebSocket requests are not traced.
+There is no automatic instrumentation or incoming trace context. URLs, room IDs,
+identities, IP addresses, credentials, bodies, tool arguments/results, message or
+drawing content, exception messages and stacks are never exported.
 
-The pinned open-source stack in `observability/compose.yaml` uses Caddy,
-OpenTelemetry Collector, Tempo, Prometheus and Grafana. The collector applies an
-independent allowlist before storage and derives operational metrics from received
-spans. These are sampled request signals, **not** cohort, retention or room-usage
-analytics. Export is bounded and best-effort; collector failure must not fail a
-product request.
+The pinned Caddy/Collector/Tempo/Prometheus/Grafana stack independently validates
+and sanitizes input. HTTP spans go to Tempo and sampled operational metrics.
+The separate `pillowfort.volume` instrumentation scope carries only four fixed
+count-event names over OTLP. Its collector pipeline produces
+`pillowfort_volume_calls_total` and **does not store room-activity traces in
+Tempo**. No room/device/session labels or per-room history are collected.
+
+The dashboard shows rooms created/retired, new member admissions and accepted
+encrypted application events, plus rates. Application events include chat,
+typing, presence, drawing and games: the server cannot identify chat-only volume.
+Retransmissions, delivery ACKs, replay backlogs and recipient fanout do not add
+message counts. See [metric definitions](docs/PRODUCTION_MONITORING.md#room-and-message-volume).
+
+Volume counts are independent of HTTP trace sampling, including at
+`OTEL_SAMPLE_RATE=0`; `OTEL_ENABLED=false` disables both. Export is bounded and
+best-effort, so these are observed operational counts—not billing, all-time,
+unique-user, retention or active-room metrics. Missing data is not zero. There
+is no historical backfill. Collector failures must not affect room operations.
 
 This workstation's private configuration is in
 `~/.config/pillowfort/observability.json` and `observability.env`, mode 0600.
@@ -532,6 +545,13 @@ Named Docker volumes persist traces, metrics and dashboard state; configured
 trace/metric retention is seven days. Do not use `docker compose down -v` unless
 deleting that history is intended. A workstation deployment stops serving when
 the machine or Docker stops; use an always-on host for continuous monitoring.
+
+The Grafana container keeps its read-only filesystem and disables background
+plugin auto-updates. Otherwise Grafana 13 can unload bundled datasource plugins
+before a failed read-only update, leaving dashboards unable to query
+([upstream defect](https://github.com/grafana/grafana/issues/132528)).
+Update the reviewed image/plugin versions deliberately; do not make the image
+writable or disable authentication to repair this failure.
 
 For Cloudflare Workers, put a **named Cloudflare Tunnel** in front of ingress,
 not Grafana. Tunnel authorization must complete before creating the stable DNS

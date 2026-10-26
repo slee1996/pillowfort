@@ -1,9 +1,47 @@
 # Production Monitoring
 
-Pillowfort currently uses privacy-safe structured log lines instead of a full
-metrics backend. Operational events are emitted as `[analytics]` JSON lines with
-bounded names and sanitized props. They intentionally avoid room passwords,
-message text, names, custom codes, checkout IDs, IP addresses, and user agents.
+Pillowfort has opt-in OpenTelemetry traces and aggregate room-volume metrics,
+alongside privacy-safe `[analytics]` structured logs. Production OTel export
+requires a stable authenticated collector ingress; instrumentation being deployed
+does not mean production collection is enabled. Neither path exports message
+contents, identities, room codes, credentials or invitation material.
+
+## Room and message volume
+
+The Grafana **Pillowfort · Operations and room volume** dashboard uses
+`pillowfort_volume_calls_total`, split only by fixed activity, service and
+environment labels (plus fixed collector/scope labels).
+
+| `pillowfort_activity` | What increments it |
+| --- | --- |
+| `room.created` | A new protocol-v4 room successfully commits its initial state. DO construction, hibernation restores and rejected setup do not count. |
+| `room.retired` | An open room commits retirement or is successfully removed by idle cleanup. Repeated close ACKs and subsequent cleanup do not count again. |
+| `member.admitted` | A new member's join proof is accepted and published after host approval. Founders, resumes and replayed approvals do not count. |
+| `application.accepted` | A new ordinary encrypted application event is accepted and published, once regardless of recipient count. Includes chat, typing, presence, drawing and games—not chat-only messages. |
+
+Both the production room DO and local Bun server emit these counts after their
+authoritative state boundary. Retry acknowledgements, delivery acknowledgements,
+backlog replay, welcome/bootstrap, membership commits and host-transfer control
+frames do not add ordinary application-event counts. Plaintext is not inspected
+and no room, member, device, session or invitation identifier enters the exporter.
+
+Count events use an always-on sampler, independently of HTTP trace sampling.
+They travel over OTLP's trace transport to a dedicated collector pipeline that
+validates the fixed vocabulary and strips other fields. It aggregates counters
+without sending these events to Tempo or attaching trace exemplars.
+
+Dashboard stat totals are received events since collector reset, not selected
+range totals or lifetime product totals. Rate charts follow the time picker.
+The four bounded counter streams do not expire merely because a room goes idle;
+collector restart resets them. Prometheus retains scraped history for seven
+days. Export is bounded/best-effort and can drop events under overload or outage.
+Missing series mean unknown coverage, not zero usage. Never infer current
+occupancy from creations minus retirements: collection may start mid-room.
+
+Set `OTEL_ENABLED=false` to stop all export. `OTEL_SAMPLE_RATE=0` stops HTTP
+traces but intentionally leaves aggregate volume enabled. Follow the root
+[operational setup](../README.md#operational-telemetry) before enabling production.
+No production room-volume history can be recovered from before collection.
 
 ## Operational Buckets
 
@@ -25,6 +63,11 @@ Watch these event names in Cloudflare logs:
   first-game prompts.
 - `discord_activity_detected`: Activity launch context was detected without
   logging Discord IDs.
+
+This catalog includes legacy room-funnel names. Protocol-v4 private room paths
+do not emit those setup/join log events; use the aggregate counters above for
+volume, not absent legacy logs. The thresholds below are operator guidance,
+not alerting rules provisioned by this repository.
 
 ## Suggested Alert Thresholds
 
