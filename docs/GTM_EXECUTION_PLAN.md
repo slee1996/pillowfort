@@ -116,6 +116,34 @@ for changed runtime/docs instead of replacing an already published artifact.
 
 ## Hosted MCP and WebMCP release
 
+The browserless cutover was deployed and verified in production on 2026-09-10:
+
+- App: `f4c7628a-99fe-4d21-80f9-36ad7f0db6ee`.
+- Hosted MCP: `9bda0d7e-894b-457b-b824-14bcc60bb384`.
+- Marketing/docs: `9f0b8aa7-8d1a-418b-a123-c51efb82108e`.
+
+All MCP ingress was blocked while the legacy Worker and its alarms remained
+running. The drain lasted 888 seconds; managed-browser inventory was empty
+before and after the native verification. Existing Durable Object namespaces,
+authorization secrets, and the global quota ledger were preserved. No browser
+binding remains in hosted MCP.
+
+Production enforces a native PBKDF2 limit absent from local workerd. The shared
+engine now retains exactly 600,000 PBKDF2-HMAC-SHA256 iterations using pinned
+portable code when native derivation is unsupported. Derived-key equivalence
+is regression-tested. Hosted CPU is capped at 30 seconds; the existing
+2-session/60-session-minute budgets are unchanged.
+
+Live verification covered native/native/browser fingerprint admission, two-way
+encrypted chat and drawing, native PNG export, Breakout, RPS commit/reveal,
+Tic-Tac-Toe, relay-authorized host transfer, room teardown, MCP DELETE, and
+rejection of closed sessions. Public authenticated initialization and tool
+discovery passed after maintenance was removed; unauthenticated MCP returns
+401 and health returns 200. The temporary gate was deleted and its dedicated
+verification operator key was revoked. These synthetic checks are not pilot users.
+
+The historical browser-backed release record follows.
+
 - Hosted endpoint: `https://mcp.pillowfort.xyz/mcp`; Worker `pillowfort-mcp`.
 - Local package: `@ontologic/pillowfort-agent@1.1.0`; existing releases remain intact.
 - Native WebMCP: actual browser API registration, tested in Chrome152 with

@@ -79,6 +79,18 @@ export type OpaqueCryptoStateMoveResult =
   | { moved: false; reason: "source-revision-conflict"; currentRevision: number | null }
   | { moved: false; reason: "destination-exists"; currentRevision: number };
 
+/** Atomic opaque-state operations required by the shared MLS participant engine. */
+export interface RoomCryptoStateStore {
+  loadOpaqueState(key: string): Promise<OpaqueCryptoStateSnapshot | null>;
+  createProvisionalOpaqueState(key: string, roomScope: string, state: Uint8Array): Promise<OpaqueCryptoStateCommitResult>;
+  compareAndSetOpaqueState(key: string, expectedRevision: number | null, state: Uint8Array): Promise<OpaqueCryptoStateCommitResult>;
+  markOpaqueStateAuthenticationAmbiguous(key: string, expectedRevision: number): Promise<OpaqueCryptoStateCommitResult>;
+  markOpaqueStateEstablished(key: string, expectedRevision: number): Promise<OpaqueCryptoStateCommitResult>;
+  compareAndDeleteOpaqueState(key: string, expectedRevision: number): Promise<OpaqueCryptoStateEraseResult>;
+  compareAndMoveOpaqueState(source: string, expectedRevision: number, destination: string, roomScope?: string): Promise<OpaqueCryptoStateMoveResult>;
+  close(): Promise<void>;
+}
+
 export interface LegacyReplayMigrationInput {
   roomId: string;
   roomInstance: string;
@@ -466,7 +478,7 @@ export async function deriveCryptoRoomInstanceV4(
   }
 }
 
-export class CryptoStateStore {
+export class CryptoStateStore implements RoomCryptoStateStore {
   private readonly factory: IDBFactory | null;
   private readonly cryptoProvider: Crypto | null;
   private readonly databaseName: string;
@@ -1259,5 +1271,138 @@ export class CryptoStateStore {
       await done.catch(() => {});
       throw transactionError(error);
     }
+  }
+}
+
+/**
+ * Ephemeral participant custody. Mutations have no await boundary, so revision
+ * checks and replacement are atomic within the owning isolate. Never persists keys.
+ */
+export class MemoryCryptoStateStore implements RoomCryptoStateStore {
+  private readonly records = new Map<string, OpaqueCryptoStateSnapshot>();
+  private closed = false;
+
+  private check(key: string, revision?: number | null): void {
+    if (this.closed) throw new CryptoStateStoreError("transaction-failed", "Participant state store is closed");
+    validateRoomInstance(key);
+    if (revision !== undefined && revision !== null && (!Number.isSafeInteger(revision) || revision < 1)) {
+      throw new CryptoStateStoreError("invalid-input", "invalid expected cryptographic state revision");
+    }
+  }
+
+  private checkPayload(state: Uint8Array): void {
+    if (!(state instanceof Uint8Array) || state.byteLength < 1 || state.byteLength > MAX_OPAQUE_STATE_BYTES) {
+      throw new CryptoStateStoreError("invalid-input", "invalid opaque cryptographic state payload");
+    }
+  }
+
+  async loadOpaqueState(key: string): Promise<OpaqueCryptoStateSnapshot | null> {
+    this.check(key);
+    const record = this.records.get(key);
+    return record ? { ...record, state: record.state.slice() } : null;
+  }
+
+  async createProvisionalOpaqueState(key: string, roomScope: string, state: Uint8Array): Promise<OpaqueCryptoStateCommitResult> {
+    this.check(key);
+    this.check(roomScope);
+    this.checkPayload(state);
+    if (key === roomScope) throw new CryptoStateStoreError("invalid-input", "invalid provisional cryptographic state scope");
+    const previous = this.records.get(key);
+    if (previous) return { committed: false, reason: "revision-conflict", currentRevision: previous.revision };
+    let pending = 0;
+    let scoped = 0;
+    for (const record of this.records.values()) {
+      if (record.roomScope && record.lifecycle !== "established") {
+        pending++;
+        if (record.roomScope === roomScope) scoped++;
+      }
+    }
+    if (pending >= MAX_PROVISIONAL_STATES_GLOBAL || scoped >= MAX_PROVISIONAL_STATES_PER_ROOM) {
+      return { committed: false, reason: "provisional-saturated", currentRevision: null };
+    }
+    this.records.set(key, { revision: 1, state: state.slice(), updatedAt: Date.now(), roomScope, lifecycle: "provisional" });
+    return { committed: true, revision: 1 };
+  }
+
+  async compareAndSetOpaqueState(key: string, expectedRevision: number | null, state: Uint8Array): Promise<OpaqueCryptoStateCommitResult> {
+    this.check(key, expectedRevision);
+    this.checkPayload(state);
+    const previous = this.records.get(key);
+    const currentRevision = previous?.revision ?? null;
+    if (currentRevision !== expectedRevision) return { committed: false, reason: "revision-conflict", currentRevision };
+    const revision = (currentRevision ?? 0) + 1;
+    if (!Number.isSafeInteger(revision)) throw new CryptoStateStoreError("transaction-failed", "cryptographic state revision exhausted");
+    const copiedState = state.slice();
+    previous?.state.fill(0);
+    this.records.set(key, {
+      revision, state: copiedState, updatedAt: Date.now(),
+      ...(previous?.roomScope ? { roomScope: previous.roomScope, lifecycle: previous.lifecycle } : {}),
+    });
+    return { committed: true, revision };
+  }
+
+  private mark(key: string, expectedRevision: number, lifecycle: "authentication-ambiguous" | "established"): OpaqueCryptoStateCommitResult {
+    this.check(key, expectedRevision);
+    const record = this.records.get(key);
+    if (!record || record.revision !== expectedRevision) {
+      return { committed: false, reason: "revision-conflict", currentRevision: record?.revision ?? null };
+    }
+    if (!record.roomScope || record.lifecycle === "established" || record.lifecycle === lifecycle) {
+      return { committed: true, revision: record.revision };
+    }
+    const revision = record.revision + 1;
+    if (!Number.isSafeInteger(revision)) throw new CryptoStateStoreError("transaction-failed", "cryptographic state revision exhausted");
+    record.revision = revision;
+    record.lifecycle = lifecycle;
+    record.updatedAt = Date.now();
+    return { committed: true, revision };
+  }
+
+  async markOpaqueStateAuthenticationAmbiguous(key: string, expectedRevision: number): Promise<OpaqueCryptoStateCommitResult> {
+    return this.mark(key, expectedRevision, "authentication-ambiguous");
+  }
+
+  async markOpaqueStateEstablished(key: string, expectedRevision: number): Promise<OpaqueCryptoStateCommitResult> {
+    return this.mark(key, expectedRevision, "established");
+  }
+
+  async compareAndDeleteOpaqueState(key: string, expectedRevision: number): Promise<OpaqueCryptoStateEraseResult> {
+    this.check(key, expectedRevision);
+    const record = this.records.get(key);
+    if (!record || record.revision !== expectedRevision) {
+      return { erased: false, reason: "revision-conflict", currentRevision: record?.revision ?? null };
+    }
+    record.state.fill(0);
+    this.records.delete(key);
+    return { erased: true, revision: expectedRevision };
+  }
+
+  async compareAndMoveOpaqueState(source: string, expectedRevision: number, destination: string, roomScope?: string): Promise<OpaqueCryptoStateMoveResult> {
+    this.check(source, expectedRevision);
+    this.check(destination);
+    if (roomScope !== undefined) this.check(roomScope);
+    if (source === destination) throw new CryptoStateStoreError("invalid-input", "invalid opaque cryptographic state migration");
+    const record = this.records.get(source);
+    if (!record || record.revision !== expectedRevision) {
+      return { moved: false, reason: "source-revision-conflict", currentRevision: record?.revision ?? null };
+    }
+    const existing = this.records.get(destination);
+    if (existing) return { moved: false, reason: "destination-exists", currentRevision: existing.revision };
+    if (record.roomScope && roomScope && record.roomScope !== roomScope) {
+      throw new CryptoStateStoreError("invalid-input", "opaque state migration changed its room scope");
+    }
+    if (!record.roomScope && roomScope) {
+      record.roomScope = roomScope;
+      record.lifecycle = "established";
+    }
+    this.records.set(destination, record);
+    this.records.delete(source);
+    return { moved: true, revision: record.revision };
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    for (const record of this.records.values()) record.state.fill(0);
+    this.records.clear();
   }
 }

@@ -4,7 +4,7 @@ import { copyTextWithFallback } from "../../services/clipboard";
 import { track } from "../../services/analytics";
 import { showToast } from "../xp/Toast";
 import { PeriodIcon } from "../xp/PeriodIcon";
-import { createRoomInvitationUrl } from "../../services/roomInvitation";
+import { createRoomInvitationUrl } from "../../../../src/participant/roomInvitation";
 import { Input } from "../xp/Input";
 import { Button } from "../xp/Button";
 

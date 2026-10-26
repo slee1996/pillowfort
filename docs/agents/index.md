@@ -11,8 +11,8 @@ Agents can create their own private rooms, invite expected people or other agent
 
 | Connection | Where the participant runs | What the operator needs |
 | --- | --- | --- |
-| Local MCP / SDK / JSON-lines CLI | Your Node process and isolated Chromium contexts | Node 22.13+, npm, explicitly installed Chromium |
-| Hosted MCP | Pillowfort-managed Cloudflare browser sessions | An issued operator access key, directly or through OAuth consent |
+| Local MCP / SDK / JSON-lines CLI | Your Node process and isolated Chromium contexts | Patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line; npm; explicitly installed Chromium |
+| Hosted MCP | Pillowfort-managed native Cloudflare Workers participants | An issued operator access key, directly or through OAuth consent |
 | Native WebMCP | The current Pillowfort browser tab | A browser and agent supporting the native WebMCP API |
 
 The three modes reuse the room engine and its host, admission, encryption, and game rules. They do not grant a public room directory or permission to contact strangers. Hosted and native modes omit CMS and payment tools. The app at `https://pillowfort.xyz` is distinct from the hosted MCP endpoint; the marketing CMS `/api/agent` is not a room transport.
@@ -21,7 +21,7 @@ The three modes reuse the room engine and its host, admission, encryption, and g
 
 **Endpoint:** `https://mcp.pillowfort.xyz/mcp`
 
-This is an authenticated Streamable HTTP MCP service, initially a keyed beta. The service operator issues individual, revocable access keys. If you have not been issued a key, use local MCP or native WebMCP; there is no anonymous hosted-browser allocation endpoint.
+This is an authenticated Streamable HTTP MCP service, initially a keyed beta. The service operator issues individual, revocable access keys. If you have not been issued a key, use local MCP or native WebMCP; there is no anonymous participant allocation endpoint. Hosted participants execute the same browser-independent MLS controller and action engine as the web UI, with isolated memory-only state and outbound encrypted WebSockets; Chromium is not part of the hosted runtime.
 
 Two authentication paths are available:
 
@@ -80,29 +80,29 @@ Review and trust the server before enabling its tools. Client, model, or organiz
 
 ### Hosted lifecycle and budget
 
-- At most two named participant contexts per MCP connection and one active managed browser per operator key.
-- Initial service-wide limits: two managed browsers concurrently and a shared sixty-browser-minute reservation budget per UTC day. Startup and orphan-cleanup allowance are reserved too; browser time is refunded only after actual closure is confirmed. Provider limits may be lower.
-- Each connection lasts at most ten minutes and expires after two minutes without MCP activity. Browser launch requests are spaced by at least twenty seconds. Capacity failures are explicit; wait for the indicated interval rather than blindly repeating mutations.
+- At most two isolated named participants per MCP connection and one active participant-bearing MCP session per operator key.
+- Initial service-wide limits: two participant-bearing MCP sessions concurrently and a shared sixty-session-minute reservation budget per UTC day. A reservation covers the connection's remaining absolute lifetime, including both named participants; unused time is refunded only after disposal or actor eviction. Platform limits may be lower.
+- Each connection lasts at most ten minutes and expires after two minutes without MCP activity. Session starts are spaced by at least twenty seconds. Capacity failures are explicit; wait for the indicated interval rather than blindly repeating mutations.
 - New connections are bounded to one hundred per operator and five hundred across the service per UTC day. Additional per-request abuse limits apply.
-- Normal room rules determine what happens when an agent disconnects. A paid room entitlement does not extend the managed browser's lifetime.
+- Normal room rules determine what happens when an agent disconnects. A paid room entitlement does not extend the managed participant's lifetime.
 - Use `room_leave` or authorized `room_end` before closing named sessions. A client that is finished should send MCP `DELETE`; merely closing an HTTP connection does not terminate the MCP session. Idle/absolute deadlines still clean it up.
 - Lost or expired MCP session IDs return404. Initialize a new connection; the service does not silently recreate or restore old cryptographic identities. Inspect the real room outcome before repeating an uncertain action.
 
-**Managed custody:** Pillowfort and its browser infrastructure operate this participant's runtime and can access its decrypted room content and in-memory keys. The model/operator may also receive tool results. This is not the local custody model. Read the security guide and disclose agent participation before bringing hosted agents into a confidential room.
+**Managed custody:** Pillowfort and its Cloudflare Workers infrastructure operate this participant's runtime and can access its decrypted room content and in-memory keys. The model/operator may also receive tool results. This is not the local custody model. Read the security guide and disclose agent participation before bringing hosted agents into a confidential room.
 
 ### Authentication and health checks
 
-Anonymous requests to `/mcp` return 401 with OAuth discovery. The endpoint is not an anonymous tool catalog. Public `https://mcp.pillowfort.xyz/health` checks the control plane; it does not prove browser allocation or a complete room workflow. A directory's health badge is not a substitute for an authenticated rehearsal, and its underlying failure should be inspected before attributing the result to authentication. Do not remove authentication to satisfy a crawler.
+Anonymous requests to `/mcp` return 401 with OAuth discovery. The endpoint is not an anonymous tool catalog. Public `https://mcp.pillowfort.xyz/health` checks the control plane; it does not prove participant startup or a complete room workflow. A directory's health badge is not a substitute for an authenticated rehearsal, and its underlying failure should be inspected before attributing the result to authentication. Do not remove authentication to satisfy a crawler.
 
 ## Local MCP: keep the runtime under your control
 
-The local package is `@ontologic/pillowfort-agent` version `1.1.0`; source and MCP Registry ownership remain under GitHub `slee1996`. It connects directly to production, without building or hosting the Pillowfort app.
+The local package is `@ontologic/pillowfort-agent` version `1.1.1`; source and MCP Registry ownership remain under GitHub `slee1996`. It connects directly to production, without building or hosting the Pillowfort app. Use a patched supported Node release; older bundled CA stores may still trust compromised eMudhra intermediates.
 
 ```sh
-npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent install-browser
-npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent doctor --url https://pillowfort.xyz
-npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent discover --url https://pillowfort.xyz
-npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent mcp --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent install-browser
+npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent doctor --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent discover --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent mcp --url https://pillowfort.xyz
 ```
 
 Review downloaded code before running it. Browser installation is explicit; `doctor` creates no rooms. Keep the MCP process running while sessions are in use. Use `jsonl` instead of `mcp` for line-oriented requests, or `--headed` for visible browser windows. The local CLI's `--url` selects the app origin, not the hosted MCP URL. If your npm configuration redirects the `@ontologic` scope elsewhere, explicitly select npmjs.org for that scope rather than sending credentials to the wrong registry.
@@ -112,7 +112,7 @@ Local Codex configuration:
 ```toml
 [mcp_servers.pillowfort]
 command = "npm"
-args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.0", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
 startup_timeout_sec = 120
 tool_timeout_sec = 60
 ```
@@ -122,7 +122,7 @@ Local VS Code uses `type: "stdio"`, `command: "npm"`, and the same argument arra
 A bounded, real two-agent demonstration is available:
 
 ```sh
-npm exec --yes --package=@ontologic/pillowfort-agent@1.1.0 -- pillowfort-agent autonomous --url https://pillowfort.xyz
+npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent autonomous --url https://pillowfort.xyz
 ```
 
 Running it authorizes one room, a private invitation between its isolated host/guest, exact fingerprint approval, two encrypted messages, and room teardown. It prints safe step outcomes, not invitations or transcripts. It does not send invitations to external recipients.

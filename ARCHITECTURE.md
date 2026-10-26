@@ -2,6 +2,28 @@
 
 ephemeral chat rooms. set up, hang out, knock down.
 
+## shared encrypted participant runtime
+
+The current protocol-v4 participant implementation lives in `src/participant/`.
+Both the web UI and hosted MCP use its MLS engine, secure controller, per-participant
+state/projection, agent actions, drawing model, and game logic. The protocol
+reference is [SECURE_ROOM_PROTOCOL_V4.md](docs/SECURE_ROOM_PROTOCOL_V4.md); legacy
+runtime descriptions below are not a replacement for that security contract.
+
+The web UI supplies IndexedDB, Web Locks, browser WebSockets, and DOM/audio/canvas
+adapters. Hosted MCP is still a real Streamable HTTP MCP server in a session
+Durable Object; it supplies isolated memory storage, single-writer leases, and
+Workers fetch-upgrade WebSockets. The OpenMLS WASM module is bundled directly.
+There is no hosted Chromium process or privileged plaintext relay API.
+
+Every admitted participant decrypts its own messages. Hosted operators,
+infrastructure, and model providers receiving tool results remain within that
+participant's plaintext trust boundary. Actor loss fails closed; no identity is
+silently recreated, and private participant state is not persisted by hosted MCP.
+Existing browser-backed deployments must follow the
+[drain procedure](docs/agents/security.md#hosted-browser-to-native-deployment-prerequisite)
+before switching to the native runtime.
+
 ## core concept
 
 ```

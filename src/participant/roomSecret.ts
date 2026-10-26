@@ -1,5 +1,6 @@
-import { normalizeRoomId } from "../../../src/entitlements";
-import { SECURE_ROOM_ID_BYTES, canonicalBase64UrlByteLength } from "../../../src/protocolV4";
+import { normalizeRoomId } from "../entitlements";
+import { SECURE_ROOM_ID_BYTES, canonicalBase64UrlByteLength } from "../protocolV4";
+import { deriveParticipantKey } from "./keyDerivation";
 
 const GENERATED_SECRET_PREFIX = "pf3_";
 const PROTOCOL_SECRET_PREFIX = "pf2_";
@@ -9,7 +10,6 @@ export const CUSTOM_ROOM_SECRET_MIN_LENGTH = 6;
 export const CUSTOM_ROOM_SECRET_MAX_LENGTH = 64;
 export const CUSTOM_ROOM_SECRET_MAX_UTF8_BYTES = 256;
 export const CUSTOM_ROOM_SECRET_KDF = "pbkdf2-sha256-600k-room-v1" as const;
-const CUSTOM_ROOM_SECRET_KDF_ITERATIONS = 600_000;
 const CUSTOM_ROOM_SECRET_KDF_DOMAIN = "pillowfort:custom-room-secret:v1";
 // A 16-byte unpadded base64url value has 22 characters; the final four
 // low bits must be zero. Legacy 32-byte values have two zero low bits.
@@ -199,13 +199,7 @@ export async function deriveProtocolRoomSecret(
   ]));
   let derived: Uint8Array | null = null;
   try {
-    const inputKey = await crypto.subtle.importKey("raw", secretBytes, "PBKDF2", false, ["deriveBits"]);
-    derived = new Uint8Array(await crypto.subtle.deriveBits({
-      name: "PBKDF2",
-      hash: "SHA-256",
-      iterations: CUSTOM_ROOM_SECRET_KDF_ITERATIONS,
-      salt: saltBytes,
-    }, inputKey, PROTOCOL_SECRET_BYTES * 8));
+    derived = await deriveParticipantKey(secretBytes, saltBytes);
     // Legacy credentials already contain 256 random bits and retain their
     // exact protocol identity. Running the same expensive derivation before
     // returning them prevents a relay from classifying password formats by

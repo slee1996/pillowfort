@@ -36,7 +36,7 @@ Optional but recommended before a marketing push:
 
 ## Preflight Commands
 
-Use Node.js 22.13+ and Bun 1.3.14; the release-check CI workflow uses Node.js 22.
+Use patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line and Bun 1.4.4+. CI pins Node.js 22.23.4 and Bun 1.4.4.
 The security gate runs persistent-browser tests with Node's native TypeScript
 support and the remaining suites with Bun. From the repo root, install both
 dependency trees from their committed lockfiles and install Playwright Chromium:
@@ -53,6 +53,19 @@ The release-check workflow runs the app gate and a separate marketing gate on
 pushes and pull requests, with read-only repository permissions and no deployment
 secrets. Both packages live in this repository. CI never deploys; optional
 long-form UI suites remain separate.
+
+CI also audits all four committed npm lockfiles and rejects moderate-or-higher advisories.
+Before promotion, verify the actual Node/Bun binaries reject the compromised
+eMudhra chains; an OS trust-store update alone may not update bundled roots.
+See [security maintenance](../SECURITY.md#security-maintenance) for the retained
+Rust advisory and its fixed-ciphersuite boundary.
+
+For agent 1.1.1, run `npm run agent:pack`, inspect the generated tarball and
+checksum, publish `marketing/public/downloads/pillowfort-agent-1.1.1.tgz` to npm,
+and register the matching `server.json` release before deploying updated public
+installation instructions. Marketing builds package this checkout, never mirror
+an older published artifact over the patched release. Publication and deployment
+are separate authorized operations, not effects of the local release gate.
 
 Confirm Cloudflare auth before deploying:
 

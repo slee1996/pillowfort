@@ -1,6 +1,6 @@
-import type { PillowfortAgent } from "./bridge";
-import { AgentError, object, validate } from "./schema";
-import type { JSONValue, Schema } from "./schema";
+import type { PillowfortAgent } from "../../../src/participant/agent";
+import { AgentError, object, validate } from "../../../src/participant/schema";
+import type { JSONValue, Schema } from "../../../src/participant/schema";
 
 interface NativeTool {
   name: string;

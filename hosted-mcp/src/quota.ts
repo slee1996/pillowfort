@@ -23,8 +23,8 @@ function integer(value: string, minimum: number, maximum: number): number {
   return parsed;
 }
 
-/** Global reservation ledger: metadata only, no browser or room credentials. */
-export class BrowserQuota extends DurableObject<Env> {
+/** Global reservation ledger: metadata only, no participant or room credentials. */
+export class ParticipantQuota extends DurableObject<Env> {
   private normalize(state: QuotaState | undefined, now: number): QuotaState {
     const day = new Date(now).toISOString().slice(0, 10);
     const current = state ?? { day, usedSeconds: 0, lastStartAt: 0, leases: [] };
@@ -45,10 +45,10 @@ export class BrowserQuota extends DurableObject<Env> {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(leaseId) || !/^[a-zA-Z0-9_-]{1,128}$/.test(principalId)) {
       return { ok: false, code: 'INVALID_LEASE', retryAfter: 0 };
     }
-    const concurrency = integer(this.env.MAX_ACTIVE_BROWSERS, 1, 10);
-    const maximumSeconds = integer(this.env.MAX_SESSION_SECONDS, 30, 3600) + 180;
-    const dailySeconds = integer(this.env.MAX_DAILY_BROWSER_MINUTES, 1, 1440) * 60;
-    if (dailySeconds < concurrency * maximumSeconds) throw new Error('Daily browser budget must cover concurrent maximum leases.');
+    const concurrency = integer(this.env.MAX_ACTIVE_SESSIONS, 1, 10);
+    const maximumSeconds = integer(this.env.MAX_SESSION_SECONDS, 30, 3600);
+    const dailySeconds = integer(this.env.MAX_DAILY_SESSION_MINUTES, 1, 1440) * 60;
+    if (dailySeconds < concurrency * maximumSeconds) throw new Error('Daily session budget must cover concurrent maximum leases.');
     if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000 || ttlMs > maximumSeconds * 1000) {
       return { ok: false, code: 'INVALID_LEASE', retryAfter: 0 };
     }
@@ -60,13 +60,13 @@ export class BrowserQuota extends DurableObject<Env> {
         ? { ok: true, expiresAt: existing.expiresAt }
         : { ok: false, code: 'INVALID_LEASE', retryAfter: 0 };
       const principalLease = state.leases.find(lease => lease.principalId === principalId);
-      if (principalLease) return { ok: false, code: 'PRINCIPAL_BROWSER_LIMIT', retryAfter: Math.max(1, Math.ceil((principalLease.expiresAt - now) / 1000)) };
-      if (state.leases.length >= concurrency) return { ok: false, code: 'BROWSER_CAPACITY', retryAfter: Math.max(1, Math.ceil((Math.min(...state.leases.map(lease => lease.expiresAt)) - now) / 1000)) };
-      if (now - state.lastStartAt < 20_000) return { ok: false, code: 'BROWSER_LAUNCH_RATE', retryAfter: Math.ceil((20_000 - (now - state.lastStartAt)) / 1000) };
+      if (principalLease) return { ok: false, code: 'PRINCIPAL_SESSION_LIMIT', retryAfter: Math.max(1, Math.ceil((principalLease.expiresAt - now) / 1000)) };
+      if (state.leases.length >= concurrency) return { ok: false, code: 'SESSION_CAPACITY', retryAfter: Math.max(1, Math.ceil((Math.min(...state.leases.map(lease => lease.expiresAt)) - now) / 1000)) };
+      if (now - state.lastStartAt < 20_000) return { ok: false, code: 'SESSION_START_RATE', retryAfter: Math.ceil((20_000 - (now - state.lastStartAt)) / 1000) };
       const reservedSeconds = Math.ceil(ttlMs / 1000);
       if (state.usedSeconds + reservedSeconds > dailySeconds) {
         const nextDay = Date.parse(`${state.day}T00:00:00Z`) + 86_400_000;
-        return { ok: false, code: 'DAILY_BROWSER_BUDGET', retryAfter: Math.max(1, Math.ceil((nextDay - now) / 1000)) };
+        return { ok: false, code: 'DAILY_SESSION_BUDGET', retryAfter: Math.max(1, Math.ceil((nextDay - now) / 1000)) };
       }
       const expiresAt = now + ttlMs;
       state.leases.push({ id: leaseId, principalId, startedAt: now, expiresAt, reservedSeconds });
@@ -78,7 +78,7 @@ export class BrowserQuota extends DurableObject<Env> {
     });
   }
 
-  /** Call only after the remote browser is confirmed closed. */
+  /** Call only after all owned participants are disposed or the actor was evicted. */
   async release(leaseId: string): Promise<void> {
     await this.ctx.storage.transaction(async transaction => {
       const now = Date.now();

@@ -29,7 +29,7 @@ before(async () => {
         });
       },
     }],
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
+    server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { allow: [fileURLToPath(new URL("../", import.meta.url))] } },
   });
   await vite.listen();
   const baseUrl = vite.resolvedUrls?.local[0] || vite.resolvedUrls?.network[0];
@@ -87,7 +87,7 @@ describe("durable replay and cryptographic state", () => {
     const context = await persistentContext(profile);
     const page = await readyPage(context);
     const result = await page.evaluate(async ({ databaseName }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const encode = (bytes: Uint8Array) => {
         let binary = "";
         for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -171,7 +171,7 @@ describe("durable replay and cryptographic state", () => {
     let context = await persistentContext(profile);
     let page = await readyPage(context);
     const first = await page.evaluate(async ({ databaseName }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const roomInstance = await module.deriveCryptoRoomInstance("restart-room", "A".repeat(43));
       const store = new module.CryptoStateStore({ databaseName });
       const result = await store.advanceReplay({
@@ -190,7 +190,7 @@ describe("durable replay and cryptographic state", () => {
     context = await persistentContext(profile);
     page = await readyPage(context);
     const afterRestart = await page.evaluate(async ({ databaseName, roomInstance }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const store = new module.CryptoStateStore({ databaseName });
       const replay = await store.advanceReplay({
         roomInstance,
@@ -221,12 +221,12 @@ describe("durable replay and cryptographic state", () => {
     const secondPage = await context.newPage();
     await secondPage.goto(fixtureUrl);
     const roomInstance = await firstPage.evaluate(async () => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       return module.deriveCryptoRoomInstance("tabs-room", "B".repeat(43));
     });
     const input = { databaseName, roomInstance };
     const advance = (page: Page) => page.evaluate(async ({ databaseName, roomInstance }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const store = new module.CryptoStateStore({ databaseName });
       try {
         return await store.advanceReplay({
@@ -254,7 +254,7 @@ describe("durable replay and cryptographic state", () => {
     const context = await persistentContext(profile);
     const page = await readyPage(context);
     const result = await page.evaluate(async ({ databaseName }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const roomInstance = await module.deriveCryptoRoomInstance("legacy-room", "C".repeat(43));
       const store = new module.CryptoStateStore({ databaseName, now: () => 1234 });
       const firstCommit = await store.compareAndSetOpaqueState(roomInstance, null, new Uint8Array([1, 2, 3]));
@@ -323,7 +323,7 @@ describe("durable replay and cryptographic state", () => {
     const context = await persistentContext(profile);
     const page = await readyPage(context);
     const result = await page.evaluate(async ({ databaseName }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const derive = (label: string) => module.deriveCryptoRoomInstance(label, "E".repeat(43));
       const store = new module.CryptoStateStore({ databaseName, now: () => 5_000 });
       const scope = await derive("scope-main");
@@ -435,7 +435,7 @@ describe("durable replay and cryptographic state", () => {
     const context = await persistentContext(profile);
     const page = await readyPage(context);
     const result = await page.evaluate(async ({ databaseName }) => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       const roomInstance = await module.deriveCryptoRoomInstance("failure-room", "D".repeat(43));
       const position = {
         roomInstance,
@@ -524,12 +524,12 @@ describe("single-writer room cryptographic lock", () => {
     const takeoverPage = await context.newPage();
     await takeoverPage.goto(fixtureUrl);
     const roomInstance = await ownerPage.evaluate(async () => {
-      const module = await import("/src/services/cryptoStateStore.ts");
+      const module = await import("/participant/cryptoStateStore.ts");
       return module.deriveCryptoRoomInstance("locked-room", "E".repeat(43));
     });
   
     const owner = await ownerPage.evaluate(async (roomInstance) => {
-      const module = await import("/src/services/roomCryptoLock.ts");
+      const module = await import("/participant/roomCryptoLock.ts");
       const coordinator = new module.RoomCryptoLockCoordinator();
       const result = await coordinator.acquire(roomInstance);
       if (result.status !== "acquired") return { status: result.status };
@@ -539,7 +539,7 @@ describe("single-writer room cryptographic lock", () => {
     assert.deepEqual(owner, { status: "acquired", active: true });
   
     const busy = await takeoverPage.evaluate(async (roomInstance) => {
-      const module = await import("/src/services/roomCryptoLock.ts");
+      const module = await import("/participant/roomCryptoLock.ts");
       const coordinator = new module.RoomCryptoLockCoordinator();
       Object.assign(globalThis, { testLockCoordinator: coordinator });
       const result = await coordinator.acquire(roomInstance);
@@ -578,8 +578,8 @@ describe("single-writer room cryptographic lock", () => {
     const context = await persistentContext(profile);
     const page = await readyPage(context);
     const result = await page.evaluate(async () => {
-      const stateModule = await import("/src/services/cryptoStateStore.ts");
-      const lockModule = await import("/src/services/roomCryptoLock.ts");
+      const stateModule = await import("/participant/cryptoStateStore.ts");
+      const lockModule = await import("/participant/roomCryptoLock.ts");
       const roomInstance = await stateModule.deriveCryptoRoomInstance("unsupported-room", "F".repeat(43));
       const nativeRequests: Promise<unknown>[] = [];
       const locks = {

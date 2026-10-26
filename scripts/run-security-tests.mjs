@@ -33,13 +33,13 @@ const groups = [
 // Persistent Chromium profiles use Playwright's Node runtime host.
 const persistenceResult = spawnSync(
   process.execPath,
-  ["--experimental-strip-types", "--test", "test/replay-persistence.node.ts"],
+  ["--experimental-strip-types", "--test", "test/agent-runtime.test.mjs", "test/replay-persistence.node.ts"],
   { cwd: repositoryRoot, stdio: "inherit" },
 );
 if (persistenceResult.error) throw persistenceResult.error;
 if (persistenceResult.status !== 0) process.exit(persistenceResult.status ?? 1);
 
-let passedFiles = 1;
+let passedFiles = 2;
 for (const files of groups) {
   const result = spawnSync(
     "bun",

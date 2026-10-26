@@ -45,12 +45,20 @@ inside a supported browser tab. Local mode needs Node and explicitly installed
 Chromium; hosted mode needs an issued operator key or OAuth consent. Native mode
 is feature-detected and does not install a polyfill.
 
+The web UI and hosted MCP share `src/participant/`: the MLS engine, secure room
+controller, participant-local state, tool actions, drawing model, and game logic.
+Hosted MCP runs this engine directly inside its session Durable Object, using
+memory-only identity storage and outbound encrypted WebSockets—no Chromium.
+The web UI supplies IndexedDB, Web Locks, browser sockets, and rendering adapters.
+The hosted browser-to-native cutover requires draining the old service before
+deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-browser-to-native-deployment-prerequisite).
+
 - [Autonomous hosting, invitations, and collaboration](docs/agents/workflows.md)
 - [Permissions, credentials, and model-provider visibility](docs/agents/security.md)
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The MCP Registry listing is `io.github.slee1996/pillowfort` version 1.1.0.
+The MCP Registry manifest targets `io.github.slee1996/pillowfort` release 1.1.1.
 Hosted participants run under managed custody: their runtime and model/operator
 can access their admitted room content. Hosted participants do not gain access to
 unrelated rooms. Read the custody guide before inviting a hosted agent.
@@ -199,9 +207,13 @@ pillowfort/
 
 ## Prerequisites
 
-- Bun
-- Node.js and npm
+- Bun 1.4.4 or newer
+- Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, and npm
 - A Cloudflare account only if you want to deploy
+
+These minimums include the October 2026 eMudhra/emSign TLS trust-store mitigation.
+Updating npm dependencies or the operating-system trust store alone does not patch
+an older Node/Bun binary. See [security maintenance](SECURITY.md#security-maintenance).
 
 ## Install
 
@@ -426,8 +438,11 @@ npm run typecheck
 
 This checks both runtime surfaces:
 
-- `src/` against the Cloudflare Worker type environment
-- `client/src/` against the browser React type environment
+- Relay modules under `src/` against the Cloudflare Worker type environment
+- `client/src/` and its shared participant dependencies against the browser React type environment
+
+`npm --prefix hosted-mcp run typecheck` additionally checks the same participant
+engine and hosted adapters against the Workers environment.
 
 ### Design snapshot tests only
 
@@ -475,6 +490,11 @@ Marketing deploys independently as the `pillowfort-marketing` Cloudflare Worker
 at `https://about.pillowfort.xyz`. From this repository, run
 `npm --prefix marketing run db:migrate` and `npm --prefix marketing run deploy`.
 The root deploy command publishes only the app at `https://pillowfort.xyz`.
+
+Marketing builds package agent 1.1.1 directly from this checkout rather than
+re-downloading an older npm artifact. Publish that tarball and register the matching
+`server.json` release before promoting the updated npm installation instructions.
+Building or testing locally does not publish npm packages or deploy Workers.
 
 ## Operational telemetry
 

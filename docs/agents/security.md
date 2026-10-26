@@ -52,6 +52,12 @@ Do not paste unrelated secrets into chat or send credentials to an endpoint name
 
 The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate authenticated HTTPS service; native WebMCP runs in the current supported browser tab.
 
+Local execution requires patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a
+supported release line. Development and CI require Bun 1.4.4+ where Bun is used.
+These versions reject the compromised October 2026 eMudhra/emSign TLS chains,
+including cross-signed chains. Update the runtime binaries as well as OS/browser
+trust stores; never disable certificate verification to work around a failure.
+
 Each room session is an isolated ephemeral browser context with its own device identity and MLS state. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
 The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
@@ -59,20 +65,28 @@ The optional CMS context is separate and uses normal authenticated permissions. 
 ## Hosted participant custody
 
 The hosted endpoint is `https://mcp.pillowfort.xyz/mcp`. Pillowfort operates a
-Cloudflare browser participant on the operator's behalf. This managed runtime,
-Pillowfort's infrastructure operator, and the browser provider can access that
+native Cloudflare Workers participant on the operator's behalf. This managed runtime,
+Pillowfort's infrastructure operator, and the hosting provider can access that
 participant's decrypted content and in-memory room keys. Model providers and
 client logs may separately receive tool results. The relay still routes encrypted
 content; admitting a managed participant deliberately places that participant's
 endpoint under hosted custody. It does not grant access to unrelated rooms.
 
 Each hosted MCP connection is bound to an authenticated operator principal and
-uses isolated named browser contexts. Another operator's bearer key or OAuth
+uses isolated named in-memory participants. Another operator's bearer key or OAuth
 token cannot reuse its session identifier. The service accepts only its fixed
 Pillowfort app origin and excludes CMS, payment, arbitrary browsing, and raw-key
-export tools. It stores lifecycle references and authorization/quota metadata,
-not room transcripts, invitations, browser storage-state exports, or MLS keys.
-Browser recording and Worker application logs are disabled.
+export tools. It stores lifecycle and authorization/quota metadata,
+not room transcripts, invitations, participant state, or MLS keys.
+Worker application logs are disabled. No browser, CDP connection, or browser recording
+exists in the hosted participant runtime.
+
+Room and invitation keys retain the protocol's 600,000-iteration
+PBKDF2-HMAC-SHA256 derivation. Production Workers cap native PBKDF2 at 100,000
+iterations, so the shared engine uses a pinned portable implementation when the
+native operation reports that it is unsupported. It does not reduce the work
+factor or alter derived keys. Hosted CPU time is bounded at thirty seconds per
+invocation to accommodate this computation; session and daily budgets are unchanged.
 
 Operator access keys are issued through a separately protected administration
 API and stored as keyed hashes, not plaintext. They are returned only on explicit
@@ -88,17 +102,50 @@ actions may have committed; revocation or cancellation cannot roll those back.
 Do not use deployment-secret rotation as a substitute for explicit key revocation.
 
 Hosted connections have an absolute ten-minute lifetime and two-minute idle
-deadline. The initial service budget permits two active browsers globally, one
-per operator, and a shared sixty-browser-minute daily reservation budget, including
-startup/orphan allowance. Actual closure is confirmed before unused time is
-refunded. Platform limits may be lower. A failed close retains its browser
-reference and reservation for cleanup retries rather than claiming success.
+deadline. The initial service budget permits two participant-bearing MCP sessions
+globally, one per operator, and a shared sixty-session-minute daily reservation
+budget. Each connection can own two named participants. Its remaining absolute
+lifetime is reserved before participant startup; unused time is refunded after all
+participants are disposed or the actor is evicted. Platform limits may be lower.
+Disposal cancels pending work, closes outbound sockets (including pending upgrades),
+and clears the memory-only identity store. Actor eviction fails closed: no
+transcripts or cryptographic state are rehydrated, and no replacement identity
+is silently created.
+
+Hosted MCP requests are limited to 64 KiB, 8,192 JSON nodes (the root and each
+object value/array entry), and sixteen nesting levels below the root. Both the
+router and session actor enforce the structural budget before SDK validation,
+including initialization metadata and batched requests. Excessive input returns
+413 without executing a tool or closing an otherwise valid session. These bounds
+cover the current room-tool schemas, including 128-point drawing strokes.
 
 MCP `DELETE` terminates the managed connection. Closing a TCP/HTTP connection does
 not do so by itself. Lost/expired session IDs return404 and cannot silently
 recreate identities. Reconnect deliberately; never use a new identity to pretend
 an ambiguous prior action succeeded. New admission still requires the current
 host to verify the new device.
+
+### Hosted browser-to-native deployment prerequisite
+
+Do not deploy the native runtime over live legacy browser sessions. First place
+all `/mcp` ingress, including the workers.dev hostname, behind a maintenance
+block while leaving the old Worker and its lifecycle alarms running. Wait at least
+13 minutes after the last admitted request (the previous ten-minute absolute
+lifetime plus startup/disconnected-browser allowance), then use the provider's
+administrative browser-session inventory to confirm that every legacy browser is
+closed. If any remain, close them administratively and verify an empty inventory
+before proceeding. Do not log their room contents or export browser state.
+
+Only then deploy the native Worker and remove maintenance. This is a deployment
+prerequisite, not an automatic browser-cleanup capability in the new runtime.
+The deployed `HostedMcpSession` and `AccessKeyStore` Durable Object class names
+remain unchanged. Wrangler migration `v2` explicitly renames `BrowserQuota` to
+`ParticipantQuota`, preserving the existing global reservation ledger and daily
+usage rather than allocating a fresh budget. Never delete or rewrite the `v1`
+migration. Old MCP IDs remain unusable; clients must initialize new connections
+and undergo normal room admission. The new release has no ongoing Chromium
+dependency and cannot terminate a legacy remote browser on its own.
+
 
 ## Native WebMCP authority
 

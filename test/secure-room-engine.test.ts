@@ -4,6 +4,12 @@ import { chromium, type Browser, type Page } from "playwright";
 import { createServer, type ViteDevServer } from "../client/node_modules/vite/dist/node/index.js";
 import { verifySecureDeviceResumeProofV4 } from "../src/deviceAuthV4";
 
+declare global {
+  interface Window {
+    participantTestRoot: string;
+  }
+}
+
 type DrawingControllerHarness = {
   config: object;
   stopped: boolean;
@@ -47,13 +53,17 @@ beforeAll(async () => {
   vite = await createServer({
     root: join(import.meta.dir, "../client"),
     logLevel: "error",
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
+    // Browser-evaluated tests load shared modules using Vite's canonical file URLs.
+    server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { allow: [join(import.meta.dir, "..")] } },
   });
   await vite.listen();
   baseUrl = vite.resolvedUrls?.local[0] || vite.resolvedUrls?.network[0] || "";
   if (!baseUrl) throw new Error("Vite did not expose a secure-room engine test URL");
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();
+  await page.addInitScript((root) => {
+    window.participantTestRoot = root;
+  }, `/@fs${join(import.meta.dir, "..")}`);
   await page.goto(baseUrl);
 }, 60_000);
 
@@ -66,9 +76,9 @@ afterAll(async () => {
 describe("protocol-v4 durable secure room engine", () => {
   it("authenticates composite state and makes send, rollback, CAS, restart, and retirement crash-safe", async () => {
     const result = await page.evaluate(async () => {
-      const engineModule = await import("/src/services/secureRoomEngine.ts");
-      const stateModule = await import("/src/services/secureRoomState.ts");
-      const storeModule = await import("/src/services/cryptoStateStore.ts");
+      const engineModule = await import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts");
+      const stateModule = await import(window.participantTestRoot + "/src/participant/secureRoomState.ts");
+      const storeModule = await import(window.participantTestRoot + "/src/participant/cryptoStateStore.ts");
 
       const base64Url = (bytes: Uint8Array) => {
         let binary = "";
@@ -358,8 +368,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("isolates abandoned wrong-password state and atomically migrates legacy room-scoped records", async () => {
     const result = await page.evaluate(async () => {
       const [engineModule, storeModule] = await Promise.all([
-        import("/src/services/secureRoomEngine.ts"),
-        import("/src/services/cryptoStateStore.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/cryptoStateStore.ts"),
       ]);
       const base64Url = (bytes: Uint8Array) => {
         let binary = "";
@@ -472,11 +482,11 @@ describe("protocol-v4 durable secure room engine", () => {
 
   it("admits a member privately, inspects without mutation, rejects replay/reorder/forgeries, and authorizes commit summaries", async () => {
     const result = await page.evaluate(async (bindingModuleUrl) => {
-      const engineModule = await import("/src/services/secureRoomEngine.ts");
-      const stateModule = await import("/src/services/secureRoomState.ts");
-      const storeModule = await import("/src/services/cryptoStateStore.ts");
-      const mlsModule = await import("/src/services/mlsCrypto.ts");
-      const invitationModule = await import("/src/services/secureInvitationAuth.ts");
+      const engineModule = await import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts");
+      const stateModule = await import(window.participantTestRoot + "/src/participant/secureRoomState.ts");
+      const storeModule = await import(window.participantTestRoot + "/src/participant/cryptoStateStore.ts");
+      const mlsModule = await import(window.participantTestRoot + "/src/participant/mlsCrypto.ts");
+      const invitationModule = await import(window.participantTestRoot + "/src/participant/secureInvitationAuth.ts");
       const bindingModule = await import(bindingModuleUrl);
       const encoder = new TextEncoder();
       const base64Url = (bytes: Uint8Array) => {
@@ -1664,10 +1674,10 @@ describe("protocol-v4 durable secure room engine", () => {
   it("requires explicit, exact, deduplicated host approval before admitting an invitation holder", async () => {
     const result = await page.evaluate(async (bindingModuleUrl) => {
       const [{ SecureRoomController, secureAdmissionBindingFingerprintV4 }, { useGameStore }, stateModule, invitationModule, bindingModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
         import("/src/stores/gameStore.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureInvitationAuth.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureInvitationAuth.ts"),
         import(bindingModuleUrl),
       ]);
       const toBase64Url = (bytes: Uint8Array) => {
@@ -1695,7 +1705,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const boundaryAdmissionId = stateModule.randomSecureRoomIdV4(16);
       const firstKeyPackage = new Uint8Array([1, 2, 3, 4]);
       const approvedKeyPackage = new Uint8Array([5, 6, 7, 8]);
-      const validationController = new SecureRoomController();
+      const validationController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const missingFortPassClaimRejected = await validationController.setup({
         roomId,
         roomSecret,
@@ -1722,7 +1732,7 @@ describe("protocol-v4 durable secure room engine", () => {
         fortPassSessionId: "cs_test_paid",
         fortPassClaimSecret: "a".repeat(64),
       });
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       const addCalls: Array<{ admissionId: string; keyPackage: string }> = [];
       const sentFrames: unknown[] = [];
@@ -1999,8 +2009,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("preserves long gestures and rapid stroke boundaries behind in-flight drawing delivery", async () => {
     const result = await page.evaluate(async () => {
       // Browser realm imports are required: a Node import cannot supply the page's controller.
-      const { SecureRoomController } = await import("/src/services/secureRoomController.ts");
-      const controller = new SecureRoomController();
+      const { SecureRoomController } = await import(window.participantTestRoot + "/src/participant/secureRoomController.ts");
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as unknown as DrawingControllerHarness;
       const encrypted: { color: string; points: [number, number][]; strokeStart?: true }[] = [];
       harness.config = {};
@@ -2086,9 +2096,9 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       // Exercise the controller and its UI error store in the same browser realm.
       const [{ SecureRoomController }, { useGameStore }] = await Promise.all([
-        import("/src/services/secureRoomController.ts"), import("/src/stores/gameStore.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"), import("/src/stores/gameStore.ts"),
       ]);
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as unknown as DrawingControllerHarness;
       const encrypted: { points: [number, number][] }[] = [];
       let errors = 0;
@@ -2162,8 +2172,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("cancels unshared drawing at membership and session boundaries instead of exposing it later", async () => {
     const result = await page.evaluate(async () => {
       // Browser realm imports keep membership and session effects on the actual page.
-      const { SecureRoomController } = await import("/src/services/secureRoomController.ts");
-      const controller = new SecureRoomController();
+      const { SecureRoomController } = await import(window.participantTestRoot + "/src/participant/secureRoomController.ts");
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as unknown as DrawingControllerHarness;
       let errors = 0;
       const onError = () => { errors += 1; };
@@ -2230,8 +2240,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("cancels queued and in-flight ordinary work at membership barriers and binds zombie removal exactly", async () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
       const [{ SecureRoomController }, stateModule, reducerModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import(reducerModuleUrl),
       ]);
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
@@ -2293,7 +2303,7 @@ describe("protocol-v4 durable secure room engine", () => {
         },
         dispose: () => {},
       };
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.engine = fakeEngine;
       harness.authenticated = false;
@@ -2475,11 +2485,13 @@ describe("protocol-v4 durable secure room engine", () => {
   it("renders the terminal Tic-Tac-Toe move on the result board", async () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
       const [uiModule, storeModule, stateModule, reducerModule] = await Promise.all([
-        import("/src/services/secureUiV4.ts"),
+        import(window.participantTestRoot + "/src/participant/secureUiV4.ts"),
         import("/src/stores/gameStore.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import(reducerModuleUrl),
       ]);
+      const { ParticipantEvents } = await import(window.participantTestRoot + "/src/participant/events.ts");
+      const ui = uiModule.createSecureRoomUiV4(storeModule.participantStore, new ParticipantEvents());
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
       const lunaDeviceId = stateModule.randomSecureRoomIdV4(16);
       const priyaDeviceId = stateModule.randomSecureRoomIdV4(16);
@@ -2504,14 +2516,14 @@ describe("protocol-v4 durable secure room engine", () => {
         board: ["O", "O", "X", "", "X", "X", "O", "", ""],
         turn: 6,
       };
-      uiModule.initializeSecureRoomUiV4({
+      ui.initializeSecureRoomUiV4({
         roomId: "abcdefghij",
         ownDeviceId: lunaDeviceId,
         state,
       });
       const terminalState = structuredClone(state);
       terminalState.ttt = null;
-      uiModule.applySecureRoomUiV4(terminalState, [
+      ui.applySecureRoomUiV4(terminalState, [
         { type: "ttt-updated", gameId, cell: 8, mark: "X", turn: 7 },
         { type: "ttt-result", gameId, winnerDeviceId: lunaDeviceId, draw: false },
       ], lunaDeviceId);
@@ -2522,7 +2534,7 @@ describe("protocol-v4 durable secure room engine", () => {
         winner: rendered?.winner ?? null,
         phase: rendered?.phase ?? null,
       };
-      uiModule.resetSecureRoomUiV4();
+      ui.resetSecureRoomUiV4();
       storeModule.useGameStore.getState().cleanup();
       return output;
     }, secureGameReducerModuleUrl);
@@ -2537,10 +2549,10 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, reducerModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import(reducerModuleUrl),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const toBase64Url = (bytes: Uint8Array) => {
         let binary = "";
@@ -2588,7 +2600,7 @@ describe("protocol-v4 durable secure room engine", () => {
         markAuthenticationAttempted: async () => {},
         dispose: () => {},
       };
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       const generation = 17;
       const socketEpoch = 23;
@@ -2679,7 +2691,7 @@ describe("protocol-v4 durable secure room engine", () => {
         ...fakeEngine,
         get pendingOutbox() { return restoredPendingOutbox; },
       };
-      const restoreController = new SecureRoomController();
+      const restoreController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const restoreHarness = restoreController as any;
       const restoredModes: string[] = [];
       restoreHarness.lease = { isActive: () => true };
@@ -2702,7 +2714,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const crashRestoredActiveAdmissionResumes = restoredModes.join(",") === "resume";
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
 
-      const snapshotBypassController = new SecureRoomController();
+      const snapshotBypassController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const snapshotBypass = snapshotBypassController as any;
       const bypassSocket = { readyState: WebSocket.OPEN };
       const bypassCloses: string[] = [];
@@ -2721,7 +2733,7 @@ describe("protocol-v4 durable secure room engine", () => {
       }), undefined, {});
       const resumeCannotBypassSnapshotPhase = bypassCloses[0] === "authentication result mismatch";
 
-      const unauthenticatedController = new SecureRoomController();
+      const unauthenticatedController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const unauthenticated = unauthenticatedController as any;
       const unauthenticatedSocket = { readyState: WebSocket.OPEN };
       const preAuthCloses: string[] = [];
@@ -2736,7 +2748,7 @@ describe("protocol-v4 durable secure room engine", () => {
       }), undefined, {});
       const preAuthRelayRejected = preAuthCloses[0] === "invalid authentication frame";
 
-      const staleController = new SecureRoomController();
+      const staleController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const stale = staleController as any;
       const socketA = { readyState: WebSocket.OPEN };
       const socketB = { readyState: WebSocket.OPEN };
@@ -2771,7 +2783,7 @@ describe("protocol-v4 durable secure room engine", () => {
       await staleWire;
       const staleSocketCouldNotAuthenticateReplacement = staleAuthenticationSends === 0;
 
-      const generationController = new SecureRoomController();
+      const generationController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const generationHarness = generationController as any;
       generationHarness.generation = 30;
       generationHarness.stopped = false;
@@ -2831,18 +2843,24 @@ describe("protocol-v4 durable secure room engine", () => {
       const acquireStarted = new Promise<void>((resolve) => { acquireEntered = resolve; });
       let acquiredLeaseReleased = 0;
       const acquiredLease = {
+        roomInstance,
+        released: new Promise<"released">(() => {}),
         signal: new AbortController().signal,
         isActive: () => true,
         release: () => { acquiredLeaseReleased += 1; },
       };
       const inFlightController = new SecureRoomController({
+        ...(await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment(),
+        lockCoordinator: {
         acquire: async () => {
           acquireEntered();
           await acquireGate;
           return { status: "acquired", lease: acquiredLease };
         },
         close: () => {},
-      } as any);
+        hasActiveLease: () => false,
+        },
+      });
       const inFlight = inFlightController as any;
       let firstOpenEntered!: () => void;
       const firstOpened = new Promise<void>((resolve) => { firstOpenEntered = resolve; });
@@ -2925,9 +2943,9 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
       const roomSecret = `pf2_${"A".repeat(43)}`;
@@ -2969,7 +2987,7 @@ describe("protocol-v4 durable secure room engine", () => {
           retire: async () => { retireCalls += 1; },
           dispose: () => {},
         };
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const harness = controller as any;
         const stops: Array<{ reason: string; preserveRecovery: boolean }> = [];
         let retries = 0;
@@ -3055,13 +3073,14 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
+      const { createControllerEnvironment } = await import(window.participantTestRoot + "/test/participant-environment.ts");
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
       const makeHarness = (ambiguous: boolean) => {
         let retireCalls = 0;
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController(createControllerEnvironment());
         const harness = controller as any;
         harness.engine = {
           isProvisional: !ambiguous,
@@ -3093,7 +3112,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const postSendCanLeave = await postSend.controller.cancelPendingConnection();
       const postSendRecovery = postSend.controller.pendingRecovery;
       const secondCancelCanLeave = await postSend.controller.cancelPendingConnection();
-      const reloaded = new SecureRoomController();
+      const reloaded = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const reloadRecovery = reloaded.pendingRecovery;
       const mismatchedStart = await reloaded.setup({
         roomId: "different1",
@@ -3131,9 +3150,9 @@ describe("protocol-v4 durable secure room engine", () => {
   it("preserves exact setup recovery and blocks replacement when provisional retirement fails", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const roomId = "abcdefghij";
       const displayName = "Failed Cleanup Founder";
@@ -3143,7 +3162,7 @@ describe("protocol-v4 durable secure room engine", () => {
         sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
         const roomInstance = stateModule.randomSecureRoomIdV4(16);
         const events: string[] = [];
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const harness = controller as any;
         harness.config = {
           initialMode: "setup",
@@ -3222,12 +3241,12 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
       const events: string[] = [];
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.config = {
         initialMode: "join",
@@ -3284,9 +3303,9 @@ describe("protocol-v4 durable secure room engine", () => {
   it("preserves recovery when terminal or definitive rejection cleanup cannot retire local state", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
 
       const exercise = async (kind: "terminal" | "lifecycle" | "pre-auth") => {
@@ -3295,7 +3314,7 @@ describe("protocol-v4 durable secure room engine", () => {
         const deviceId = stateModule.randomSecureRoomIdV4(16);
         const events: string[] = [];
         const settlements: unknown[] = [];
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const harness = controller as any;
         harness.config = {
           initialMode: "join",
@@ -3399,9 +3418,9 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const roomId = "abcdefghij";
       const displayName = "Recovery User";
@@ -3479,7 +3498,7 @@ describe("protocol-v4 durable secure room engine", () => {
           throw new Error("recovery created a replacement joiner");
         };
 
-        const setupController = new SecureRoomController();
+        const setupController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const setup = seedRecovery(setupController, "setup");
         const setupModes: string[] = [];
         let setupSends = 0;
@@ -3496,7 +3515,7 @@ describe("protocol-v4 durable secure room engine", () => {
         const setupRestored = setupModes.join(",") === "setup" && setupSends === 1 &&
           setup.engine?.isAuthenticationAmbiguous === true;
 
-        const wrongSetupController = new SecureRoomController();
+        const wrongSetupController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const wrongSetup = seedRecovery(wrongSetupController, "setup");
         const wrongSetupSettlements: unknown[] = [];
         (engineModule.SecureRoomEngine as any).restore = async () => {
@@ -3512,7 +3531,7 @@ describe("protocol-v4 durable secure room engine", () => {
             "recovery-credential-mismatch";
 
         sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
-        const joinController = new SecureRoomController();
+        const joinController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const join = seedRecovery(joinController, "join");
         const joinSettlements: unknown[] = [];
         let joinRestoreAttempt = 0;
@@ -3556,7 +3575,7 @@ describe("protocol-v4 durable secure room engine", () => {
           join.engine === restoredJoin;
 
         sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
-        const lifecycleController = new SecureRoomController();
+        const lifecycleController = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const lifecycle = lifecycleController as any;
         let lifecycleRetireCalls = 0;
         lifecycle.generation = 7;
@@ -3623,9 +3642,9 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const roomId = "abcdefghij";
       const displayName = "Established Founder";
@@ -3648,7 +3667,7 @@ describe("protocol-v4 durable secure room engine", () => {
         retire: async () => { retireCalls += 1; },
         dispose: () => { disposeCalls += 1; },
       };
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.config = {
         initialMode: "setup",
@@ -3725,9 +3744,9 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
       const deviceId = stateModule.randomSecureRoomIdV4(16);
@@ -3753,7 +3772,7 @@ describe("protocol-v4 durable secure room engine", () => {
         retire: async () => { retired += 1; },
         dispose: () => { disposed += 1; },
       };
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.generation = 19;
       harness.config = {
@@ -3822,8 +3841,8 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
       const NativeWebSocket = window.WebSocket;
       const sockets: Array<{
@@ -3851,7 +3870,7 @@ describe("protocol-v4 durable secure room engine", () => {
         const roomInstance = stateModule.randomSecureRoomIdV4(16);
         const events: string[] = [];
         let provisionalPresent = true;
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const harness = controller as any;
         const generation = 29;
         harness.generation = generation;
@@ -3922,10 +3941,11 @@ describe("protocol-v4 durable secure room engine", () => {
     const result = await page.evaluate(async () => {
       sessionStorage.removeItem("pillowfort:secure-room-recovery:v1");
       const [{ SecureRoomController }, stateModule, engineModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
-        import("/src/services/secureRoomEngine.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomEngine.ts"),
       ]);
+      const { createControllerEnvironment } = await import(window.participantTestRoot + "/test/participant-environment.ts");
       const roomId = "abcdefghij";
       const displayName = "Recovery User";
       const originalRoomInstance = stateModule.randomSecureRoomIdV4(16);
@@ -3938,7 +3958,7 @@ describe("protocol-v4 durable secure room engine", () => {
       let retireCalls = 0;
 
       const seed = () => {
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController(createControllerEnvironment());
         const harness = controller as any;
         const engine = {
           roomInstance: originalRoomInstance,
@@ -4051,8 +4071,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("gates terminal relay errors before durable retirement can yield", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
       let releaseRetire!: () => void;
       let retireEntered!: () => void;
@@ -4062,7 +4082,7 @@ describe("protocol-v4 durable secure room engine", () => {
       let socketClosed = 0;
       let leaseReleased = 0;
       let mappedActions = 0;
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.engine = {
         deviceId: stateModule.randomSecureRoomIdV4(16),
@@ -4124,8 +4144,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("drains already-received secure frames before reconciling socket close", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
       const NativeWebSocket = window.WebSocket;
       const sockets: Array<{
@@ -4150,7 +4170,7 @@ describe("protocol-v4 durable secure room engine", () => {
         value: FakeWebSocket,
       });
       try {
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         const harness = controller as any;
         const generation = 41;
         const roomInstance = stateModule.randomSecureRoomIdV4(16);
@@ -4213,8 +4233,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("ends a rejected pending admission before socket close can reconnect its retired identity", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule, { useGameStore }] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import("/src/stores/gameStore.ts"),
       ]);
       const NativeWebSocket = window.WebSocket;
@@ -4230,7 +4250,7 @@ describe("protocol-v4 durable secure room engine", () => {
       }
       Object.defineProperty(window, "WebSocket", { configurable: true, writable: true, value: FakeWebSocket });
       try {
-        const controller = new SecureRoomController();
+        const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
         // Exercise the real serialized socket handlers with deterministic
         // transport and durable-erasure boundaries instead of network timing.
         const harness = controller as unknown as {
@@ -4302,8 +4322,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("shows an inbound self-removal as a knocked terminal state, not a voluntary leave", async () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
       const [{ SecureRoomController }, stateModule, reducerModule, storeModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import(reducerModuleUrl),
         import("/src/stores/gameStore.ts"),
       ]);
@@ -4314,7 +4334,7 @@ describe("protocol-v4 durable secure room engine", () => {
         signaturePublicKey: stateModule.randomSecureRoomIdV4(32),
         displayName: "Removed member",
       }], ownDeviceId);
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       let disposed = 0;
       let leaseReleased = 0;
@@ -4402,8 +4422,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("gates a revoked single-writer lease before queued disposal", async () => {
     const result = await page.evaluate(async () => {
       const [{ SecureRoomController }, stateModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
       ]);
       const abortController = new AbortController();
       let active = true;
@@ -4422,7 +4442,7 @@ describe("protocol-v4 durable secure room engine", () => {
       let releaseOperation!: () => void;
       const operationStarted = new Promise<void>((resolve) => { operationEntered = resolve; });
       const operationGate = new Promise<void>((resolve) => { releaseOperation = resolve; });
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.generation = 12;
       harness.stopped = false;
@@ -4472,8 +4492,8 @@ describe("protocol-v4 durable secure room engine", () => {
   it("acknowledges durable sender results before any follow-on secure work", async () => {
     const result = await page.evaluate(async (reducerModuleUrl) => {
       const [{ SecureRoomController }, stateModule, reducerModule] = await Promise.all([
-        import("/src/services/secureRoomController.ts"),
-        import("/src/services/secureRoomState.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
+        import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
         import(reducerModuleUrl),
       ]);
       const roomInstance = stateModule.randomSecureRoomIdV4(16);
@@ -4510,7 +4530,7 @@ describe("protocol-v4 durable secure room engine", () => {
         },
         dispose: () => {},
       };
-      const controller = new SecureRoomController();
+      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
       const harness = controller as any;
       harness.engine = fakeEngine;
       harness.authenticated = true;

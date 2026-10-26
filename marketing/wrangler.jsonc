@@ -33,7 +33,7 @@
     "CMS_ADMIN_NAME": "Editor",
     "OTEL_ENABLED": "false",
     "OTEL_DEPLOYMENT_ENVIRONMENT": "production",
-    "OTEL_SERVICE_VERSION": "1.1.0",
+    "OTEL_SERVICE_VERSION": "1.1.1",
     "OTEL_SAMPLE_RATE": "1"
   }
 }

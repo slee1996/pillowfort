@@ -1,14 +1,13 @@
 import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 import type { HostedMcpSession } from './session';
 import type { AccessKeyStore } from './auth';
-import type { BrowserQuota } from './quota';
+import type { ParticipantQuota } from './quota';
 import type { TelemetryEnv } from '../../src/telemetry';
 
 export interface Env extends TelemetryEnv {
-  BROWSER: Fetcher;
   MCP_SESSIONS: DurableObjectNamespace<HostedMcpSession>;
   MCP_ACCESS_KEYS: DurableObjectNamespace<AccessKeyStore>;
-  MCP_QUOTAS: DurableObjectNamespace<BrowserQuota>;
+  MCP_QUOTAS: DurableObjectNamespace<ParticipantQuota>;
   OAUTH_KV: KVNamespace;
   OAUTH_PROVIDER: OAuthHelpers;
   ADMIN_TOKEN: string;
@@ -16,8 +15,8 @@ export interface Env extends TelemetryEnv {
   PUBLIC_MCP_URL: string;
   APP_URL: string;
   ALLOWED_ORIGINS: string;
-  MAX_ACTIVE_BROWSERS: string;
-  MAX_DAILY_BROWSER_MINUTES: string;
+  MAX_ACTIVE_SESSIONS: string;
+  MAX_DAILY_SESSION_MINUTES: string;
   MAX_SESSION_SECONDS: string;
   IDLE_TIMEOUT_SECONDS: string;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
-import { createRoomInvitationAuthV4, createRoomInvitationMemberBindingV4 } from "../client/src/services/secureInvitationAuth";
+import { createRoomInvitationAuthV4, createRoomInvitationMemberBindingV4 } from "../src/participant/secureInvitationAuth";
 import { createRoomAuthPayload } from "../client/src/services/chatCrypto";
 import { Room, type Env } from "../src/index";
 import { signSecureDeviceResumeProofV4 } from "../src/deviceAuthV4";

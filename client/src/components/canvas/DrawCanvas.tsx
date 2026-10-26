@@ -1,14 +1,12 @@
 import { useRef, useEffect, useState } from "react";
 import { send } from "../../services/ws";
 import {
-  DRAWING_COLORS, DRAWING_HEIGHT, DRAWING_WIDTH,
   notifyDrawingSurface, registerDrawingSurface,
 } from "../../services/drawingSurface";
+import { DRAWING_COLORS, DRAWING_HEIGHT, DRAWING_WIDTH, DrawingModel, type Point } from "../../../../src/participant/drawing";
 import { PeriodIcon } from "../xp/PeriodIcon";
 import { useGameStore } from "../../stores/gameStore";
 
-type Point = [number, number];
-type Drawer = { point: Point; color: string };
 const MAX_POINTS = 128;
 const BATCH_INTERVAL_MS = 250;
 const INK_WIDTH = 3;
@@ -57,7 +55,21 @@ export function DrawCanvas({ active }: { active: boolean }) {
     let strokeStart = false;
     let points: Point[] = [];
     let lastInput: Point | null = null;
-    const drawers = new Map<string, Drawer>();
+    const drawing = ink ? new DrawingModel({
+      dot(point, color) {
+        ink.fillStyle = color;
+        ink.beginPath();
+        ink.arc(point[0] * DRAWING_WIDTH, point[1] * DRAWING_HEIGHT, INK_WIDTH / 2, 0, Math.PI * 2);
+        ink.fill();
+      },
+      path(origin, points, color, skipFirst) {
+        ink.strokeStyle = color;
+        ink.beginPath();
+        ink.moveTo(origin[0] * DRAWING_WIDTH, origin[1] * DRAWING_HEIGHT);
+        for (let index = skipFirst ? 1 : 0; index < points.length; index++) ink.lineTo(points[index][0] * DRAWING_WIDTH, points[index][1] * DRAWING_HEIGHT);
+        ink.stroke();
+      },
+    }) : null;
 
     const updateNotice = (value: string | null) => {
       noticeRef.current = value;
@@ -185,39 +197,7 @@ export function DrawCanvas({ active }: { active: boolean }) {
       finish();
     };
     const onAppliedDraw = (event: Event) => {
-      if (!ink || !ready) return;
-      const message = (event as CustomEvent).detail;
-      if (!message || typeof message.from !== "string" || typeof message.color !== "string" || message.color.length > 24 ||
-          !useGameStore.getState().members.includes(message.from) ||
-          !Array.isArray(message.pts) || message.pts.length < 1 || message.pts.length > MAX_POINTS) return;
-      for (const point of message.pts) {
-        if (!Array.isArray(point) || point.length !== 2 ||
-            !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
-            point[0] < 0 || point[0] > 1 || point[1] < 0 || point[1] > 1) return;
-      }
-      const batch = message.pts as Point[];
-      const previous = drawers.get(message.from);
-      const start = message.s === 1 || !previous || previous.color !== message.color;
-      const first = batch[0];
-      ink.strokeStyle = message.color;
-      ink.fillStyle = message.color;
-      // A dot is real ink, not a zero-length path (which canvas may omit).
-      if (start) {
-        ink.beginPath();
-        ink.arc(first[0] * DRAWING_WIDTH, first[1] * DRAWING_HEIGHT, INK_WIDTH / 2, 0, Math.PI * 2);
-        ink.fill();
-      }
-      // Never leave a participant's current path inside the shared 2D context.
-      ink.beginPath();
-      const origin = !start && previous ? previous.point : first;
-      ink.moveTo(origin[0] * DRAWING_WIDTH, origin[1] * DRAWING_HEIGHT);
-      for (let index = start ? 1 : 0; index < batch.length; index++) {
-        ink.lineTo(batch[index][0] * DRAWING_WIDTH, batch[index][1] * DRAWING_HEIGHT);
-      }
-      ink.stroke();
-      const end = batch[batch.length - 1];
-      drawers.set(message.from, { point: [end[0], end[1]], color: message.color });
-      schedulePaint();
+      if (ready && drawing?.apply((event as CustomEvent).detail, useGameStore.getState().members)) schedulePaint();
     };
     const chooseColor = (value: string) => {
       if (!DRAWING_COLORS.some((entry) => entry.value === value)) return;
@@ -267,7 +247,7 @@ export function DrawCanvas({ active }: { active: boolean }) {
     window.addEventListener("pf-drawing-error", onDrawingError);
     const unsubscribeMembers = useGameStore.subscribe((state, previous) => {
       if (state.members === previous.members) return;
-      for (const name of drawers.keys()) if (!state.members.includes(name)) drawers.delete(name);
+      drawing?.retainMembers(state.members);
     });
 
     return () => {
@@ -292,7 +272,6 @@ export function DrawCanvas({ active }: { active: boolean }) {
       window.removeEventListener("pf-drawing-error", onDrawingError);
       preview.hidden = true;
       points = [];
-      drawers.clear();
       backing.width = backing.height = 0;
       canvas.width = canvas.height = 0;
     };

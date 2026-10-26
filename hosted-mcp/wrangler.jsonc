@@ -15,9 +15,6 @@
       "custom_domain": true
     }
   ],
-  "browser": {
-    "binding": "BROWSER"
-  },
   "durable_objects": {
     "bindings": [
       {
@@ -30,7 +27,7 @@
       },
       {
         "name": "MCP_QUOTAS",
-        "class_name": "BrowserQuota"
+        "class_name": "ParticipantQuota"
       }
     ]
   },
@@ -41,6 +38,16 @@
         "HostedMcpSession",
         "AccessKeyStore",
         "BrowserQuota"
+      ]
+    }
+    ,
+    {
+      "tag": "v2",
+      "renamed_classes": [
+        {
+          "from": "BrowserQuota",
+          "to": "ParticipantQuota"
+        }
       ]
     }
   ],
@@ -58,23 +65,29 @@
       ],
       "fallthrough": true
     }
+    ,
+    {
+      "type": "CompiledWasm",
+      "globs": ["**/*.wasm"],
+      "fallthrough": true
+    }
   ],
   "observability": {
     "enabled": false
   },
   "limits": {
-    "cpu_ms": 1000
+    "cpu_ms": 30000
   },
   "vars": {
     "OTEL_ENABLED": "false",
     "OTEL_DEPLOYMENT_ENVIRONMENT": "production",
-    "OTEL_SERVICE_VERSION": "1.1.0",
+    "OTEL_SERVICE_VERSION": "1.1.1",
     "OTEL_SAMPLE_RATE": "1",
     "PUBLIC_MCP_URL": "https://mcp.pillowfort.xyz/mcp",
     "APP_URL": "https://pillowfort.xyz",
     "ALLOWED_ORIGINS": "https://pillowfort.xyz,https://about.pillowfort.xyz,https://mcp.pillowfort.xyz,https://chatgpt.com,https://claude.ai",
-    "MAX_ACTIVE_BROWSERS": "2",
-    "MAX_DAILY_BROWSER_MINUTES": "60",
+    "MAX_ACTIVE_SESSIONS": "2",
+    "MAX_DAILY_SESSION_MINUTES": "60",
     "MAX_SESSION_SECONDS": "600",
     "IDLE_TIMEOUT_SECONDS": "120"
   }

@@ -9,8 +9,8 @@ import {
   type SecureApplicationContentV4,
   type SecureApplicationEventV4,
   type SecureRoomStateSnapshotV4,
-} from "../../../src/applicationEventsV4";
-import { encodeSecureAdmissionBundleV4 } from "../../../src/admissionBundleV4";
+} from "../applicationEventsV4";
+import { encodeSecureAdmissionBundleV4 } from "../admissionBundleV4";
 import {
   createEmptySecureRoomStateV4,
   createSecureRoomStateV4,
@@ -20,32 +20,32 @@ import {
   reduceSecureRoomEventV4,
   type SecureMemberCredentialV4,
   type SecureReducerEffectV4,
-} from "../../../src/secureGameReducer";
+} from "../secureGameReducer";
 import {
   SECURE_APPLICATION_EVENT_PUBLIC_KEY_BYTES,
-} from "../../../src/applicationEventsV4";
+} from "../applicationEventsV4";
 import {
   parseRoomInvitationMemberBindingV4,
   secureKeyPackageDigestV4,
   type RoomInvitationMemberBindingV4,
-} from "../../../src/roomInvitationMemberBindingV4";
+} from "../roomInvitationMemberBindingV4";
 import {
   signSecureDeviceResumeProofV4,
   type SecureDeviceResumeContextV4,
-} from "../../../src/deviceAuthV4";
+} from "../deviceAuthV4";
 import {
   MAX_SECURE_ZOMBIE_REMOVALS_V4,
   type SecureLogicalOrderGrantV4,
-} from "../../../src/secureRelayV4";
+} from "../secureRelayV4";
 import {
   MAX_MLS_RELAY_PAYLOAD_BYTES,
   SECURE_DEVICE_ID_BYTES,
   SECURE_MESSAGE_ID_BYTES,
   SECURE_ROOM_ID_BYTES,
   canonicalBase64UrlByteLength,
-} from "../../../src/protocolV4";
+} from "../protocolV4";
 import {
-  CryptoStateStore,
+  type RoomCryptoStateStore,
   type OpaqueCryptoStateSnapshot,
 } from "./cryptoStateStore";
 import {
@@ -110,7 +110,7 @@ interface CommonEngineOptions {
   roomInstance: string;
   roomSecret: string;
   lease: RoomCryptoLockLease;
-  store?: CryptoStateStore;
+  store: RoomCryptoStateStore;
 }
 
 export interface CreateSecureRoomFounderOptions extends CommonEngineOptions {
@@ -433,7 +433,7 @@ export class SecureRoomEngine {
   private durable: SecureRoomDurableStateV1;
   private revision: number;
   private readonly roomSecret: string;
-  private readonly store: CryptoStateStore;
+  private readonly store: RoomCryptoStateStore;
   private readonly lease: RoomCryptoLockLease;
   private readonly lockKey: string;
   private readonly storeKey: string;
@@ -456,7 +456,7 @@ export class SecureRoomEngine {
     durable: SecureRoomDurableStateV1;
     revision: number;
     roomSecret: string;
-    store: CryptoStateStore;
+    store: RoomCryptoStateStore;
     lease: RoomCryptoLockLease;
     lockKey: string;
     storeKey: string;
@@ -488,7 +488,7 @@ export class SecureRoomEngine {
     founder: boolean,
   ): Promise<SecureRoomEngine> {
     validateRoomAndDevice(options?.roomInstance, options?.deviceId);
-    const store = options.store ?? new CryptoStateStore();
+    const store = options.store;
     const lockKey = await secureRoomOpaqueStoreKey(options.roomInstance);
     const storeKey = await secureRoomCredentialStoreKey(options.roomInstance, options.roomSecret);
     this.assertLease(options.lease, lockKey);
@@ -568,7 +568,7 @@ export class SecureRoomEngine {
 
   static async restore(options: RestoreSecureRoomEngineOptions): Promise<SecureRoomEngine> {
     validateRoomAndDevice(options?.roomInstance);
-    const store = options.store ?? new CryptoStateStore();
+    const store = options.store;
     const lockKey = await secureRoomOpaqueStoreKey(options.roomInstance);
     const storeKey = await secureRoomCredentialStoreKey(options.roomInstance, options.roomSecret);
     this.assertLease(options.lease, lockKey);

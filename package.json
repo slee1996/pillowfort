@@ -2,6 +2,10 @@
   "name": "pillowfort",
   "version": "0.0.1",
   "license": "MIT",
+  "engines": {
+    "node": "^22.23.4 || ^24.22.1 || >=26.12.1",
+    "bun": ">=1.4.4"
+  },
   "scripts": {
     "dev": "bun --watch server.ts",
     "dev:client": "cd client && npx vite",
@@ -10,7 +14,7 @@
     "check": "npm run typecheck && npm test && npm run build",
     "deploy": "npm run check && npx wrangler deploy",
     "start": "bun server.ts",
-    "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/room-invitation.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts test/telemetry.test.ts && npm run test:security",
+    "test": "bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/room-invitation.test.ts test/participant-state.test.ts test/participant-key-derivation.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts test/telemetry.test.ts && npm run test:security",
     "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
     "test:ui": "bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 60000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 60000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 60000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 60000 --max-concurrency 1 test/game-night.test.ts",
@@ -24,22 +28,24 @@
     "pilot:demos": "node scripts/capture-pilot-demos.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260906.1",
+    "@cloudflare/workers-types": "5.20261023.1",
     "@playwright/test": "1.59.1",
-    "sharp": "0.35.3",
-    "wrangler": "4.129.0"
+    "sharp": "0.35.5",
+    "wrangler": "4.153.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@noble/ed25519": "3.1.0",
+    "@noble/hashes": "2.4.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/core": "2.11.0",
     "@opentelemetry/otlp-transformer": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0",
-    "playwright": "1.59.1"
+    "playwright": "1.59.1",
+    "zustand": "5.0.11"
   },
   "overrides": {
-    "sharp": "0.35.3"
+    "sharp": "0.35.5"
   }
 }

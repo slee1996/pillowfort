@@ -1,6 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-browser.mjs';
+import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-common.mjs';
 import { createAgentToolRegistry } from './agent-tools.mjs';
 import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResource, getAgentPrompt } from './agent-guidance.mjs';
 
@@ -11,7 +11,7 @@ export function createAgentMcpServer({
   agent, tools = [], instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
   resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError,
 }) {
-  const server = new Server({ name: 'pillowfort', version: '1.1.0' }, {
+  const server = new Server({ name: 'pillowfort', version: '1.1.1' }, {
     capabilities: { tools: {}, resources: {}, prompts: {} },
     instructions,
     jsonSchemaValidator,

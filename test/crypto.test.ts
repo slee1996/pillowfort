@@ -299,7 +299,7 @@ describe("encrypted chat protocol v3", () => {
   });
 
   it("builds protocol-v4 WebSocket URLs without invitation secrets", async () => {
-    const { secureRoomWebSocketUrl } = await import("../client/src/services/secureRoomController");
+    const { secureRoomWebSocketUrl } = await import("../src/participant/secureRoomController");
     const httpUrl = secureRoomWebSocketUrl("abcdefgh", {
       protocol: "http:",
       host: "localhost:3025",
