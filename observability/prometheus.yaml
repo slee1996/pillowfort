@@ -6,8 +6,8 @@ scrape_configs:
   - job_name: pillowfort-operational
     static_configs:
       - targets: [collector:8889]
-    # Only accepted operational span metrics; no process/host inventory.
+    # Allowlisted operational histograms and aggregate volume counters only.
     metric_relabel_configs:
       - source_labels: [__name__]
-        regex: pillowfort_operational_(calls_total|duration_seconds_(bucket|sum|count))
+        regex: pillowfort_(operational_(calls_total|duration_seconds_(bucket|sum|count))|volume_calls_total)
         action: keep

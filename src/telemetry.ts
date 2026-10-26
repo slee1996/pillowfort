@@ -2,7 +2,7 @@ import { ROOT_CONTEXT, SpanKind, SpanStatusCode, type Span, type Tracer } from "
 import { ExportResultCode, SDK_INFO, type ExportResult } from "@opentelemetry/core";
 import { JsonTraceSerializer } from "@opentelemetry/otlp-transformer";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BasicTracerProvider, TraceIdRatioBasedSampler, type ReadableSpan, type SpanExporter, type SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { AlwaysOnSampler, BasicTracerProvider, TraceIdRatioBasedSampler, type ReadableSpan, type SpanExporter, type SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_REDEEM_PATH, FORT_PASS_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
 
 export interface TelemetryEnv {
@@ -95,7 +95,6 @@ function configurationFor(env: TelemetryEnv): Configuration | undefined {
   const rawRate = env.OTEL_SAMPLE_RATE ?? "0.1";
   if (!/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(rawRate)) return;
   const sampleRate = Number(rawRate);
-  if (sampleRate === 0) return;
   const environment = env.OTEL_DEPLOYMENT_ENVIRONMENT ?? "production";
   if (environment !== "production" && environment !== "development" && environment !== "test") return;
   const version = env.OTEL_SERVICE_VERSION;
@@ -163,7 +162,8 @@ class FetchSpanExporter implements SpanExporter {
         headers: this.config.headers,
         body,
         signal: controller.signal,
-        redirect: "error",
+        // Workers rejects "error". Manual mode also prevents forwarding credentials.
+        redirect: "manual",
       });
       // The response is untrusted too. No body parsing, retries, or diagnostic logging.
       await response.body?.cancel();
@@ -210,17 +210,18 @@ interface State {
 }
 
 const MAX_CACHED_ENVS = 8;
-const states = new Map<TelemetryEnv, Map<Service, State>>();
+const states = new Map<TelemetryEnv, Map<Service | "pillowfort.volume", State>>();
 
-function stateFor(service: Service, env: TelemetryEnv): State | undefined {
+function stateFor(service: Service, env: TelemetryEnv, volume = false): State | undefined {
   if (env.OTEL_ENABLED !== "true") return;
+  const key = volume ? "pillowfort.volume" : service;
   let services = states.get(env);
-  const cached = services?.get(service);
+  const cached = services?.get(key);
   if (cached && cached.endpoint === env.OTEL_EXPORTER_OTLP_ENDPOINT
     && cached.headers === env.OTEL_EXPORTER_OTLP_HEADERS && cached.sampleRate === env.OTEL_SAMPLE_RATE
     && cached.version === env.OTEL_SERVICE_VERSION && cached.environment === env.OTEL_DEPLOYMENT_ENVIRONMENT) return cached;
   const config = configurationFor(env);
-  if (!config) return;
+  if (!config || (!volume && config.sampleRate === 0)) return;
   const processor = new RequestSpanProcessor(new FetchSpanExporter(config));
   const provider = new BasicTracerProvider({
     resource: resourceFromAttributes({
@@ -231,7 +232,7 @@ function stateFor(service: Service, env: TelemetryEnv): State | undefined {
       "telemetry.sdk.language": SDK_INFO["telemetry.sdk.language"],
       "telemetry.sdk.version": SDK_INFO["telemetry.sdk.version"],
     }),
-    sampler: new TraceIdRatioBasedSampler(config.sampleRate),
+    sampler: volume ? new AlwaysOnSampler() : new TraceIdRatioBasedSampler(config.sampleRate),
     spanProcessors: [processor],
     spanLimits: {
       attributeCountLimit: 4, attributeValueLengthLimit: 32,
@@ -240,7 +241,7 @@ function stateFor(service: Service, env: TelemetryEnv): State | undefined {
     },
   });
   const state: State = {
-    tracer: provider.getTracer("pillowfort.operational"), processor,
+    tracer: provider.getTracer(volume ? "pillowfort.volume" : "pillowfort.operational"), processor,
     endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT, headers: env.OTEL_EXPORTER_OTLP_HEADERS,
     sampleRate: env.OTEL_SAMPLE_RATE, version: env.OTEL_SERVICE_VERSION,
     environment: env.OTEL_DEPLOYMENT_ENVIRONMENT,
@@ -250,7 +251,7 @@ function stateFor(service: Service, env: TelemetryEnv): State | undefined {
     services = new Map();
     states.set(env, services);
   }
-  services.set(service, state);
+  services.set(key, state);
   return state;
 }
 
@@ -302,4 +303,27 @@ export async function withOperationalTelemetry(
   }
   if (span && state) finish(span, state, ctx, response.status);
   return response;
+}
+
+export type RoomActivity = "room.created" | "room.retired" | "application.accepted" | "member.admitted";
+
+/** Unsampled, content-free count events. The collector aggregates these without storing traces. */
+export function recordRoomActivity(env: TelemetryEnv, ctx: Lifetime, activity: RoomActivity): void {
+  if (env.OTEL_ENABLED !== "true") return;
+  // Enforce the closed vocabulary at runtime too; never accept a caller's labels or identifiers.
+  switch (activity) {
+    case "room.created": case "room.retired": case "application.accepted": case "member.admitted": break;
+    default: return;
+  }
+  try {
+    const state = stateFor("pillowfort.app", env, true);
+    if (!state) return;
+    const span = state.tracer.startSpan("room.activity", {
+      kind: SpanKind.INTERNAL,
+      attributes: { "pillowfort.activity": activity },
+    }, ROOT_CONTEXT);
+    finish(span, state, ctx);
+  } catch {
+    // Counting must never delay or fail an authenticated room transition.
+  }
 }

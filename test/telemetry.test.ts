@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Server } from "bun";
-import { withOperationalTelemetry, type TelemetryEnv } from "../src/telemetry";
+import { recordRoomActivity, withOperationalTelemetry, type TelemetryEnv } from "../src/telemetry";
 
 type Attribute = { key: string; value: { stringValue?: string; intValue?: number | string } };
 type WireSpan = {
@@ -133,6 +133,29 @@ describe("operational OTLP privacy boundary", () => {
     expect(attributes(span.attributes)).toEqual({
       "http.request.method": "POST", "http.response.status_code": 201, "pillowfort.operation": "commerce",
     });
+  });
+
+  it("keeps aggregate counts unsampled while rejecting arbitrary activity labels", async () => {
+    env.OTEL_SAMPLE_RATE = "0";
+    await withOperationalTelemetry("pillowfort.app", new Request("https://app.test/"), env, ctx, () => new Response("ok"));
+    recordRoomActivity(env, ctx, "room.created");
+    recordRoomActivity(env, ctx, PRIVATE as Parameters<typeof recordRoomActivity>[2]);
+    await Promise.all(pending);
+    expect(received).toHaveLength(1);
+    const wire = received[0];
+    expect(wire.text).not.toContain(PRIVATE);
+    expect(wire.text).not.toContain(AUTH);
+    const resource = wire.envelope.resourceSpans[0];
+    expect(attributes(resource.resource.attributes)["service.name"]).toBe("pillowfort.app");
+    const scope = resource.scopeSpans[0];
+    expect(scope.scope.name).toBe("pillowfort.volume");
+    const span = scope.spans[0];
+    expect(span.name).toBe("room.activity");
+    expect(span.kind).toBe(1);
+    expect(attributes(span.attributes)).toEqual({ "pillowfort.activity": "room.created" });
+    expect(span.parentSpanId ?? "").toBe("");
+    expect(span.events ?? []).toEqual([]);
+    expect(span.links ?? []).toEqual([]);
   });
 
   it("never instruments room, websocket, internal, asset, or unknown paths", async () => {

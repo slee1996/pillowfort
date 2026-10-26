@@ -6,6 +6,7 @@ import { readByteLimitedText } from "./src/requestBody";
 import { blockedProbeResponse, isDiscordActivityRequest, logBlockedProbe, logRateLimitedOpsEvent, probeReasonForPath, withSecurityHeaders, type SecurityHeaderMode } from "./src/security";
 import { createFortPassStripeCheckoutSession, createStripeFulfillmentClaimToken, normalizeStripeHostedCheckoutUrl, normalizeStripeRedemptionRequest, resolveFortPassCheckoutSession, resolveFortPassEntitlementFromStripeEvent, resolveFortPassRevocationFromStripeEvent, stripeFulfillmentSessionKey, stripeRevocationEventKey, verifyStripeWebhookSignature, type StripeFortPassRevocationReason } from "./src/stripe";
 import { sanitizeDraw, uniqueName, MAX_DRAW_EVENTS_PER_5S, GRACE_MS as DEFAULT_GRACE_MS } from "./src/shared";
+import { recordRoomActivity, type TelemetryEnv } from "./src/telemetry";
 import {
   createRoomAuthChallenge,
   MAX_AUTH_FAILURES_PER_MINUTE,
@@ -45,6 +46,18 @@ import {
   type SecureServerErrorCodeV4,
   type SecureServerFrameV4,
 } from "./src/secureTransportV4";
+
+const localTelemetryEnv: TelemetryEnv = {
+  OTEL_ENABLED: process.env.OTEL_ENABLED,
+  OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+  OTEL_SAMPLE_RATE: process.env.OTEL_SAMPLE_RATE,
+  OTEL_SERVICE_VERSION: process.env.OTEL_SERVICE_VERSION,
+  OTEL_DEPLOYMENT_ENVIRONMENT: process.env.OTEL_DEPLOYMENT_ENVIRONMENT ?? "development",
+};
+const localTelemetryLifetime = {
+  waitUntil(promise: Promise<unknown>) { void promise.catch(() => {}); },
+};
 
 /** Strictly parse trusted deployment knobs without letting malformed values disable bounds. */
 export function strictBoundedEnvironmentInteger(
@@ -504,6 +517,11 @@ function dispatchLocalSecureEffects(room: SecureLocalRoom, effects: readonly Sec
         });
         break;
       case "route-relay":
+        if (effect.frame.relayKind === "application") {
+          recordRoomActivity(localTelemetryEnv, localTelemetryLifetime, "application.accepted");
+        } else if (effect.frame.relayKind === "join-proof") {
+          recordRoomActivity(localTelemetryEnv, localTelemetryLifetime, "member.admitted");
+        }
         for (const deviceId of effect.toDeviceIds) sendSecureToDevice(room, deviceId, {
           kind: "secure-server", v: 4, suite: 1, type: "relay",
           fromDeviceId: effect.fromDeviceId, frame: effect.frame, logicalOrder: effect.logicalOrder,
@@ -742,6 +760,7 @@ function destroyLocalSecureRoom(room: SecureLocalRoom, notify = true) {
   }
   room.connections.clear();
   secureRooms.delete(room.id);
+  recordRoomActivity(localTelemetryEnv, localTelemetryLifetime, "room.retired");
 }
 
 function members(room: Room): string[] {
@@ -1621,6 +1640,7 @@ async function onLocalSecureAuthenticate(ws: any, d: WSData, authenticate: Secur
       };
       // Map insertion is the local runtime's authoritative persistence boundary.
       secureRooms.set(roomId, room);
+      recordRoomActivity(localTelemetryEnv, localTelemetryLifetime, "room.created");
       pendingFortPassEntitlements.delete(roomId);
       pendingFortPassSetupClaims.delete(roomId);
       pendingFortPassReservations.delete(roomId);

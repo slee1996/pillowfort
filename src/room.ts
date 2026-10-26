@@ -1,4 +1,5 @@
 import type { Env } from "./index";
+import { recordRoomActivity } from "./telemetry";
 import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
 import {
   FORT_PASS_RESERVATION_MS,
@@ -593,6 +594,7 @@ export class Room implements DurableObject {
     options: { touchIdle?: boolean } = {},
   ): Promise<void> {
     const previous = this.secureRelayManifest;
+    const previousLifecycle = this.secureRelayState?.lifecycle;
     if ((!previous && relayState.revision !== 1)
       || (previous && relayState.revision !== previous.stateRevision + 1)) {
       throw new Error("secure relay revision compare-and-swap failed");
@@ -648,6 +650,10 @@ export class Room implements DurableObject {
     this.secureRoomAuthPublicKey = roomAuthPublicKey;
     this.secureRelayState = relayState;
     this.secureStateCorrupt = false;
+    if (!previous) recordRoomActivity(this.env, this.state, "room.created");
+    else if (previousLifecycle === "open" && relayState.lifecycle === "retired") {
+      recordRoomActivity(this.env, this.state, "room.retired");
+    }
   }
 
   private async schedulePreAuthSocketSweep(deadline: number): Promise<void> {
@@ -2133,6 +2139,13 @@ export class Room implements DurableObject {
           });
           break;
         case "route-relay":
+          // New publications only: retries/backlogs do not produce route-relay.
+          // Count once even with no recipients, never once per fanout recipient.
+          if (effect.frame.relayKind === "application") {
+            recordRoomActivity(this.env, this.state, "application.accepted");
+          } else if (effect.frame.relayKind === "join-proof") {
+            recordRoomActivity(this.env, this.state, "member.admitted");
+          }
           for (const deviceId of effect.toDeviceIds) {
             this.sendSecureToDevice(deviceId, {
               kind: "secure-server", v: 4, suite: 1, type: "relay",
@@ -2601,6 +2614,9 @@ export class Room implements DurableObject {
         await transaction.put(FORT_PASS_PREGRANT_REVOCATION_KEY, preGrantRevocation);
       }
     });
+    if (this.secureRelayState?.lifecycle === "open") {
+      recordRoomActivity(this.env, this.state, "room.retired");
+    }
     this.authPublicKey = null;
     this.secureRelayState = null;
     this.secureRelayManifest = null;

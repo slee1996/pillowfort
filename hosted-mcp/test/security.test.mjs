@@ -14,7 +14,8 @@ import { chromium } from 'playwright';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 const admin = randomBytes(48).toString('base64url');
-let directory, child, relay, origin;
+let directory, child, relay, origin, otelReceiver;
+const telemetryPayloads = [];
 
 function request(path, { method = 'GET', json, form, headers = {} } = {}) {
   const body = form !== undefined ? Buffer.from(new URLSearchParams(form).toString()) : json === undefined ? undefined : Buffer.from(JSON.stringify(json));
@@ -66,6 +67,13 @@ before(async () => {
     if (Date.now() >= relayDeadline) throw new Error('Local encrypted relay did not become ready.');
     await delay(100);
   }
+  otelReceiver = createHttpServer(async (incoming, response) => {
+    const chunks = [];
+    for await (const chunk of incoming) chunks.push(chunk);
+    telemetryPayloads.push({ path: incoming.url, authorization: incoming.headers.authorization, text: Buffer.concat(chunks).toString('utf8') });
+    response.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
+  });
+  await new Promise(resolve => otelReceiver.listen(0, '127.0.0.1', resolve));
   const config = JSON.parse(await readFile(join(project, 'wrangler.jsonc'), 'utf8'));
   config.name = 'pillowfort-auth-test';
   config.main = relative(directory, join(project, 'src/index.ts'));
@@ -73,6 +81,13 @@ before(async () => {
   // Only this temporary local fixture may connect to its own loopback relay.
   config.compatibility_flags = config.compatibility_flags.filter(flag => flag !== 'global_fetch_strictly_public');
   config.vars = { ...config.vars, PUBLIC_MCP_URL: origin + '/mcp', APP_URL: relayOrigin, ADMIN_TOKEN: admin, CONSENT_SECRET: randomBytes(48).toString('base64url'), ALLOWED_ORIGINS: origin, MAX_SESSION_SECONDS: '30', IDLE_TIMEOUT_SECONDS: '120' };
+  Object.assign(config.vars, {
+    OTEL_ENABLED: 'true',
+    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${otelReceiver.address().port}`,
+    OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Bearer%20local-test-ingestion',
+    OTEL_DEPLOYMENT_ENVIRONMENT: 'test',
+    OTEL_SAMPLE_RATE: '1',
+  });
   const configPath = join(directory, 'wrangler.json');
   await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
   child = spawn(process.execPath, [join(project, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', configPath, '--local', '--ip', '127.0.0.1', '--port', String(port), '--local-protocol', 'https', '--local-upstream', `127.0.0.1:${port}`, '--upstream-protocol', 'https', '--persist-to', join(directory, 'state'), '--log-level', 'error'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -98,6 +113,7 @@ after(async () => {
       process.kill('SIGTERM');
     });
   }));
+  if (otelReceiver?.listening) await new Promise(resolve => otelReceiver.close(resolve));
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
@@ -108,6 +124,28 @@ const issue = async label => {
   assert.equal(response.status, 201);
   return response.body;
 };
+
+test('enabled telemetry exports from the real Worker runtime without leaking credentials', async () => {
+  const before = telemetryPayloads.length;
+  assert.equal((await request('/health')).status, 200);
+  const deadline = Date.now() + 5000;
+  while (telemetryPayloads.length === before && Date.now() < deadline) await delay(20);
+  const received = telemetryPayloads[before];
+  assert(received, 'An enabled, healthy Worker must deliver its OTLP request.');
+  assert.equal(received.path, '/v1/traces');
+  assert.equal(received.authorization, 'Bearer local-test-ingestion');
+  assert(!received.text.includes(admin));
+  assert(!received.text.includes(origin));
+  const resource = JSON.parse(received.text).resourceSpans[0];
+  const attrs = Object.fromEntries(resource.resource.attributes.map(({ key, value }) => [key, value.stringValue]));
+  assert.equal(attrs['service.name'], 'pillowfort.hosted-mcp');
+  const scope = resource.scopeSpans[0];
+  assert.equal(scope.scope.name, 'pillowfort.operational');
+  const span = scope.spans[0];
+  assert.equal(span.name, 'http.server.request');
+  assert(span.attributes.some(({ key, value }) => key === 'pillowfort.operation' && value.stringValue === 'health'));
+  assert(span.attributes.some(({ key, value }) => key === 'http.response.status_code' && Number(value.intValue) === 200));
+});
 
 test('MCP metadata and tool arguments are bounded before validation without losing a live session', async () => {
   const key = await issue('request-limits');

@@ -8,6 +8,11 @@
 > `src/analytics.ts`. Use the opt-in cohort measurement plan in
 > [GTM_MARKETING_PLAN.md](GTM_MARKETING_PLAN.md), not room-funnel counts inferred
 > from absent events.
+>
+> Separately, opt-in server OTel can export four aggregate room/admission/
+> encrypted-application counts without identities or contents. This is not the
+> browser `/analytics` funnel, chat-only measurement, cohort tracking or room
+> tracing. See [room-volume definitions](PRODUCTION_MONITORING.md#room-and-message-volume).
 
 Pillowfort beta analytics are same-origin, privacy-safe funnel events. They are
 intended to answer product questions without collecting chat content or user
