@@ -409,7 +409,7 @@ describe("Worker production entrypoint", () => {
     const upgrade = new Response(null, { status: 101 });
     Object.defineProperty(upgrade, "webSocket", { value: acceptedWebSocket });
 
-    const wrapped = withSecurityHeaders(upgrade);
+    const wrapped = withSecurityHeaders(upgrade, new Request("https://pillow.test/ws"));
 
     expect(wrapped.status).toBe(101);
     expect(wrapped.webSocket).toBe(acceptedWebSocket);
@@ -702,6 +702,18 @@ describe("Worker production entrypoint", () => {
     expect(res.headers.get("strict-transport-security")).toContain("includeSubDomains");
     expect(res.headers.get("referrer-policy")).toBe("no-referrer");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+  });
+
+  it("exposes the public homepage to discovery without indexing room or launch documents", async () => {
+    const { env } = createWorkerEnv();
+    const home = await worker.fetch(new Request("https://pillow.test/"), env);
+    expect(home.headers.get("x-robots-tag")).toBeNull();
+    expect(home.headers.get("link")).toContain('<https://pillowfort.xyz/>; rel="canonical"');
+    for (const path of ["/party-1", "/activity?frame_id=test", "/?room=party-1"]) {
+      const response = await worker.fetch(new Request(`https://pillow.test${path}`), env);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-robots-tag")).toContain("noindex");
+    }
   });
 
   it("serves activity route with Discord-compatible frame headers", async () => {

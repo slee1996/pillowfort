@@ -1114,6 +1114,7 @@ function contentTypeForPath(path: string): string {
   if (path.endsWith(".css")) return "text/css; charset=utf-8";
   if (path.endsWith(".json")) return "application/json; charset=utf-8";
   if (path.endsWith(".txt")) return "text/plain; charset=utf-8";
+  if (path.endsWith(".xml")) return "application/xml; charset=utf-8";
   if (path.endsWith(".wasm")) return "application/wasm";
   if (path.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
   if (path.endsWith(".png")) return "image/png";
@@ -3387,7 +3388,7 @@ export function startLocalServer(port = PORT, options: LocalServerOptions = {}) 
       localUnauthenticatedSockets,
     );
     const mode: SecurityHeaderMode = isDiscordActivityRequest(req) ? "discord-activity" : "default";
-    return response ? withSecurityHeaders(response, mode) : undefined;
+    return response ? withSecurityHeaders(response, req, mode) : undefined;
   },
 
   websocket: {

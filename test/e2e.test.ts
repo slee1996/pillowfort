@@ -83,6 +83,7 @@ describe("Invite link flow", () => {
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-robots-tag")).toContain("noindex");
   });
 
   it("GET /:customCode returns HTML for paid custom room links", async () => {
@@ -90,6 +91,7 @@ describe("Invite link flow", () => {
     expect(res.status).toBe(200);
     const ct = res.headers.get("content-type") || "";
     expect(ct).toContain("text/html");
+    expect(res.headers.get("x-robots-tag")).toContain("noindex");
   });
 
   it("GET /activity returns HTML with Discord frame headers", async () => {
@@ -101,6 +103,16 @@ describe("Invite link flow", () => {
       "frame-ancestors https://discord.com https://canary.discord.com https://ptb.discord.com",
     );
     expect(res.headers.get("x-frame-options")).toBeNull();
+  });
+
+  it("serves the public sitemap as XML without publishing private room URLs", async () => {
+    const response = await fetch(`http://localhost:${getPort()}/sitemap.xml`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/xml");
+    const xml = await response.text();
+    const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => new URL(match[1]));
+    expect(locations.some(url => url.href === "https://pillowfort.xyz/")).toBe(true);
+    expect(locations.every(url => url.origin === "https://pillowfort.xyz" && url.pathname === "/" && !url.search)).toBe(true);
   });
 
   it("blocks scanner paths in the local runtime", async () => {

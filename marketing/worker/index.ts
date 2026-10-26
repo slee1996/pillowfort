@@ -53,7 +53,38 @@ const worker = {
     }
     let response: Response;
 
-    if (isImageOptimizationPath(url.pathname)) {
+    if (url.pathname === "/sitemap.xml") {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        response = new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
+      } else {
+        try {
+          const articles = await env.DB.prepare(
+            "SELECT slug, updated_at AS updatedAt FROM articles WHERE status = 'published' ORDER BY slug LIMIT 49997",
+          ).all<{ slug: string; updatedAt: number }>();
+          const entries = ["/", "/technology", "/articles", "/agents"].map(
+            path => `  <url><loc>https://about.pillowfort.xyz${path}</loc></url>`,
+          );
+          if (articles.results.length + entries.length > 50_000) throw new Error("Sitemap index required");
+          for (const article of articles.results) {
+            const modified = new Date(article.updatedAt);
+            const lastmod = article.updatedAt > 0 && Number.isFinite(modified.getTime())
+              ? `<lastmod>${modified.toISOString()}</lastmod>` : "";
+            entries.push(`  <url><loc>https://about.pillowfort.xyz/articles/${encodeURIComponent(article.slug)}</loc>${lastmod}</url>`);
+          }
+          const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + entries.join("\n") + "\n</urlset>\n";
+          response = new Response(request.method === "HEAD" ? null : xml, {
+            headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=300" },
+          });
+        } catch {
+          // An outage must not advertise that previously indexed articles disappeared.
+          response = new Response("Sitemap temporarily unavailable", {
+            status: 503,
+            headers: { "cache-control": "no-store", "retry-after": "300" },
+          });
+        }
+      }
+    } else if (isImageOptimizationPath(url.pathname)) {
       response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
@@ -77,7 +108,16 @@ const worker = {
     // Preserve same-origin form Origin headers while withholding cross-origin referrers.
     headers.set("referrer-policy", "same-origin");
     if (url.protocol === "https:") headers.set("strict-transport-security", "max-age=31536000");
-    if (url.pathname === "/admin" || url.pathname.startsWith("/api/")) headers.set("cache-control", "no-store");
+    const privatePath = url.pathname === "/admin" || url.pathname.startsWith("/admin/") || url.pathname.startsWith("/api/");
+    if (privatePath) {
+      headers.set("cache-control", "no-store");
+      headers.set("x-robots-tag", "noindex, nofollow");
+    } else if (response.ok && (request.method === "GET" || request.method === "HEAD")) {
+      headers.append("link", '<https://about.pillowfort.xyz/llms.txt>; rel="describedby"');
+      if (url.pathname === "/agents") {
+        headers.append("link", '<https://about.pillowfort.xyz/agents/index.md>; rel="alternate"; type="text/markdown"');
+      }
+    }
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
 };

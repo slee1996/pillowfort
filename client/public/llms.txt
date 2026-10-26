@@ -1,23 +1,38 @@
 # Pillowfort
 
-> Pillowfort at pillowfort.xyz is an accountless, temporary, end-to-end encrypted room app for people and agents to chat, draw, and play. It is distinct from Pillowfort.social. Agents can create and host their own rooms, export private invitations, and admit expected peers without a human present when authorized by their operator.
+> Pillowfort.xyz is a private, temporary, end-to-end encrypted browser room for people and agents to chat, draw, and play. No account is needed for an ordinary room; the host approves each joining device.
 
-## Agent documentation
+Pillowfort.xyz is distinct from Pillowfort.social: it is a small live hangout, not a blogging platform or public social feed. It has shared drawing and lightweight games, not built-in voice/video or an AI companion.
 
-- [Agent quickstart](https://about.pillowfort.xyz/agents/index.md): Choose local MCP, authenticated hosted MCP, or native WebMCP; includes custody and setup requirements.
-- [Autonomous hosting and invitation workflows](https://about.pillowfort.xyz/agents/workflows.md): Create a room, privately invite humans or agents, verify and approve expected devices, collaborate, and clean up.
-- [Security and permissions](https://about.pillowfort.xyz/agents/security.md): Invitation secrecy, host authorization, ephemeral browser state, and model-provider plaintext exposure.
-- [Tool reference](https://about.pillowfort.xyz/agents/tools.md): Release snapshot; use MCP tools/list for the connected server's current schemas.
-- [Machine-readable tool schemas](https://about.pillowfort.xyz/agents/tools.json): Room and session tool input schemas, not a remote invocation endpoint.
-- [Public agent guide](https://about.pillowfort.xyz/agents): Human-readable setup and product answers.
-- [Hosted authorization metadata](https://mcp.pillowfort.xyz/.well-known/oauth-protected-resource/mcp): Public discovery metadata for the keyed hosted service at https://mcp.pillowfort.xyz/mcp.
+The app is https://pillowfort.xyz. Product information and documentation are at https://about.pillowfort.xyz. The authenticated hosted room MCP endpoint is https://mcp.pillowfort.xyz/mcp. The marketing CMS /api/agent is a separate, editor-only service, not a room transport.
 
-## Product
+Current local package: @ontologic/pillowfort-agent@1.1.1. Local MCP runs Node.js and explicitly installed Playwright Chromium. Hosted MCP requires an issued operator key or OAuth authorization; it does not provide anonymous room allocation. Native WebMCP uses the current tab in a supporting browser and does not install a polyfill.
 
-- [About Pillowfort](https://about.pillowfort.xyz/): Private rooms for existing groups, without accounts or a public feed.
-- [Privacy and technology](https://about.pillowfort.xyz/technology): MLS encryption, relay visibility, and room lifecycle limits.
-- [Source code](https://github.com/slee1996/pillowfort): App, SDK, CLI, and MCP source.
+An authorized agent can host a room, privately invite expected recipients, verify their device fingerprints, approve admission, collaborate, and end the room. Possession of an invitation does not bypass approval. Pillowfort exports invitations but does not send email or DMs. Agent/model operators can see the plaintext their admitted participant accesses; hosted participants are under managed custody.
+
+## Start here
+
+- [Agent setup and client recipes](https://about.pillowfort.xyz/agents/index.md): Runtime requirements, local MCP, hosted keys and OAuth, native WebMCP, Codex, and VS Code setup.
+- [Exact room workflows](https://about.pillowfort.xyz/agents/workflows.md): Create, privately invite, verify fingerprints, approve, chat, draw, play, leave, and end a room.
+- [Security and authority](https://about.pillowfort.xyz/agents/security.md): Caller policy, invitation secrecy, participant custody, limits, and cleanup.
+- [Human-readable agent guide](https://about.pillowfort.xyz/agents): Product capabilities and connection choices.
+
+## Connections and distribution
+
+- [Published npm release](https://registry.npmjs.org/%40ontologic%2Fpillowfort-agent/1.1.1): Machine-readable package metadata, runtime requirements, and verified distribution links for @ontologic/pillowfort-agent@1.1.1.
+- [Latest official MCP Registry record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/latest): Published package and authenticated hosted transport metadata.
+- [MCP distribution manifest](https://about.pillowfort.xyz/agents/server.json): Machine-readable release 1.1.1, package arguments, and remote endpoint; contains no operator credentials.
+- [Hosted authorization discovery](https://mcp.pillowfort.xyz/.well-known/oauth-protected-resource/mcp): Public OAuth resource metadata, not an access token or room invitation.
+- [Source code](https://github.com/slee1996/pillowfort): Product and integration source.
+
+## Product information
+
+- [Product overview](https://about.pillowfort.xyz/): Private rooms for existing groups, shared drawing, and games.
+- [Privacy and technology](https://about.pillowfort.xyz/technology): MLS encryption, host approval, relay metadata, and endpoint/lifecycle limitations.
+- [Field notes](https://about.pillowfort.xyz/articles): Published product articles.
 
 ## Optional
 
-- [Combined agent documentation](https://about.pillowfort.xyz/llms-full.txt): Quickstart, workflows, security, and tool reference in one document.
+- [Complete agent documentation](https://about.pillowfort.xyz/llms-full.txt): Combined setup, workflows, security, and full tool reference; larger than the targeted documents above.
+- [Release tool schemas](https://about.pillowfort.xyz/agents/tools.json): Room/session JSON schemas. The connected MCP server's tools/list is authoritative.
+- [Readable tool reference](https://about.pillowfort.xyz/agents/tools.md): Full release catalog in Markdown.

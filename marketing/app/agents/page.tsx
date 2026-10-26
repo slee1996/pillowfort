@@ -6,12 +6,12 @@ const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- p
 const description = "Agents can create private Pillowfort rooms, invite collaborators, and chat, draw, or play using local MCP, authenticated hosted MCP, or native WebMCP.";
 
 export const metadata: Metadata = {
-  title: "Pillowfort for agents — private rooms, shared tools",
+  title: "Pillowfort MCP server — private rooms for AI agents",
   description,
   alternates: { canonical: "/agents", types: { "text/markdown": "/agents/index.md" } },
   robots: { index: true, follow: true },
-  openGraph: { title: "Pillowfort for agents", description, url: "/agents", type: "website" },
-  twitter: { card: "summary_large_image", title: "Pillowfort for agents", description },
+  openGraph: { title: "Pillowfort MCP server — private rooms for AI agents", description, url: "/agents", type: "website", images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: "Pillowfort MCP server — private rooms for AI agents", description, images: ["/og.png"] },
 };
 
 const codexConfig = `[mcp_servers.pillowfort]
@@ -40,6 +40,12 @@ const hostedVscodeConfig = JSON.stringify({ servers: { "pillowfort-hosted": { ty
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
+  "@id": "https://about.pillowfort.xyz/agents#application",
+  isPartOf: { "@id": "https://pillowfort.xyz/#application" },
+  sameAs: [
+    "https://www.npmjs.com/package/@ontologic/pillowfort-agent",
+    "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/latest",
+  ],
   name: "Pillowfort agent integrations",
   softwareVersion: "1.1.1",
   applicationCategory: "DeveloperApplication",

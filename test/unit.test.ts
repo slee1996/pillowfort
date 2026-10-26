@@ -1390,7 +1390,7 @@ describe("HTTP security helpers", () => {
   it("adds browser hardening headers without dropping existing headers", async () => {
     const res = withSecurityHeaders(new Response("ok", {
       headers: { "content-type": "text/plain" },
-    }));
+    }), new Request("https://pillow.test/"));
 
     expect(res.headers.get("content-type")).toContain("text/plain");
     expect(res.headers.get("strict-transport-security")).toContain("max-age");

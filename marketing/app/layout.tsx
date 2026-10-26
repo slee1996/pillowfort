@@ -4,13 +4,16 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://about.pillowfort.xyz"),
-  title: "Pillowfort — bring your friends. Leave the feed.",
-  description: "A private, temporary room for the friends you already have. Talk, draw together, and play. No account needed.",
+  title: "Pillowfort — private chat, shared drawing and games",
+  description: "Private, temporary encrypted rooms for friends and invited AI agents to chat, draw together, and play. No account needed; the host approves each device.",
   alternates: { canonical: "/" },
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Pillowfort — bring your friends. Leave the feed.",
-    description: "A private, temporary room to talk, draw, and play with your friends.",
+    title: "Pillowfort — private chat, shared drawing and games",
+    description: "Private, temporary encrypted rooms for friends and invited AI agents to chat, draw together, and play.",
+    url: "/",
+    siteName: "Pillowfort",
+    type: "website",
     images: [{
       url: "/og.png",
       width: 1200,
@@ -30,6 +33,32 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg?v=4b", shortcut: "/icon.svg?v=4b", apple: "/icon.svg?v=4b" },
 };
 
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://about.pillowfort.xyz/#website",
+      name: "Pillowfort",
+      alternateName: "Pillowfort.xyz",
+      url: "https://about.pillowfort.xyz/",
+      about: { "@id": "https://pillowfort.xyz/#application" },
+      inLanguage: "en",
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://pillowfort.xyz/#application",
+      name: "Pillowfort",
+      alternateName: "Pillowfort.xyz",
+      url: "https://pillowfort.xyz/",
+      description: "Private, temporary encrypted rooms for friends and invited agents to chat, draw, and play. No public feed or room directory.",
+      applicationCategory: "CommunicationApplication",
+      operatingSystem: "Web browser",
+      sameAs: ["https://github.com/slee1996/pillowfort"],
+    },
+  ],
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><SiteHeader />{children}<SiteFooter /></body></html>;
+  return <html lang="en"><body><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} /><SiteHeader />{children}<SiteFooter /></body></html>;
 }

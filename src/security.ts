@@ -153,7 +153,7 @@ export function isDiscordActivityRequest(request: Request): boolean {
   return url.pathname === "/activity";
 }
 
-export function withSecurityHeaders(response: Response, mode: SecurityHeaderMode = "default"): Response {
+export function withSecurityHeaders(response: Response, request: Request, mode: SecurityHeaderMode = "default"): Response {
   // `webSocket` is a Cloudflare Response extension, not part of the standard
   // ResponseInit copy algorithm. Passing a Response object as ResponseInit can
   // therefore turn an accepted upgrade into a 101 response with no socket.
@@ -181,6 +181,12 @@ export function withSecurityHeaders(response: Response, mode: SecurityHeaderMode
     // shell pin stale cryptographic code while immutable hashed assets remain
     // cacheable under their own response metadata.
     next.headers.set("cache-control", "no-store");
+    const url = new URL(request.url);
+    if (url.pathname !== "/" || url.search) {
+      next.headers.set("x-robots-tag", "noindex, nofollow, noarchive");
+    } else {
+      next.headers.append("link", '<https://pillowfort.xyz/>; rel="canonical", <https://pillowfort.xyz/llms.txt>; rel="describedby"');
+    }
   }
   if (mode === "discord-activity") next.headers.delete("x-frame-options");
   return next;

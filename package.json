@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "bun --watch server.ts",
     "dev:client": "cd client && npx vite",
-    "build": "npm run verify:openmls && npm --prefix client run build",
+    "build": "npm run agent:docs && npm run verify:openmls && npm --prefix client run build",
     "typecheck": "npm --prefix client run typecheck",
     "check": "npm run typecheck && npm test && npm run build",
     "deploy": "npm run check && npx wrangler deploy",
