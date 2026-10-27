@@ -560,9 +560,13 @@ tunneled. The connector image is pinned and runs read-only, unprivileged, with a
 native readiness check and `restart: unless-stopped`.
 
 The private `~/.config/pillowfort/tunnel.env` contains the dedicated tunnel ID,
-credential-file path and its owner UID/GID—not the credential contents. The
-connector mounts that scoped credential file read-only; do not mount the broader
-Cloudflare origin certificate, loosen file permissions, or commit either file.
+credential-file path and container-readable UID/GID—not the credential contents.
+With rootful Docker, use the host file owner's UID/GID. With rootless Docker, use
+`PILLOWFORT_UID=0` and `PILLOWFORT_GID=0`: container root maps to the unprivileged
+daemon owner, not host root. Using host UID 1001 inside the rootless container
+cannot read an owner-only bind mount. Keep the scoped credential file mode 0600
+and mounted read-only; do not mount the broader Cloudflare origin certificate,
+loosen file permissions, or commit either file.
 Start/recover the complete stack without deleting its persisted data:
 
 ```sh
@@ -572,6 +576,53 @@ docker compose \
   -f observability/compose.yaml -f observability/compose.ingress.yaml \
   up -d --wait --wait-timeout 90
 ```
+
+**Linux host preparation (2026-10-27).** `agent@mbp-agent.local` has Docker Engine
+29.9.2 and Compose 5.6.1 installed from Docker's signed Ubuntu repository. The
+daemon runs as `agent` (host UID 1001) through an enabled systemd user service;
+linger is already enabled. The root-owned Docker, Docker socket and containerd
+services remain masked. The required `nf_tables` module is loaded and recorded in
+`/etc/modules-load.d/pillowfort-rootless-docker.conf`; the global AppArmor
+restriction on unprivileged user namespaces remains enabled.
+
+An actual container verified the UID mapping, kernel-enforced memory/CPU/PID
+limits and automatic recovery after a daemon restart. No host reboot was
+performed. Rootless Docker uses seccomp but does not apply per-container AppArmor
+profiles; cpuset and disk-I/O throttling are not available in this delegation.
+The existing Resin8 and OMP services are outside this setup's scope.
+
+The isolated deployment directory is
+`/home/agent/workspaces/pillowfort-observability-20261027.azBvVd`, with the public
+`observability/` configuration from release `8947f46`. Its `private/tunnel.env`
+contains only the tunnel ID, credential path and rootless UID/GID mapping. The
+owner must provision the project-specific runtime environment and dedicated
+tunnel credential directly; SSH keys, provider authentication and the broad
+Cloudflare origin certificate must stay in place.
+
+Host preparation is **not a production cutover**. Keep the workstation stack
+running until the storage writers have been stopped for a consistent volume
+copy, numeric owners restored inside rootless containers, and production receipt
+verified on Linux. Never run both ingestion connectors against independent
+collectors: Cloudflare can split events between them. A cold handoff can lose
+best-effort exports, and collector restarts reset its in-memory counter epoch;
+persisted Prometheus/Tempo history is separate.
+
+For backend preparation only, after the owner provisions the runtime files:
+
+```sh
+ssh agent@mbp-agent.local
+systemctl --user start docker.service
+cd /home/agent/workspaces/pillowfort-observability-20261027.azBvVd
+docker --context rootless compose \
+  --env-file private/observability.env \
+  --env-file private/tunnel.env \
+  -f observability/compose.yaml -f observability/compose.ingress.yaml \
+  up -d --wait --wait-timeout 90 ingress collector tempo prometheus grafana
+```
+
+That command deliberately excludes `cloudflared`. Grafana must stay loopback-only;
+use an SSH local forward rather than publishing it through the public tunnel.
+
 
 Checked-in `OTEL_ENABLED=false` is intentional: local development must not send
 production events. After verifying authenticated ingress, explicitly enable the
