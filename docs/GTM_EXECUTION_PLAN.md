@@ -353,3 +353,21 @@ The current workstation stack is not an always-on hosted monitoring service.
 - The connector survives the assistant session but still depends on this Mac and
   Docker staying awake/running. This is not an always-on hosted monitoring service.
 
+## Rootless Linux host preparation — 2026-10-27
+
+- Owner selected rootless Docker for the shared Linux MacBook Pro. Used existing
+  key-only maintenance access to install signed Docker Engine 29.9.2, Compose
+  5.6.1 and the UID/network prerequisites. No existing packages were upgraded.
+- The daemon runs as unprivileged `agent`; root-owned Docker/containerd services
+  are masked. Existing subordinate UID/GID ranges, systemd delegation and linger
+  were reused. Loaded/persisted only the required `nf_tables` kernel module;
+  global AppArmor namespace restrictions were not disabled.
+- An actual native container verified UID mapping, enforced memory/CPU/PID limits
+  and automatic restart after a daemon restart. A nonsecret mode-0600 bind mount
+  was readable by container UID 0 and denied to container UID 1001; real
+  credentials were not read for this test.
+- Public release `8947f46` configuration is staged in an isolated workspace.
+  Runtime-secret provisioning and a consistent persisted-data/single-connector
+  handoff are still required. The production stack remains on the workstation;
+  this preparation does not establish continuous Linux-hosted collection.
+
