@@ -528,23 +528,35 @@ best-effort, so these are observed operational counts—not billing, all-time,
 unique-user, retention or active-room metrics. Missing data is not zero. There
 is no historical backfill. Collector failures must not affect room operations.
 
-This workstation's private configuration is in
-`~/.config/pillowfort/observability.json` and `observability.env`, mode 0600.
-The JSON contains distinct Grafana and ingestion passwords; never commit or share
-it. Compose requires `GRAFANA_ADMIN_PASSWORD` and
-`OTEL_INGEST_PASSWORD_HASH` (a bcrypt hash for the `otel` ingestion user).
-The environment file is outside the repository:
+Production telemetry runs on the shared Linux MacBook Pro as
+`agent@mbp-agent.local`, in
+`/home/agent/workspaces/pillowfort-observability-20261027.azBvVd`.
+Collection no longer depends on this workstation or its Docker staying awake;
+the Linux host, its network connection and rootless Docker must remain running.
+
+The deployment's `private/observability.env` supplies `GRAFANA_ADMIN_PASSWORD`
+and `OTEL_INGEST_PASSWORD_HASH` (the bcrypt hash for ingestion user `otel`).
+It is owner-only, mode 0600. The owner provisioned the dedicated tunnel credential
+directly, retaining mode 0400. No SSH keys, provider authentication or broad
+Cloudflare origin certificate were transferred.
+
+Grafana remains loopback-only. From the Mac, open a private SSH forward:
 
 ```sh
-docker compose --env-file ~/.config/pillowfort/observability.env -f observability/compose.yaml up -d
+ssh -N -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:13000:127.0.0.1:13000 agent@mbp-agent.local
 ```
 
-Grafana is local-only at `http://127.0.0.1:13000`, username `admin`; its password
-is in the private JSON. OTLP ingress is local-only at `http://127.0.0.1:43180`.
-Named Docker volumes persist traces, metrics and dashboard state; configured
-trace/metric retention is seven days. Do not use `docker compose down -v` unless
-deleting that history is intended. A workstation deployment stops serving when
-the machine or Docker stops; use an always-on host for continuous monitoring.
+Then visit `http://localhost:13000`, username `admin`. The password is unchanged
+and remains in the Mac's private `~/.config/pillowfort/observability.json`.
+That JSON also contains the separate ingestion password; never commit or share
+it. The SSH forward is needed only for dashboard access, not for collection.
+
+Named Docker volumes persist traces, metrics and Grafana state; trace/metric
+retention is seven days. Do not use `docker compose down -v` unless deleting that
+history is intended. The stopped Mac volumes are retained only for rollback;
+retention does not prune a stopped backup. Never restart its connector while the
+Linux connector is active.
 
 The Grafana container keeps its read-only filesystem and disables background
 plugin auto-updates. Otherwise Grafana 13 can unload bundled datasource plugins
@@ -553,61 +565,41 @@ before a failed read-only update, leaving dashboards unable to query
 Update the reviewed image/plugin versions deliberately; do not make the image
 writable or disable authentication to repair this failure.
 
-The stable ingestion hostname is `https://otel.pillowfort.xyz`, backed by the
-dedicated `pillowfort-observability` named Cloudflare Tunnel. It routes only to
+Grafana's Go soft memory limit is explicitly `384MiB`; its container ceiling is
+`1g` to leave headroom for separate bundled datasource backend processes. The
+rootless smoke exposed an unbounded Go heap pressing against the former 512 MiB
+ceiling and swapping. With the bounded heap and measured process headroom, the
+same real dashboard workload completed without swap, cgroup-limit hits or
+container restarts. These are smoke observations, not a sustained-load guarantee.
+
+The stable ingestion hostname remains `https://otel.pillowfort.xyz`, backed by
+the dedicated `pillowfort-observability` Cloudflare Tunnel. It routes only to
 authenticated Caddy ingestion; other hostnames/paths return 404. Grafana is not
-tunneled. The connector image is pinned and runs read-only, unprivileged, with a
-native readiness check and `restart: unless-stopped`.
+publicly tunneled. The pinned connector runs read-only with a native readiness
+check and `restart: unless-stopped`; no new tunnel login or Worker/npm release
+was needed for this host migration.
 
-The private `~/.config/pillowfort/tunnel.env` contains the dedicated tunnel ID,
-credential-file path and container-readable UID/GID—not the credential contents.
-With rootful Docker, use the host file owner's UID/GID. With rootless Docker, use
+The deployment's `private/tunnel.env` contains only the dedicated tunnel ID,
+credential-file path and container-readable UID/GID. With rootless Docker, use
 `PILLOWFORT_UID=0` and `PILLOWFORT_GID=0`: container root maps to the unprivileged
-daemon owner, not host root. Using host UID 1001 inside the rootless container
-cannot read an owner-only bind mount. Keep the scoped credential file mode 0600
-and mounted read-only; do not mount the broader Cloudflare origin certificate,
-loosen file permissions, or commit either file.
-Start/recover the complete stack without deleting its persisted data:
+daemon owner, not host root. Host UID 1001 used inside the container cannot read
+the owner-only credential bind mount. Keep that file mode 0400 or 0600 and
+mounted read-only; do not loosen permissions or mount a management certificate.
 
-```sh
-docker compose \
-  --env-file ~/.config/pillowfort/observability.env \
-  --env-file ~/.config/pillowfort/tunnel.env \
-  -f observability/compose.yaml -f observability/compose.ingress.yaml \
-  up -d --wait --wait-timeout 90
-```
+Docker Engine 29.9.2 and Compose 5.6.1 came from Docker's signed Ubuntu repository.
+The daemon runs as `agent` (host UID 1001) through an enabled systemd user service;
+linger is enabled. Root-owned Docker, Docker socket and containerd services
+remain masked. The required `nf_tables` module is persisted in
+`/etc/modules-load.d/pillowfort-rootless-docker.conf`; global AppArmor restrictions
+on unprivileged user namespaces remain enabled.
 
-**Linux host preparation (2026-10-27).** `agent@mbp-agent.local` has Docker Engine
-29.9.2 and Compose 5.6.1 installed from Docker's signed Ubuntu repository. The
-daemon runs as `agent` (host UID 1001) through an enabled systemd user service;
-linger is already enabled. The root-owned Docker, Docker socket and containerd
-services remain masked. The required `nf_tables` module is loaded and recorded in
-`/etc/modules-load.d/pillowfort-rootless-docker.conf`; the global AppArmor
-restriction on unprivileged user namespaces remains enabled.
+Kernel-enforced memory/CPU/PID limits and automatic container recovery after a
+daemon restart were exercised. No host reboot was performed. Rootless Docker
+uses seccomp but does not apply per-container AppArmor profiles; cpuset and
+disk-I/O throttling are unavailable in the current cgroup setup. Existing Resin8
+and OMP workloads were not changed.
 
-An actual container verified the UID mapping, kernel-enforced memory/CPU/PID
-limits and automatic recovery after a daemon restart. No host reboot was
-performed. Rootless Docker uses seccomp but does not apply per-container AppArmor
-profiles; cpuset and disk-I/O throttling are not available in this delegation.
-The existing Resin8 and OMP services are outside this setup's scope.
-
-The isolated deployment directory is
-`/home/agent/workspaces/pillowfort-observability-20261027.azBvVd`, with the public
-`observability/` configuration from release `8947f46`. Its `private/tunnel.env`
-contains only the tunnel ID, credential path and rootless UID/GID mapping. The
-owner must provision the project-specific runtime environment and dedicated
-tunnel credential directly; SSH keys, provider authentication and the broad
-Cloudflare origin certificate must stay in place.
-
-Host preparation is **not a production cutover**. Keep the workstation stack
-running until the storage writers have been stopped for a consistent volume
-copy, numeric owners restored inside rootless containers, and production receipt
-verified on Linux. Never run both ingestion connectors against independent
-collectors: Cloudflare can split events between them. A cold handoff can lose
-best-effort exports, and collector restarts reset its in-memory counter epoch;
-persisted Prometheus/Tempo history is separate.
-
-For backend preparation only, after the owner provisions the runtime files:
+Start/recover the complete Linux stack without deleting persisted data:
 
 ```sh
 ssh agent@mbp-agent.local
@@ -617,12 +609,35 @@ docker --context rootless compose \
   --env-file private/observability.env \
   --env-file private/tunnel.env \
   -f observability/compose.yaml -f observability/compose.ingress.yaml \
-  up -d --wait --wait-timeout 90 ingress collector tempo prometheus grafana
+  up -d --wait --wait-timeout 90
 ```
 
-That command deliberately excludes `cloudflared`. Grafana must stay loopback-only;
-use an SSH local forward rather than publishing it through the public tunnel.
+Compose's backend wait checks container state, not every HTTP service's readiness.
+Tempo can return 503 while starting; Grafana can temporarily report its database
+as failing. Check actual readiness after startup, waiting and repeating this
+check if necessary:
 
+```sh
+docker --context rootless exec pillowfort-observability-ingress-1 sh -ec '
+  wget -qO- http://collector:13133/healthz
+  wget -qO- http://tempo:3200/ready
+  wget -qO- http://prometheus:9090/-/ready
+  wget -qO- http://grafana:3000/api/health
+'
+```
+
+For a future migration, prepare backends without `cloudflared`, stop storage
+writers for a consistent volume copy, and restore numeric owners **inside**
+rootless containers. Gate all four HTTP readiness endpoints before a controlled
+single-connector handoff. Cloudflare can split events across independent
+collectors if both connectors run. Cold handoffs can lose best-effort exports;
+collector restarts reset its in-memory counter epoch, not persisted history.
+
+The 2026-10-27 cutover preserved the historical counter snapshot and stored
+traces, then verified fresh unsampled room counters, new HTTP traces from all
+three production services, and the actual Grafana dashboard on Linux. Room
+activity remained absent from Tempo. The old Mac stack is stopped, with its
+volumes intact for rollback.
 
 Checked-in `OTEL_ENABLED=false` is intentional: local development must not send
 production events. After verifying authenticated ingress, explicitly enable the
@@ -650,7 +665,8 @@ logs. Missing/invalid configuration leaves export disabled. Verify new productio
 counts and service traces in Grafana after activation; deployment success alone
 does not prove receipt. Select `test` only for synthetic isolated smoke data.
 Native Cloudflare automatic traces remain disabled. Quick Tunnels are not a
-permanent destination, and this Mac/Docker must remain running for collection.
+permanent destination. The production collector now depends on the Linux host,
+not this Mac; a private SSH forward is needed only to view Grafana.
 
 ## Good First Places To Read
 
