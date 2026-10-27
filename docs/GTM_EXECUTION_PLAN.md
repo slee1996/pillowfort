@@ -299,13 +299,10 @@ search ranking, indexing, adoption, or retention measurements.
   marketing `75effe25-a367-40a7-b581-851362941f5a`, hosted MCP
   `0ba96998-ca7b-4b18-a3a3-0a3e992aa666`.
 
-**Remaining prerequisite:** Cloudflare named-tunnel authorization did not
-complete; no certificate was saved or found in Downloads. Existing credentials
-cannot administer the tunnel. Retry owner authorization, create a stable named
-tunnel/DNS route to authenticated ingress, configure the OTLP endpoint and
-authorization secret on each Worker, then enable export and verify a production
-span. Do not configure a temporary Quick Tunnel as the permanent destination.
-The current workstation stack is not an always-on hosted monitoring service.
+At that release, named-tunnel authorization and production activation were still
+pending, and the collector was workstation-hosted. Those prerequisites were
+completed in the stable-ingress release below; collection subsequently moved to
+the shared Linux host. Quick Tunnels remain unsuitable as permanent destinations.
 
 ## Room-volume observability — 2026-10-26
 
@@ -350,8 +347,8 @@ The current workstation stack is not an always-on hosted monitoring service.
   Source defaults remain off for development; the production activation uses
   explicit guarded deployment overrides, 10% HTTP sampling and unsampled room
   counts. Deployment/receipt evidence belongs in the activation PR release record.
-- The connector survives the assistant session but still depends on this Mac and
-  Docker staying awake/running. This is not an always-on hosted monitoring service.
+- This ingress initially ran on the workstation. The subsequent Linux cutover
+  below removed collection's dependency on this Mac and its Docker.
 
 ## Rootless Linux host preparation — 2026-10-27
 
@@ -366,8 +363,48 @@ The current workstation stack is not an always-on hosted monitoring service.
   and automatic restart after a daemon restart. A nonsecret mode-0600 bind mount
   was readable by container UID 0 and denied to container UID 1001; real
   credentials were not read for this test.
-- Public release `8947f46` configuration is staged in an isolated workspace.
-  Runtime-secret provisioning and a consistent persisted-data/single-connector
-  handoff are still required. The production stack remains on the workstation;
-  this preparation does not establish continuous Linux-hosted collection.
+- Initial preparation staged public release `8947f46` configuration without
+  transferring credentials or switching production. The owner subsequently
+  provisioned the two project-specific runtime files directly before the cutover.
+
+## Linux production telemetry cutover — 2026-10-27
+
+- Migrated Grafana, Prometheus and Tempo volumes with their storage writers
+  stopped. Restored numeric owners from inside rootless containers. Compared a
+  fixed historical counter snapshot and retrieved five historical trace samples;
+  Grafana database health and its existing authenticated session were preserved.
+- Initial handoffs rolled back before starting the Linux connector because
+  container startup preceded actual HTTP readiness. Reproduced Tempo's starting
+  503 and Grafana's temporary database-failing 503, then gated Collector, Tempo,
+  Prometheus and Grafana on actual HTTP readiness before the successful handoff.
+- Stopped the old connector before starting the Linux connector; the stable
+  `https://otel.pillowfort.xyz` endpoint is unchanged. Authenticated health/export
+  returned 200, unauthenticated requests 401, and the Grafana login path 404.
+- Exercised a real ephemeral room with isolated host/guest browser participants:
+  private invitation, fingerprint verification, explicit admission, encrypted
+  message exchange and observed room teardown. Verified all room-volume counters
+  with sample timestamps after that workflow, not just restored historical data.
+  Verification activity is included in those operational counts.
+- Generated genuine HTTP traffic and queried traces with a post-cutover time
+  boundary; app, marketing and hosted MCP all delivered new spans. No room
+  activity traces were stored. Visually verified the production Grafana dashboard
+  through a private SSH forward at its unchanged `http://localhost:13000` URL.
+- All six old Mac containers are stopped; their volumes remain as cold rollback
+  copies and are not retention-pruned while stopped. Linux ingestion stayed
+  healthy after stopping the Mac stack. Never run both connectors against
+  independent collectors.
+- Grafana credentials are unchanged. The owner-provisioned environment remains
+  mode 0600 and the dedicated tunnel credential mode 0400. SSH keys, provider
+  authentication and the broader Cloudflare certificate stayed in place.
+- No Worker redeployment, npm publication, new tunnel login, public Grafana
+  exposure or changes to the existing Resin8/OMP workloads were required.
+- The Linux resource smoke exposed Grafana's unset Go memory limit, active
+  cgroup-limit reclaim and swapping at its former 512 MiB ceiling. Set
+  `GOMEMLIMIT=384MiB` and a bounded 1 GiB container ceiling to accommodate its
+  separate datasource backend processes; no plugins or security controls were
+  disabled. Re-exercised the actual dashboard and observed the configured Go
+  limit, zero container swap, zero cgroup-limit hits and no restarts. See the
+  [Go memory-limit guidance](https://go.dev/doc/gc-guide) for why a Go soft limit
+  is not a total-process or multi-process container RSS limit.
+
 

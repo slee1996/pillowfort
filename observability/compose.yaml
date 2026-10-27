@@ -75,6 +75,8 @@ services:
     image: grafana/grafana:13.2.1@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283
     restart: unless-stopped
     environment:
+      # Bound Go heaps while leaving room for separate datasource backends.
+      GOMEMLIMIT: 384MiB
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Supply a unique Grafana admin password}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
@@ -100,7 +102,7 @@ services:
     tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    mem_limit: 512m
+    mem_limit: 1g
 
 networks:
   edge:
