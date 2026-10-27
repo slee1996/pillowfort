@@ -1,0 +1,21 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.4@sha256:c6c7ae1d5dfdcb094ad344ed68ccffc26635c9c6be80965664c33baf064b0515
+    command: [tunnel, --no-autoupdate, --config, /etc/cloudflared/config.yaml, run, "${CLOUDFLARED_TUNNEL_ID:?Supply the dedicated ingestion tunnel ID}"]
+    user: "${PILLOWFORT_UID:?Supply the credential file owner UID}:${PILLOWFORT_GID:?Supply the credential file owner GID}"
+    restart: unless-stopped
+    volumes:
+      - ./cloudflared.yaml:/etc/cloudflared/config.yaml:ro
+      - ${CLOUDFLARED_CREDENTIALS_FILE:?Supply the dedicated tunnel credential path}:/run/pillowfort/tunnel.json:ro
+    networks: [edge]
+    depends_on: [ingress]
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, "127.0.0.1:2000", ready]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m

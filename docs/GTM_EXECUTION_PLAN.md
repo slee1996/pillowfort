@@ -333,3 +333,23 @@ The current workstation stack is not an always-on hosted monitoring service.
   `cloudflared` command found no origin certificate. Do not use a Quick Tunnel
   as a permanent production destination.
 
+
+## Stable telemetry ingress — 2026-10-27
+
+- Owner completed named-tunnel authorization. Created the dedicated
+  `pillowfort-observability` tunnel and the `otel.pillowfort.xyz` DNS route.
+- Added a separate Compose ingress overlay using the digest-pinned cloudflared
+  2026.10.4 image. Its non-root process reads only the dedicated tunnel credential,
+  uses a read-only filesystem and native readiness check, and restarts with Docker.
+  The broader management certificate is not mounted. Grafana remains local-only.
+- Verified the real stable HTTPS endpoint: authenticated health and empty OTLP
+  requests return 200; unauthenticated health/export return 401; `/login` returns
+  404. Existing Grafana and ingestion credentials were used in place and were
+  neither printed nor rotated.
+- Stored ingestion authorization as a secret on all three existing Workers.
+  Source defaults remain off for development; the production activation uses
+  explicit guarded deployment overrides, 10% HTTP sampling and unsampled room
+  counts. Deployment/receipt evidence belongs in the activation PR release record.
+- The connector survives the assistant session but still depends on this Mac and
+  Docker staying awake/running. This is not an always-on hosted monitoring service.
+

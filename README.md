@@ -500,8 +500,8 @@ Building or testing locally does not publish npm packages or deploy Workers.
 
 `src/telemetry.ts` provides opt-in HTTP server traces for the app, marketing and
 hosted MCP, plus unsampled aggregate room-volume events in the app Worker and
-local Bun runtime. Production export stays disabled until a stable authenticated
-collector endpoint is configured.
+local Bun runtime. Checked-in defaults keep export disabled for local development.
+Production activation uses the authenticated ingress and explicit settings below.
 
 HTTP traces contain only allowlisted service/environment/version, operation
 category, method, status and duration. Room/WebSocket requests are not traced.
@@ -553,20 +553,53 @@ before a failed read-only update, leaving dashboards unable to query
 Update the reviewed image/plugin versions deliberately; do not make the image
 writable or disable authentication to repair this failure.
 
-For Cloudflare Workers, put a **named Cloudflare Tunnel** in front of ingress,
-not Grafana. Tunnel authorization must complete before creating the stable DNS
-route. Temporary Quick Tunnel URLs are verification-only. Cloudflare Containers'
-ephemeral local disks are not a durable replacement for these named volumes.
+The stable ingestion hostname is `https://otel.pillowfort.xyz`, backed by the
+dedicated `pillowfort-observability` named Cloudflare Tunnel. It routes only to
+authenticated Caddy ingestion; other hostnames/paths return 404. Grafana is not
+tunneled. The connector image is pinned and runs read-only, unprivileged, with a
+native readiness check and `restart: unless-stopped`.
 
-Configure each Worker with `OTEL_ENABLED=true`,
-`OTEL_EXPORTER_OTLP_ENDPOINT=https://<stable-ingress-host>` (base URL, without
-`/v1/traces`), `OTEL_DEPLOYMENT_ENVIRONMENT=production`, a release
-`OTEL_SERVICE_VERSION`, and `OTEL_SAMPLE_RATE` between 0 and 1.
-Set `OTEL_EXPORTER_OTLP_HEADERS` as a **Worker secret**:
-`Authorization=Basic%20<base64(otel:ingestion-password)>`. Never put it in tracked
-Wrangler vars. Missing/invalid configuration leaves export disabled.
-The Grafana dashboard defaults to production; select `test` for synthetic smoke
-data. Native Cloudflare automatic traces remain disabled.
+The private `~/.config/pillowfort/tunnel.env` contains the dedicated tunnel ID,
+credential-file path and its owner UID/GID—not the credential contents. The
+connector mounts that scoped credential file read-only; do not mount the broader
+Cloudflare origin certificate, loosen file permissions, or commit either file.
+Start/recover the complete stack without deleting its persisted data:
+
+```sh
+docker compose \
+  --env-file ~/.config/pillowfort/observability.env \
+  --env-file ~/.config/pillowfort/tunnel.env \
+  -f observability/compose.yaml -f observability/compose.ingress.yaml \
+  up -d --wait --wait-timeout 90
+```
+
+Checked-in `OTEL_ENABLED=false` is intentional: local development must not send
+production events. After verifying authenticated ingress, explicitly enable the
+production binding through the guarded deployment. For the app:
+
+```sh
+npm run deploy -- --keep-vars \
+  --var OTEL_ENABLED:true \
+  --var OTEL_EXPORTER_OTLP_ENDPOINT:https://otel.pillowfort.xyz \
+  --var OTEL_DEPLOYMENT_ENVIRONMENT:production \
+  --var OTEL_SAMPLE_RATE:0.1 \
+  --var OTEL_SERVICE_VERSION:$(git rev-parse --short HEAD)
+```
+
+Apply the same flags to the marketing guarded deploy and the hosted-MCP deploy
+after its `npm run check`. `--keep-vars` preserves the production opt-in during
+later releases; the explicit flags override local/source defaults. HTTP traces
+are sampled at 10%; aggregate room counts are unsampled. To stop export, deploy
+with the explicit `OTEL_ENABLED:false` override.
+
+`OTEL_EXPORTER_OTLP_HEADERS` is a Worker **secret** containing the ingestion
+authorization and a genuine `Pillowfort-OTel/1.0` application user-agent. Never
+place passwords or encoded authorization in tracked vars, command arguments or
+logs. Missing/invalid configuration leaves export disabled. Verify new production
+counts and service traces in Grafana after activation; deployment success alone
+does not prove receipt. Select `test` only for synthetic isolated smoke data.
+Native Cloudflare automatic traces remain disabled. Quick Tunnels are not a
+permanent destination, and this Mac/Docker must remain running for collection.
 
 ## Good First Places To Read
 
