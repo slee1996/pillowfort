@@ -39,7 +39,7 @@ export async function createParticipantRuntime({ baseURL, createWebSocket }: Par
       return socket;
     },
   });
-  const agent = createParticipantAgent({ store, controller, events, origin: location.origin });
+  const agent = createParticipantAgent({ store, controller, events, origin: location.origin, identityStorage: 'isolated-memory' });
   return {
     agent,
     controller,

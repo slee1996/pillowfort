@@ -41,6 +41,26 @@ export class ParticipantQuota extends DurableObject<Env> {
     return current;
   }
 
+  async status() {
+    const now = Date.now();
+    const state = this.normalize(await this.ctx.storage.get<QuotaState>('quota'), now);
+    const maxActiveSessions = integer(this.env.MAX_ACTIVE_SESSIONS, 1, 10);
+    const maxSessionSeconds = integer(this.env.MAX_SESSION_SECONDS, 30, 3600);
+    const dailySeconds = integer(this.env.MAX_DAILY_SESSION_MINUTES, 1, 1440) * 60;
+    if (dailySeconds < maxActiveSessions * maxSessionSeconds) throw new Error('Daily session budget must cover concurrent maximum leases.');
+    const remainingSeconds = Math.max(0, dailySeconds - state.usedSeconds);
+    const nextDay = Date.parse(`${state.day}T00:00:00Z`) + 86_400_000;
+    const retryAfter = state.leases.length >= maxActiveSessions
+      ? Math.max(1, Math.ceil((Math.min(...state.leases.map(lease => lease.expiresAt)) - now) / 1000))
+      : remainingSeconds < maxSessionSeconds ? Math.max(1, Math.ceil((nextDay - now) / 1000))
+      : Math.max(0, Math.ceil((state.lastStartAt + 20_000 - now) / 1000));
+    return {
+      advisory: true, participantAllocated: false, activeSessions: state.leases.length,
+      maxActiveSessions, maxSessionSeconds, remainingDailySessionSeconds: remainingSeconds,
+      canStartFullSession: retryAfter === 0, retryAfterSeconds: retryAfter, sessionStartSpacingSeconds: 20,
+    };
+  }
+
   async acquire(leaseId: string, principalId: string, ttlMs: number): Promise<LeaseResult> {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(leaseId) || !/^[a-zA-Z0-9_-]{1,128}$/.test(principalId)) {
       return { ok: false, code: 'INVALID_LEASE', retryAfter: 0 };

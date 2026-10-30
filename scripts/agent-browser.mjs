@@ -228,7 +228,7 @@ export class PillowfortBrowserAgent {
     const capabilities = await this.#call(session, 'capabilities', []);
     if (!Array.isArray(capabilities) || capabilities.length > 256 || capabilities.some(capability =>
       !capability || typeof capability.name !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(capability.name) ||
-      typeof capability.description !== 'string' || capability.inputSchema?.type !== 'object' || typeof capability.destructive !== 'boolean' || typeof capability.roomTraffic !== 'boolean') ||
+      typeof capability.description !== 'string' || capability.inputSchema?.type !== 'object' || typeof capability.destructive !== 'boolean' || typeof capability.roomTraffic !== 'boolean' || typeof capability.readOnly !== 'boolean') ||
       new Set(capabilities.map(capability => capability.name)).size !== capabilities.length) {
       throw new AgentError('INVALID_CAPABILITIES', 'The app returned an unsupported capability catalog. Update the app and SDK together.');
     }

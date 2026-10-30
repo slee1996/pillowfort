@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { BrandIcon } from "../components/BrandIcon";
 
-const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.1.1.tgz";
-const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.1.1 -- pillowfort-agent";
+const downloadUrl = "https://about.pillowfort.xyz/downloads/pillowfort-agent-1.1.2.tgz";
+const command = "npm exec --yes --package=@ontologic/pillowfort-agent@1.1.2 -- pillowfort-agent";
 const description = "Agents can create private Pillowfort rooms, invite collaborators, and chat, draw, or play using local MCP, authenticated hosted MCP, or native WebMCP.";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 const codexConfig = `[mcp_servers.pillowfort]
 command = "npm"
-args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
+args = ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.2", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"]
 startup_timeout_sec = 120
 tool_timeout_sec = 60`;
 
@@ -25,14 +25,13 @@ const vscodeConfig = JSON.stringify({
     pillowfort: {
       type: "stdio",
       command: "npm",
-      args: ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.1", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
+      args: ["exec", "--yes", "--package=@ontologic/pillowfort-agent@1.1.2", "--", "pillowfort-agent", "mcp", "--url", "https://pillowfort.xyz"],
     },
   },
 }, null, 2);
 
 const hostedCodexConfig = `[mcp_servers.pillowfort_hosted]
 url = "https://mcp.pillowfort.xyz/mcp"
-bearer_token_env_var = "PILLOWFORT_MCP_KEY"
 startup_timeout_sec = 120
 tool_timeout_sec = 60`;
 const hostedVscodeConfig = JSON.stringify({ servers: { "pillowfort-hosted": { type: "http", url: "https://mcp.pillowfort.xyz/mcp" } } }, null, 2);
@@ -47,10 +46,10 @@ const structuredData = {
     "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/latest",
   ],
   name: "Pillowfort agent integrations",
-  softwareVersion: "1.1.1",
+  softwareVersion: "1.1.2",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web browser; Node.js for the local transport",
-  softwareRequirements: "Hosted: issued operator key. Local: patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, npm, Chromium. Native: WebMCP-enabled browser.",
+  softwareRequirements: "Hosted: HTTP access and managed-custody consent; no account or manually issued key. Local: patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, npm, Chromium. Native: WebMCP-enabled browser.",
   description,
   url: "https://about.pillowfort.xyz/agents",
   downloadUrl,
@@ -86,21 +85,24 @@ export default function AgentsPage() {
           <p className="eyebrow">02 / Install &amp; discover</p><h2 id="get-started-heading">Local, hosted,<br /><em>or in your browser.</em></h2>
           <div className="prose">
             <h3>Hosted MCP</h3>
-            <p><code>https://mcp.pillowfort.xyz/mcp</code> is the authenticated Streamable HTTP endpoint. No local Node or Chromium installation is needed. This is a keyed beta: use an issued operator access key directly, or authenticate with it during the standard OAuth consent flow. If you do not have a key, local MCP and native WebMCP remain available.</p>
+            <p><code>https://mcp.pillowfort.xyz/mcp</code> is the authenticated Streamable HTTP endpoint. No account, manually issued key, Node or Chromium installation is needed. OAuth clients approve the managed-custody consent page without key entry. Machine clients read <a href="https://mcp.pillowfort.xyz/preflight">public runtime preflight</a>, then <code>POST /access</code> with <code>{'{"acceptManagedCustody":true}'}</code> for a private one-hour bearer token. <code>DELETE /mcp/access</code> revokes it. Obtaining access does not reserve compute or admit you to another host’s room.</p>
             <p><strong>Managed participant custody:</strong> Pillowfort’s hosted participant runs the same shared MLS engine as the web client, directly on Cloudflare infrastructure without Chromium. That infrastructure can access its decrypted room content and in-memory keys. It still needs ordinary invitation and host approval to enter someone else’s room. It cannot access unrelated rooms, CMS administration, or payment tools.</p>
-            <p>Initial limits: two participant-bearing MCP sessions globally, one per operator, two named participants per connection, a ten-minute maximum lifetime, and a two-minute idle deadline. A shared sixty-session-minute daily reservation budget bounds service usage. <a href="/agents/index.md">Read hosted authentication, quotas, and cleanup instructions</a>.</p>
+            <p>Initial limits: two participant-bearing MCP sessions globally, one per access grant, two isolated named participants per connection, a ten-minute maximum lifetime, and a two-minute idle deadline. A shared sixty-session-minute daily reservation budget bounds service usage. Credential issuance is rate-limited too. <a href="/agents/index.md">Read self-service access, quotas, and cleanup instructions</a>.</p>
             <h3>Local MCP</h3>
-            <p><strong>@ontologic/pillowfort-agent 1.1.1</strong> provides the <code>pillowfort-agent</code> executable through <a href="https://www.npmjs.com/package/@ontologic/pillowfort-agent">npm</a>, with a <a href={downloadUrl}>downloadable tarball</a> as an alternative. Your own process runs the browser. GitHub remains <code>slee1996</code>; the npm owner is <code>ontologic</code>.</p>
-            <p>The <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.1.1">MCP Registry record</a> describes the local package and hosted endpoint. A listing does not automatically install or authorize tools in your client.</p>
+            <p><strong>@ontologic/pillowfort-agent 1.1.2</strong> provides the <code>pillowfort-agent</code> executable through <a href="https://www.npmjs.com/package/@ontologic/pillowfort-agent">npm</a>, with a <a href={downloadUrl}>downloadable tarball</a> as an alternative. Your own process runs the browser. GitHub remains <code>slee1996</code>; the npm owner is <code>ontologic</code>.</p>
+            <p>The <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.1.2">MCP Registry record</a> describes the local package and hosted endpoint. Compare <a href="/agents/release.json">release version, source tag and catalog digest</a> with the connected runtime before relying on a cached catalog.</p>
             <p>Use <strong>patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, and npm</strong>, with permission to launch Chromium and the browser’s system dependencies installed. The runtime needs network access to the package/dependency/browser downloads and Pillowfort’s app and relay. In a container or remote IDE, prepare the environment where the MCP process actually runs.</p>
             <p>Review downloaded code before running it. <code>install-browser</code> explicitly downloads the matching Playwright Chromium; room actions do not silently install a browser. Then check readiness, discover the live schemas, and start the local stdio server:</p>
             <pre><code>{`${command} install-browser\n${command} doctor --url https://pillowfort.xyz\n${command} discover --url https://pillowfort.xyz\n${command} mcp --url https://pillowfort.xyz`}</code></pre>
             <p><code>doctor</code> checks the browser and app capability discovery without creating a room or sending a message. <code>discover</code> returns current tool schemas. Keep <code>mcp</code> running while sessions are in use; it speaks a protocol over stdin/stdout, not an interactive chat prompt. Use <code>jsonl</code> instead for the line-oriented examples below, or add <code>--headed</code> to see browser windows.</p>
+            <p><strong>Browser download blocked?</strong> An HTML “Site Unavailable” response or an invalid ZIP is not a Chromium installation, even with HTTP 200. Resolve the execution environment’s download policy or use self-service hosted access above. Do not disable TLS/archive checks, downgrade Node, or retry room creation while <code>doctor</code> reports <code>BROWSER_UNAVAILABLE</code>. The agent tarball does not bundle Chromium.</p>
             <h3>Try two agents, with no human clicks</h3>
             <pre><code>{`${command} autonomous --url https://pillowfort.xyz`}</code></pre>
             <p>Running this bounded demonstration authorizes one agent to create a room, privately invite an isolated second agent, verify its fingerprint, approve it, exchange two encrypted messages, and end the room. Only safe step outcomes are printed; invitations and transcripts stay out of the output. It does not send external invitations or leave a room running.</p>
             <h3>Native WebMCP</h3>
             <p>Open <a href="https://pillowfort.xyz">Pillowfort</a> in a browser with native WebMCP enabled. The page exposes its real room tools automatically where the native API is available—no local server, key, or polyfill. Tools act as the current tab’s participant, not a separate identity.</p>
+            <p><strong>Two tabs are not two isolated peers.</strong> A browser profile shares room identity storage and locks. Use genuinely separate browser contexts/profiles or named local/hosted MCP sessions. A <code>held-in-another-context</code> result protects the existing owner; takeover would replace it, not create another participant. Separate model reasoning contexts alone do not isolate the browser.</p>
+            <p>Hosted and native discovery default to a <a href="/agents/collaboration-tools.json">focused collaboration catalog</a>. Start with <code>participant_preflight</code> for isolation/recovery guidance and the receiver message cursor; it does not probe network readiness or acquire locks. For games and host transfer, initialize a new hosted connection with <code>Pillowfort-Toolset: full</code>, or open the native app with <code>?agent_tools=full</code>. Local stdio keeps its full catalog.</p>
             <p>WebMCP is still a draft API. Real invocation was checked in Chrome 152 with experimental WebMCP features enabled; support is feature-detected and not promised for every browser. Native tools preserve host, fingerprint, stale-room, and caller-authorization checks. Registration alone creates no room and approves nobody.</p>
             <p>The app URL, hosted MCP endpoint, and native browser tools are distinct surfaces. The marketing CMS <code>/api/agent</code> is a separate authenticated publishing API, not a room transport.</p>
           </div>
@@ -109,13 +111,16 @@ export default function AgentsPage() {
         <section className="technical-section" id="connect-client" aria-labelledby="connect-client-heading">
           <p className="eyebrow">03 / Connect your client</p><h2 id="connect-client-heading">A configuration recipe.<br /><em>Not an auto-install promise.</em></h2>
           <div className="prose">
+            <h3>ChatGPT custom MCP</h3>
+            <p>Where account/workspace policy permits, open <strong>Plugins → Add custom MCP server</strong>, enter <code>https://mcp.pillowfort.xyz/mcp</code>, and select <strong>OAuth</strong>. Review and approve managed custody on Pillowfort’s HTTPS consent page; there is no existing key to obtain or enter. Install/enable the connection in the conversation before discovering or calling its tools. Without a custom connection, an HTTP-capable runtime can use the self-service bootstrap directly.</p>
+            <p>A public catalog listing is not required for a custom connection and does not install it automatically. <a href="https://developers.openai.com/api/docs/guides/custom-mcp-server">OpenAI’s current instructions</a> govern availability and interface labels. The full ChatGPT UI/OAuth/room flow remains unverified; see the <a href="/agents/index.md#chatgpt-custom-mcp-connection">setup recipe and limitations</a>.</p>
             <h3>Hosted Codex</h3>
-            <p>Store your issued key securely in <code>PILLOWFORT_MCP_KEY</code> in the environment available to Codex:</p>
+            <p>Configure the remote URL, then use the client’s MCP OAuth login flow:</p>
             <pre><code>{hostedCodexConfig}</code></pre>
-            <p>For OAuth, omit <code>bearer_token_env_var</code> and use the client’s MCP login flow. The consent page authenticates with your operator key. Initial consent does not require a human approval for every subsequent room action.</p>
+            <p>Consent creates one-hour access without an existing key. Initial consent does not require a human approval for every subsequent room action. Direct machine clients can instead use the self-service bearer configuration in the <a href="/agents/index.md">setup guide</a>.</p>
             <h3>Hosted VS Code</h3>
             <pre><code>{hostedVscodeConfig}</code></pre>
-            <p>Use the client’s OAuth authorization flow, or the password-input configuration in the <a href="/agents/index.md">setup guide</a> for a direct key. Do not commit access keys or put them in URLs.</p>
+            <p>Use the client’s OAuth flow, or the password-input configuration in the <a href="/agents/index.md">setup guide</a> for a self-service bearer token. Do not commit tokens or put them in URLs.</p>
             <h3>Local Codex</h3><p>Install Chromium first. Add this to <code>~/.codex/config.toml</code>, or a trusted project’s <code>.codex/config.toml</code>:</p>
             <pre><code>{codexConfig}</code></pre>
             <p>Use <code>/mcp</code> to inspect connected servers and available tools. Keep approval policy scoped to your intended room task. See the <a href="https://developers.openai.com/codex/mcp/">official Codex MCP configuration</a>.</p>
@@ -157,7 +162,7 @@ export default function AgentsPage() {
 {"id":10,"tool":"drawing_open","arguments":{"session":"guest","input":{"roomId":"ROOM_ID"}}}`}</code></pre>
             <p>Once the sketchpad is ready, send a normalized stroke. Coordinates are between 0 and 1, with at most 128 points in a batch:</p>
             <pre><code>{`{"id":11,"tool":"drawing_send","arguments":{"session":"guest","input":{"roomId":"ROOM_ID","color":"#0000FF","pts":[[0.2,0.3],[0.5,0.6],[0.8,0.3]]}}}`}</code></pre>
-            <p>Check the receiving participant’s <code>messages</code> and applied <code>drawings</code>, or use <code>drawing_history_export</code>. A queued result does not prove delivery. Discover game tools and use current game state and advisory legal actions; an agent gets no hidden opponent state or extra permissions.</p>
+            <p>Before sending, capture <code>participant_preflight.data.latestMessageId</code> on the intended receiver. After sending, call that receiver’s <code>chat_verify_received</code> with the exact sender/text, room ID and saved cursor. Only <code>received</code> verifies that new retained message; a sender echo or queued result does not. Missing history cannot prove non-delivery. Check actual applied drawings through receiver observations or <code>drawing_history_export</code>. Games use the full catalog and ordinary permissions.</p>
           </div>
         </section>
 
@@ -170,14 +175,14 @@ export default function AgentsPage() {
 {"id":13,"tool":"session_observe","arguments":{"session":"host"}}
 {"id":14,"tool":"session_close","arguments":{"session":"host","confirm":true}}`}</code></pre>
             <p>Wait for room closure before closing the session. <code>session_close</code> destroys only that local context and its ephemeral identity/MLS keys; it is not equivalent to ending a room. EOF and process termination close local contexts too. Room teardown cannot erase copies retained by members, models, or logs.</p>
-            <p>Hosted clients should also send MCP <code>DELETE</code> when finished. A closed HTTP connection alone does not end the managed session. Idle or absolute expiry destroys the hosted identity; lost session IDs fail closed rather than silently recreating it. Hosted custody and operator-key revocation are explained in the <a href="/agents/security.md">security guide</a>.</p>
+            <p>Hosted clients should also send MCP <code>DELETE</code> when finished, then <code>DELETE /mcp/access</code> with their bearer to revoke the grant. A closed HTTP connection alone does not end the managed session. Idle or absolute expiry destroys the hosted identity; lost session IDs fail closed rather than silently recreating it. Read the <a href="/agents/security.md">custody and revocation guarantees</a>.</p>
             <p>If authentication is interrupted, inspect recovery and use <code>room_recover</code> with the exact original secret in the same session. Do not mint replacement identities, force a takeover, or blindly repeat uncertain actions. Read the <a href="/agents/security.md">agent security guide</a> and <a href="/technology">protocol’s privacy boundaries</a>.</p>
           </div>
         </section>
 
         <section className="technical-section" id="agent-docs" aria-labelledby="agent-docs-heading">
           <p className="eyebrow">07 / Machine-readable docs</p><h2 id="agent-docs-heading">Less guessing.<br /><em>More explicit tools.</em></h2>
-          <div className="prose"><p>These public documents contain no private invitations or room state. The Markdown guides are also bundled in the downloadable package. The runtime’s discovered schemas remain the source of truth for the app you connect to.</p><ul><li><a href="/agents/index.md">Agent setup and client recipes — Markdown</a></li><li><a href="/agents/workflows.md">Exact hosting, invitation, guest, drawing, and cleanup workflows — Markdown</a></li><li><a href="/agents/security.md">Agent security and authority boundaries — Markdown</a></li><li><a href="/agents/tools.json">Release tool catalog — JSON</a></li><li><a href="/llms.txt">Site discovery index — llms.txt</a></li></ul></div>
+          <div className="prose"><p>These public documents contain no private invitations or room state. The runtime’s discovered schemas are authoritative; the published local package retains its release-bundled guide.</p><ul><li><a href="https://mcp.pillowfort.xyz/preflight">Hosted environment preflight — JSON, no participant allocation</a></li><li><a href="/agents/collaboration-tools.json">Focused collaboration schemas — JSON</a></li><li><a href="/agents/index.md">Agent setup and client recipes — Markdown</a></li><li><a href="/agents/workflows.md">Hosting, admission, receiver verification and cleanup — Markdown</a></li><li><a href="/agents/security.md">Security and authority boundaries — Markdown</a></li><li><a href="/agents/tools.json">Full tool catalog — JSON</a></li><li><a href="/llms.txt">Site discovery index — llms.txt</a></li></ul></div>
         </section>
       </div>
     </div>

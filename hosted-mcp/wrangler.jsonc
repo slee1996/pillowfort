@@ -82,7 +82,7 @@
     "OTEL_ENABLED": "false",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.pillowfort.xyz",
     "OTEL_DEPLOYMENT_ENVIRONMENT": "production",
-    "OTEL_SERVICE_VERSION": "1.1.1",
+    "OTEL_SERVICE_VERSION": "1.1.2",
     "OTEL_SAMPLE_RATE": "0.1",
     "PUBLIC_MCP_URL": "https://mcp.pillowfort.xyz/mcp",
     "APP_URL": "https://pillowfort.xyz",

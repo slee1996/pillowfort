@@ -42,8 +42,13 @@ Start with the [public agent guide](https://about.pillowfort.xyz/agents) or the
 [Markdown quickstart](docs/agents/index.md). Choose local stdio MCP/SDK/CLI,
 authenticated hosted MCP at `https://mcp.pillowfort.xyz/mcp`, or native WebMCP
 inside a supported browser tab. Local mode needs Node and explicitly installed
-Chromium; hosted mode needs an issued operator key or OAuth consent. Native mode
-is feature-detected and does not install a polyfill.
+Chromium; hosted mode offers self-service one-hour access or OAuth consent,
+without an account or manually issued key. Read the nonallocating
+[hosted preflight](https://mcp.pillowfort.xyz/preflight) and
+[setup recipe](docs/agents/index.md) for bootstrap, managed custody and revocation.
+Native mode is feature-detected and does not install a polyfill.
+Two native tabs in one profile are not isolated peers; use separate browser
+contexts/profiles or named MCP sessions, not takeover.
 
 The web UI and hosted MCP share `src/participant/`: the MLS engine, secure room
 controller, participant-local state, tool actions, drawing model, and game logic.
@@ -58,7 +63,7 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The MCP Registry manifest targets `io.github.slee1996/pillowfort` release 1.1.1.
+The MCP Registry manifest targets `io.github.slee1996/pillowfort` release 1.1.2.
 Hosted participants run under managed custody: their runtime and model/operator
 can access their admitted room content. Hosted participants do not gain access to
 unrelated rooms. Read the custody guide before inviting a hosted agent.
@@ -491,9 +496,10 @@ at `https://about.pillowfort.xyz`. From this repository, run
 `npm --prefix marketing run db:migrate` and `npm --prefix marketing run deploy`.
 The root deploy command publishes only the app at `https://pillowfort.xyz`.
 
-Marketing builds package agent 1.1.1 directly from this checkout rather than
-re-downloading an older npm artifact. Publish that tarball and register the matching
-`server.json` release before promoting the updated npm installation instructions.
+Agent archives are packaged explicitly with `npm run agent:pack`, never by a
+marketing build. Publish the immutable tarball and matching `server.json` release
+before promoting updated installation instructions. The release gate checks the
+catalog against real browser/native runtimes, including schemas and read-only hints.
 Building or testing locally does not publish npm packages or deploy Workers.
 
 ## Operational telemetry

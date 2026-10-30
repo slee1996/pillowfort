@@ -15,6 +15,7 @@ export function installPillowfortAgent({ exposeWindow = true } = {}): Pillowfort
   if (exposeWindow && new URLSearchParams(location.search).get("agent") !== "1") return;
   const bridge = participantBridge ??= createParticipantAgent({
     store, controller: participantController, events: participantEvents, origin: location.origin,
+    identityStorage: "browser-profile",
     formatStore: participantFormatStore,
     activities: { breakoutSnapshot, moveBreakout, resetBreakout, selectRoomActivity, subscribeBreakout,
       exportDrawingPng, getDrawingSurfaceSnapshot, setDrawingColor, subscribeDrawingSurface,

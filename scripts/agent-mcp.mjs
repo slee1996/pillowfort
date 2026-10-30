@@ -11,7 +11,7 @@ export function createAgentMcpServer({
   agent, tools = [], instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
   resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError,
 }) {
-  const server = new Server({ name: 'pillowfort', version: '1.1.1' }, {
+  const server = new Server({ name: 'pillowfort', version: '1.1.2' }, {
     capabilities: { tools: {}, resources: {}, prompts: {} },
     instructions,
     jsonSchemaValidator,

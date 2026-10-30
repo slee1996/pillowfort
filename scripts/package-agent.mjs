@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,12 +78,21 @@ async function packageAgent() {
     }
     const artifact = await readFile(path.join(stage, packed.filename));
     const sha256 = createHash('sha256').update(artifact).digest('hex');
-    await mkdir(downloads, { recursive: true });
-    stagedDownload = await mkdtemp(path.join(downloads, '.agent-package-'));
-    await writeFile(path.join(stagedDownload, filename), artifact);
-    await writeFile(path.join(stagedDownload, `${filename}.sha256`), `${sha256}  ${filename}\n`);
-    await rename(path.join(stagedDownload, filename), path.join(downloads, filename));
-    await rename(path.join(stagedDownload, `${filename}.sha256`), path.join(downloads, `${filename}.sha256`));
+    let existing;
+    try { existing = await readFile(path.join(downloads, filename)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (existing && !artifact.equals(existing)) {
+      throw new Error('Refusing to replace an existing versioned agent archive. Bump the package and registry release version before packaging changed inputs.');
+    }
+    if (!existing) {
+      await mkdir(downloads, { recursive: true });
+      stagedDownload = await mkdtemp(path.join(downloads, '.agent-package-'));
+      await writeFile(path.join(stagedDownload, filename), artifact);
+      await writeFile(path.join(stagedDownload, `${filename}.sha256`), `${sha256}  ${filename}\n`);
+      // Exclusive publication also prevents concurrent packagers replacing a release.
+      await link(path.join(stagedDownload, filename), path.join(downloads, filename));
+      await link(path.join(stagedDownload, `${filename}.sha256`), path.join(downloads, `${filename}.sha256`));
+    }
     process.stdout.write(JSON.stringify({
       package: manifest.name,
       version: manifest.version,

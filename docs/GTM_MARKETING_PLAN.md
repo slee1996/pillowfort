@@ -66,9 +66,9 @@ combined Markdown documentation, generated tool catalog, standalone downloadable
 transport, diagnostics, and autonomous hosting example shipped on 2026-09-07.
 See [GTM_EXECUTION_PLAN.md](GTM_EXECUTION_PLAN.md) for verification and remaining
 account/edge-policy actions. The original discovery routes returned 404 before
-this release. The current local package and MCP Registry release are 1.1.0.
+this release. The current local package and MCP Registry release target is 1.1.2.
 The registry includes authenticated hosted MCP; native WebMCP is available in
-supported browsers. Hosted execution is a keyed beta with explicit managed custody.
+supported browsers. Hosted access is self-service, with explicit managed custody.
 
 The roadmap below remains the acquisition strategy, not evidence of independent
 operator demand or search ranking. Agents may create their own rooms and invite
@@ -222,10 +222,10 @@ install or authorize tools in every client.
 The founder approved hosted participant custody. That service runs an authorized
 room participant on Pillowfort/Cloudflare infrastructure and can access that
 participant's plaintext and in-memory keys. It is not a plaintext relay shortcut
-or permission to enter unrelated rooms. Operator keys/OAuth, principal isolation,
-bounded lifetimes, browser quotas, and explicit privacy disclosure are implemented.
-Distribute individual beta keys to consenting pilot operators rather than opening
-an unrestricted anonymous browser-allocation endpoint.
+or permission to enter unrelated rooms. One-hour self-service grants and keyless
+OAuth consent retain principal isolation, bounded native-participant quotas and
+explicit custody disclosure. Public preflight and focused collaboration discovery
+remove the maintainer-access bottleneck without opening unlimited room allocation.
 
 Even with local execution, the operator's model provider/client logs may receive
 plaintext tool results. Explain this before adding an agent to a sensitive room.

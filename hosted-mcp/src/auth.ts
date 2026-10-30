@@ -2,8 +2,10 @@ import { DurableObject } from 'cloudflare:workers';
 import { AuthorizationError, CimdFetchError, OAuthProvider, OAuthError, type AuthRequest } from '@cloudflare/workers-oauth-provider';
 import type { AuthenticatedProps, Env } from './env';
 import { readByteLimitedText } from '../../src/requestBody';
+import catalog from '../../docs/agents/tools.json';
 
 const SCOPE = 'mcp:rooms';
+export const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const OPERATOR_KEY = /^pfm_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/;
 const COOKIE = '__Host-pillowfort-consent';
@@ -16,6 +18,8 @@ const policies = {
   admin: { window: 3_600_000, perAddress: 30, global: 100 },
   adminFailure: { window: 3_600_000, perAddress: 30, global: 100 },
   issuance: { window: 86_400_000, perAddress: 20, global: 20 },
+  accessHour: { window: 3_600_000, perAddress: 10, global: 60 },
+  accessDay: { window: 86_400_000, perAddress: 30, global: 200 },
   initialization: { window: 86_400_000, perAddress: 100, global: 500 },
 } as const;
 type RateKind = keyof typeof policies;
@@ -65,11 +69,20 @@ export class AccessKeyStore extends DurableObject<Env> {
 
   async issue(label: string, expiresInDays: number): Promise<{ id: string; key: string; label: string; expiresAt: number }> {
     if (!validLabel(label) || !Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 365) throw new Error('Invalid key metadata');
+    return this.createCredential(label, expiresInDays * 86_400);
+  }
+
+  async issueSelfService(): Promise<{ id: string; key: string; label: string; expiresAt: number }> {
+    return this.createCredential('Self-service access', ACCESS_TOKEN_TTL_SECONDS);
+  }
+
+  private async createCredential(label: string, lifetimeSeconds: number): Promise<{ id: string; key: string; label: string; expiresAt: number }> {
     const id = crypto.randomUUID();
     const key = `pfm_${id}.${randomSecret()}`;
     const now = Date.now();
-    const expiresAt = now + expiresInDays * 86_400_000;
+    const expiresAt = now + lifetimeSeconds * 1000;
     const hash = await mac(await this.key, `operator:${key}`);
+    this.ctx.storage.sql.exec('DELETE FROM operator_keys WHERE expiresAt <= ?', now);
     this.ctx.storage.sql.exec('INSERT INTO operator_keys (id, hash, label, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?)', id, hash, label, now, expiresAt);
     return { id, key, label, expiresAt };
   }
@@ -157,16 +170,52 @@ async function boundedBody(request: Request, limit = 16_384): Promise<string> {
   if (!result.ok) throw new InvalidRequest('Invalid body');
   return result.text;
 }
+async function selfServiceAccess(request: Request, env: Env): Promise<Response> {
+  if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return error(415);
+  const value: unknown = JSON.parse(await boundedBody(request, 256));
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).length !== 1 || !Object.hasOwn(value, 'acceptManagedCustody')
+    || (value as Record<string, unknown>).acceptManagedCustody !== true) return error(400, 'managed_custody_consent_required');
+  for (const kind of ['accessHour', 'accessDay'] as const) {
+    const rate = await limited(request, env, kind);
+    if (rate) return rate;
+  }
+  const issued = await store(env).issueSelfService();
+  return Response.json({
+    access_token: issued.key, token_type: 'Bearer', scope: SCOPE,
+    expires_in: ACCESS_TOKEN_TTL_SECONDS, expires_at: Math.floor(issued.expiresAt / 1000),
+    mcp_url: env.PUBLIC_MCP_URL, revocation_endpoint: `${env.PUBLIC_MCP_URL}/access`,
+  }, { status: 201, headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } });
+}
+async function selfServicePreflight(env: Env): Promise<Response> {
+  const base = new URL(env.PUBLIC_MCP_URL).origin;
+  const quota = await env.MCP_QUOTAS.get(env.MCP_QUOTAS.idFromName('global')).status();
+  return Response.json({
+    version: 1, status: 'control-plane-ready', mutatingActions: false, participantAllocated: false,
+    release: catalog.release,
+    runtime: { kind: 'hosted-native', nodeRequired: false, chromiumRequired: false, isolatedNamedParticipants: 2 },
+    access: {
+      manualKeyRequired: false, accountRequired: false, method: 'POST', url: `${base}/access`,
+      body: { acceptManagedCustody: true }, scope: SCOPE, expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS,
+      revocation: { method: 'DELETE', url: `${env.PUBLIC_MCP_URL}/access`, authorization: 'Bearer access token' },
+      custody: 'Pillowfort and Cloudflare operate the participant and can access its plaintext and in-memory keys.',
+    },
+    mcp: { url: env.PUBLIC_MCP_URL, transport: 'streamable-http', authentication: 'self-service bearer or OAuth consent', defaultToolset: 'collaboration', fullToolsetHeader: { 'Pillowfort-Toolset': 'full' } },
+    catalog: 'https://about.pillowfort.xyz/agents/collaboration-tools.json',
+    receiverVerification: 'chat_verify_received', quota,
+  }, { headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+}
 function escape(value: string): string {
   return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 function consentHtml(clientName: string, clientId: string, redirectUri: string, token: string, env: Env): string {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize Pillowfort</title>
-<style>body{font:16px Tahoma,Arial,sans-serif;color:#1d2c42;background:#dce7f5;margin:0;padding:32px 16px}main{max-width:620px;margin:auto;background:#fff;padding:24px;border:1px solid #8c9db5}h1{font-size:24px;color:#1556a8}p,li{line-height:1.5}code{overflow-wrap:anywhere}label{display:block;margin-top:20px}input[type=password]{box-sizing:border-box;width:100%;padding:10px;margin:8px 0 16px;border:1px solid #8c9db5;font:inherit}button{font:inherit;background:#1556a8;color:white;padding:10px 16px;border:0;margin:12px 8px 0 0}button[value=deny]{background:#536078}</style>
+<style>body{font:16px Tahoma,Arial,sans-serif;color:#1d2c42;background:#dce7f5;margin:0;padding:32px 16px}main{max-width:620px;margin:auto;background:#fff;padding:24px;border:1px solid #8c9db5}h1{font-size:24px;color:#1556a8}p,li{line-height:1.5}code{overflow-wrap:anywhere}label{display:block;margin-top:20px}button{font:inherit;background:#1556a8;color:white;padding:10px 16px;border:0;margin:12px 8px 0 0}button[value=deny]{background:#536078}</style>
 <main><h1>Authorize Pillowfort</h1><p><strong>${escape(clientName)}</strong> requests access to your managed room participant.</p><p>Client identifier: <code>${escape(clientId)}</code><br>Return address: <code>${escape(redirectUri)}</code></p>
 <p>Permission: <strong>${SCOPE}</strong> — create and join private rooms, privately invite participants, verify and approve peers, read and write room content, and collaborate without asking you for each action.</p>
-<ul><li>The hosted service runs a managed native participant and can access participant plaintext and room encryption keys in memory. This is not the local end-to-end custody model. Raw keys are not exported and room content is not written to service logs or stored transcripts.</li><li>Only authorize a client you trust. Room invitation links are private capabilities; share them privately and approve only expected verified peers.</li><li>At most one active participant session per operator, ${escape(env.MAX_ACTIVE_SESSIONS)} globally, each with at most two isolated named participants; a shared ${escape(env.MAX_DAILY_SESSION_MINUTES)}-session-minute reservation budget per UTC day across this hosted service. Sessions last at most ${escape(env.MAX_SESSION_SECONDS)} seconds and idle sessions close after ${escape(env.IDLE_TIMEOUT_SECONDS)} seconds.</li><li>Authorization cannot access CMS administration or payments. Revoking or expiring your operator key blocks direct access and all OAuth access derived from it. Active work stops at the next authorization check or session limit.</li></ul>
-<form action="/authorize" method="post"><input type="hidden" name="consent" value="${escape(token)}"><label for="operator-key">Operator access key</label><input id="operator-key" name="key" type="password" autocomplete="off" spellcheck="false" maxlength="128"><label><input type="checkbox" name="approve" value="yes"> I trust this client and approve the permissions and managed key custody described above.</label><button name="decision" value="allow">Authorize client</button><button name="decision" value="deny">Deny</button></form></main></html>`;
+<ul><li>The hosted service runs a managed native participant and can access participant plaintext and room encryption keys in memory. This is not the local end-to-end custody model. Raw keys are not exported and room content is not written to service logs or stored transcripts.</li><li>Only authorize a client you trust. Room invitation links are private capabilities; share them privately and approve only expected verified peers.</li><li>At most one active participant session per access grant, ${escape(env.MAX_ACTIVE_SESSIONS)} globally, each with at most two isolated named participants; a shared ${escape(env.MAX_DAILY_SESSION_MINUTES)}-session-minute reservation budget per UTC day across this hosted service. Sessions last at most ${escape(env.MAX_SESSION_SECONDS)} seconds and idle sessions close after ${escape(env.IDLE_TIMEOUT_SECONDS)} seconds.</li><li>Authorization cannot access CMS administration or payments. Revoking or expiring this access grant blocks its direct and OAuth access. Active work stops at the next authorization check or session limit.</li></ul>
+<p>No account or manually issued key is required. This consent creates isolated, revocable hosted access for one hour. It does not verify a human identity or authorize entry into another host's room.</p>
+<form action="/authorize" method="post"><input type="hidden" name="consent" value="${escape(token)}"><label><input type="checkbox" name="approve" value="yes"> I trust this client and approve the permissions and managed key custody described above.</label><button name="decision" value="allow">Authorize client</button><button name="decision" value="deny">Deny</button></form></main></html>`;
 }
 function consentHeaders(cookie: string, redirectUri: string): Record<string, string> {
   // Chromium applies form-action across the POST redirect. Only permit the
@@ -211,7 +260,7 @@ async function authorize(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('Origin') !== origin || (request.headers.has('Sec-Fetch-Site') && request.headers.get('Sec-Fetch-Site') !== 'same-origin')) return error(403, 'access_denied');
   if (request.headers.get('Content-Type')?.split(';')[0].trim() !== 'application/x-www-form-urlencoded') return error(415);
   const form = new URLSearchParams(await boundedBody(request));
-  for (const name of form.keys()) if (!['consent', 'key', 'approve', 'decision'].includes(name) || form.getAll(name).length !== 1) return error(400);
+  for (const name of form.keys()) if (!['consent', 'approve', 'decision'].includes(name) || form.getAll(name).length !== 1) return error(400);
   const [payload, signature, extra] = (form.get('consent') ?? '').split('.');
   if (!payload || !signature || extra !== undefined || !await matches(key, signature, `consent:${payload}`)) return error(403, 'access_denied');
   const bound = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(decode64(payload))) as { nonce: string; expiresAt: number; query: string };
@@ -227,10 +276,18 @@ async function authorize(request: Request, env: Env): Promise<Response> {
     return new Response(null, { status: 302, headers: { ...consentHeaders('', auth.redirectUri), Location: redirect.toString() } });
   }
   if (form.get('decision') !== 'allow' || form.get('approve') !== 'yes') return error(403, 'access_denied');
-  const principalId = await store(env).validate(form.get('key') ?? '');
-  if (!principalId) return error(401, 'access_denied');
-  const result = await env.OAUTH_PROVIDER.completeAuthorization({ request: auth, userId: principalId, metadata: {}, scope: [SCOPE], props: { principalId } });
-  return new Response(null, { status: 302, headers: { ...consentHeaders('', auth.redirectUri), Location: result.redirectTo } });
+  for (const kind of ['accessHour', 'accessDay'] as const) {
+    const rate = await limited(request, env, kind);
+    if (rate) return rate;
+  }
+  const issued = await store(env).issueSelfService();
+  try {
+    const result = await env.OAUTH_PROVIDER.completeAuthorization({ request: auth, userId: issued.id, metadata: {}, scope: [SCOPE], props: { principalId: issued.id } });
+    return new Response(null, { status: 302, headers: { ...consentHeaders('', auth.redirectUri), Location: result.redirectTo } });
+  } catch (cause) {
+    await store(env).revoke(issued.id);
+    throw cause;
+  }
 }
 
 async function admin(request: Request, env: Env): Promise<Response> {
@@ -264,13 +321,21 @@ async function admin(request: Request, env: Env): Promise<Response> {
   return error(404, 'not_found');
 }
 
+const apiMethods: Record<string, readonly string[]> = {
+  '/mcp': ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  '/mcp/access': ['DELETE', 'OPTIONS'],
+  '/access': ['POST', 'OPTIONS'],
+};
+
 const publicPaths: Record<string, true> = {
   '/authorize': true,
+  '/preflight': true,
   '/oauth/token': true,
   '/oauth/register': true,
   '/.well-known/oauth-authorization-server': true,
   '/.well-known/oauth-protected-resource': true,
   '/.well-known/oauth-protected-resource/mcp': true,
+  '/.well-known/oauth-protected-resource/mcp/access': true,
 };
 
 /** The only route into the MCP router, after provider token validation and live principal recheck. */
@@ -283,7 +348,8 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
       apiRoute: '/mcp',
       apiHandler: {
         async fetch(request, environment, ctx) {
-          if (new URL(request.url).pathname !== '/mcp') return error(404, 'not_found');
+          const path = new URL(request.url).pathname;
+          if (path !== '/mcp' && path !== '/mcp/access') return error(404, 'not_found');
           const principalId = (ctx.props as Partial<AuthenticatedProps> | undefined)?.principalId;
           if (typeof principalId !== 'string' || !await store(environment).active(principalId)) return unauthorized(environment);
           const token = bearer(request);
@@ -291,6 +357,11 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
           if (!OPERATOR_KEY.test(token)) {
             const summary = await environment.OAUTH_PROVIDER.unwrapToken<AuthenticatedProps>(token);
             if (!summary || summary.userId !== principalId || !correctScope(summary.scope)) return error(403, 'insufficient_scope');
+          }
+          if (path === '/mcp/access') {
+            if (request.method !== 'DELETE') return error(405);
+            await store(environment).revoke(principalId);
+            return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
           }
           if (!apiHandler.fetch) return error(503, 'temporarily_unavailable');
           if (request.method === 'POST' && !request.headers.has('MCP-Session-Id')
@@ -301,7 +372,9 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
         },
       },
       defaultHandler: { async fetch(request, environment) {
-        if (new URL(request.url).pathname === '/authorize') return authorize(request, environment);
+        const path = new URL(request.url).pathname;
+        if (path === '/authorize') return authorize(request, environment);
+        if (path === '/preflight') return selfServicePreflight(environment);
         return error(404, 'not_found');
       } },
       authorizeEndpoint: '/authorize', tokenEndpoint: '/oauth/token', clientRegistrationEndpoint: '/oauth/register',
@@ -334,16 +407,21 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
         if (url.origin !== new URL(env.PUBLIC_MCP_URL).origin) return error(404, 'not_found');
         if (url.href.length > 8192 || (request.headers.get('Authorization')?.length ?? 0) > 4096) return error(400);
         if (url.pathname === '/admin/keys' || /^\/admin\/keys\/[0-9a-f-]{36}$/.test(url.pathname)) return await admin(request, env);
-        if (url.pathname !== '/mcp' && !Object.hasOwn(publicPaths, url.pathname)) return error(404, 'not_found');
-        if (url.pathname === '/mcp') {
+        const methods = Object.hasOwn(apiMethods, url.pathname) ? apiMethods[url.pathname] : undefined;
+        if (!methods && !Object.hasOwn(publicPaths, url.pathname)) return error(404, 'not_found');
+        if (methods) {
           const origin = request.headers.get('Origin');
           const allowed = new Set([new URL(env.PUBLIC_MCP_URL).origin, new URL(env.APP_URL).origin, ...env.ALLOWED_ORIGINS.split(',').map(value => value.trim()).filter(Boolean)]);
           if (origin !== null && !allowed.has(origin)) return error(403, 'access_denied');
-          if (!['GET', 'POST', 'DELETE', 'OPTIONS'].includes(request.method)) return error(405);
+          if (!methods.includes(request.method)) return error(405);
           if (request.method !== 'OPTIONS') {
             const rate = await limited(request, env, 'api');
             if (rate) return rate;
           }
+        } else if (url.pathname === '/preflight') {
+          if (!['GET', 'OPTIONS'].includes(request.method)) return error(405);
+          const rate = await limited(request, env, 'api');
+          if (rate) return rate;
         } else if (url.pathname.startsWith('/.well-known/')) {
           if (!['GET', 'OPTIONS'].includes(request.method)) return error(405);
         } else if (url.pathname === '/oauth/token' || url.pathname === '/oauth/register') {
@@ -355,16 +433,18 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
             providerRequest = new Request(request, { body });
           }
         }
-        const response = await providerFor(env).fetch(providerRequest, env, ctx);
+        const response = url.pathname === '/access'
+          ? request.method === 'OPTIONS' ? new Response(null, { status: 204 }) : await selfServiceAccess(request, env)
+          : await providerFor(env).fetch(providerRequest, env, ctx);
         const headers = new Headers(response.headers);
         headers.delete('Access-Control-Allow-Credentials');
         headers.set('Cache-Control', 'no-store');
         headers.set('X-Content-Type-Options', 'nosniff');
-        if (url.pathname === '/mcp' && request.headers.has('Origin')) {
+        if (methods && request.headers.has('Origin')) {
           headers.set('Access-Control-Allow-Origin', request.headers.get('Origin')!);
           headers.append('Vary', 'Origin');
           headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-          headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, MCP-Session-Id, MCP-Protocol-Version, Last-Event-ID');
+          headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, MCP-Session-Id, MCP-Protocol-Version, Last-Event-ID, Pillowfort-Toolset');
           headers.set('Access-Control-Expose-Headers', 'MCP-Session-Id, MCP-Protocol-Version, WWW-Authenticate, Retry-After');
         }
         return new Response(response.body, { status: response.status, statusText: response.statusText, headers });

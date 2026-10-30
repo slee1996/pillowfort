@@ -5,6 +5,7 @@ import { ParticipantQuota } from './quota';
 import type { AuthenticatedProps, Env } from './env';
 import { withOperationalTelemetry } from '../../src/telemetry';
 import { hasBoundedMcpStructure, MAX_MCP_REQUEST_BYTES } from './requestLimits';
+import catalog from '../../docs/agents/tools.json';
 
 export { AccessKeyStore, HostedMcpSession, ParticipantQuota };
 
@@ -18,8 +19,10 @@ const apiHandler: ExportedHandler<Env, unknown, unknown, AuthenticatedProps> = {
   async fetch(request, env, ctx) {
     if (new URL(request.url).pathname !== '/mcp') return new Response('Not found', { status: 404 });
     const principalId = ctx.props.principalId;
-    if (typeof principalId !== 'string' || !UUID.test(principalId)) return rpcError(401, 'Valid operator authorization is required.');
+    if (typeof principalId !== 'string' || !UUID.test(principalId)) return rpcError(401, 'Valid access authorization is required.');
     if (!['POST', 'GET', 'DELETE'].includes(request.method)) return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST, GET, DELETE' } });
+    const toolset = request.headers.get('Pillowfort-Toolset') ?? 'collaboration';
+    if (toolset !== 'collaboration' && toolset !== 'full') return rpcError(400, 'Pillowfort-Toolset must be collaboration or full.');
 
     let sessionId = request.headers.get('MCP-Session-Id');
     if (sessionId !== null && !UUID.test(sessionId)) return rpcError(400, 'Invalid MCP session identifier.');
@@ -48,7 +51,7 @@ const apiHandler: ExportedHandler<Env, unknown, unknown, AuthenticatedProps> = {
     // Only protocol headers reach the session actor. Never forward credentials,
     // cookies, raw client IPs, or caller-supplied internal routing assertions.
     const headers = new Headers();
-    for (const name of ['content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version', 'last-event-id', 'origin']) {
+    for (const name of ['content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version', 'last-event-id', 'origin', 'pillowfort-toolset']) {
       const value = request.headers.get(name);
       if (value !== null) headers.set(name, value);
     }
@@ -70,9 +73,9 @@ const worker = {
     const url = new URL(request.url);
     let response: Response;
     if (request.method === 'GET' && url.pathname === '/health') {
-      response = Response.json({ ok: true, version: '1.1.1', transport: 'streamable-http' });
+      response = Response.json({ ok: true, version: catalog.release.version, catalog: catalog.release, transport: 'streamable-http' });
     } else if (request.method === 'GET' && url.pathname === '/') {
-      response = new Response('Pillowfort hosted MCP\n\nEndpoint: https://mcp.pillowfort.xyz/mcp\nRequires an operator access key or OAuth authorization.\nThis managed participant runtime can see its admitted room content.\nSetup and privacy: https://about.pillowfort.xyz/agents\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      response = new Response('Pillowfort hosted MCP\n\nEndpoint: https://mcp.pillowfort.xyz/mcp\nNo manually issued key or account is required.\nPreflight: GET https://mcp.pillowfort.xyz/preflight\nSelf-service access: POST https://mcp.pillowfort.xyz/access with JSON {"acceptManagedCustody":true}; use the returned access_token as a Bearer credential. Access expires after one hour and can be revoked with DELETE /mcp/access.\nOAuth clients authorize through the consent page without key entry.\nThe default catalog focuses on collaboration; initialize with Pillowfort-Toolset: full for games and the broader catalog.\nThis managed participant runtime can see its admitted room content. Invitations and verified host approval are still required.\nSetup, isolation and privacy: https://about.pillowfort.xyz/agents/index.md\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     } else {
       try { response = await authorizedWorker.fetch!(request, env, ctx); }
       catch { response = new Response('Hosted MCP request failed.', { status: 503 }); }
@@ -80,6 +83,7 @@ const worker = {
     const headers = new Headers(response.headers);
     headers.set('cache-control', 'no-store');
     headers.set('x-content-type-options', 'nosniff');
+    headers.set('link', '<https://about.pillowfort.xyz/llms.txt>; rel="describedby"');
     // Preserve same-origin form Origin headers while withholding cross-origin referrers.
     headers.set('referrer-policy', 'same-origin');
     headers.set('x-frame-options', 'DENY');

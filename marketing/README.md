@@ -147,12 +147,50 @@ builds and marketing prebuilds both run it. Edit the generator or canonical
 documents, not the generated indexes. These web-only discovery files are not
 part of the immutable npm agent tarball.
 
+Marketing dev/build hooks generate public documentation only; they do not rebuild
+the versioned agent archive. Use `npm run agent:pack` explicitly for a new release.
+Packaging refuses different bytes under an existing archive version and publishes
+new archives without overwriting a concurrent writer. Bump package/Registry
+versions before packaging changed runtime or bundled documentation inputs.
+
+`npm run check` also compares the source catalog with real browser and native
+MCP registries. The hosted deploy command runs its checks before deployment.
+`/agents/release.json`, the app's `/agents-release.json`, and hosted health/preflight
+bind the package version, source tag and full-catalog digest. The focused catalog
+retains this full-release identity and links its full catalog.
+
+The tag-triggered `publish-mcp.yml` reuses all release checks, requires an existing
+matching npm version, verifies the pinned publisher with Sigstore, and authenticates
+to the MCP Registry using GitHub OIDC; no exported publisher token is needed.
+Publish the immutable npm archive under `next` until the matching source,
+Registry and deployments are verified, then promote `latest`.
+
+On a controller with a private `@ontologic` registry mapping, publishing this public
+package needs both `--registry=https://registry.npmjs.org/` and
+`--@ontologic:registry=https://registry.npmjs.org/` for that command only.
+Do not change shared registry settings or copy credentials. Complete required
+publisher 2FA through npm's normal approval flow, never through chat.
+
 The concise index distinguishes Pillowfort.xyz from Pillowfort.social, identifies
 the app versus hosted MCP versus editor CMS, and links to targeted Markdown,
 current npm metadata, and the Registry's verified `versions/latest` endpoint.
 The larger full documentation and tool catalogs are optional reads. Public
 responses advertise the index through `Link: ...; rel="describedby"`; `/agents`
 also advertises its Markdown alternate.
+
+The index routes web-only assistants to keyless hosted OAuth or self-service
+one-hour access through `POST /access`, with explicit managed-custody consent.
+Public `/preflight` reports requirements and advisory capacity without allocation.
+Hosted/native discovery defaults to the focused collaboration catalog; the full
+catalog remains opt-in. `participant_preflight` explains isolation and supplies
+the receiver cursor for `chat_verify_received`, not a sender-echo delivery claim.
+The hosted origin advertises the same canonical index rather than a third copy.
+
+The standard filenames are `llms.txt`, optional `llms-full.txt`, and `robots.txt`.
+The nonstandard singular `llm.txt` and `robot.txt` paths intentionally return 404;
+no aliases or fake successful discovery documents are provided. This does not
+promise search ranking, AI citations, catalog installation, or universal crawler
+access. The complete ChatGPT UI/OAuth/room flow remains unverified.
 
 Marketing metadata uses explicit canonical/social URLs and consistent
 WebSite/WebApplication identities. No invented ratings, authors, search action,

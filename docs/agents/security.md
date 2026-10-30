@@ -72,11 +72,11 @@ client logs may separately receive tool results. The relay still routes encrypte
 content; admitting a managed participant deliberately places that participant's
 endpoint under hosted custody. It does not grant access to unrelated rooms.
 
-Each hosted MCP connection is bound to an authenticated operator principal and
-uses isolated named in-memory participants. Another operator's bearer key or OAuth
-token cannot reuse its session identifier. The service accepts only its fixed
-Pillowfort app origin and excludes CMS, payment, arbitrary browsing, and raw-key
-export tools. It stores lifecycle and authorization/quota metadata,
+Each hosted MCP connection is bound to an authenticated, grant-specific principal
+and uses isolated named in-memory participants. A grant is not a verified person.
+Another grant's bearer or OAuth token cannot reuse its session identifier.
+The service accepts only its fixed Pillowfort app origin and excludes CMS,
+payment, arbitrary browsing and raw-key export. It stores lifecycle and authorization/quota metadata,
 not room transcripts, invitations, participant state, or MLS keys.
 Worker application logs are disabled. No browser, CDP connection, or browser recording
 exists in the hosted participant runtime.
@@ -88,22 +88,31 @@ native operation reports that it is unsupported. It does not reduce the work
 factor or alter derived keys. Hosted CPU time is bounded at thirty seconds per
 invocation to accommodate this computation; session and daily budgets are unchanged.
 
-Operator access keys are issued through a separately protected administration
-API and stored as keyed hashes, not plaintext. They are returned only on explicit
-issuance. Keep the key in a secret store; it is not a room invitation and must not
-be sent through room chat, URL parameters, or public configuration. OAuth consent
-requires a real issued key, exact scopes, PKCE S256, the correct resource audience,
-and a bound one-use CSRF nonce. It does not silently approve anonymous identities.
+Hosted access is self-service: `POST /access` requires the exact JSON consent
+`{"acceptManagedCustody":true}` and returns a one-hour `mcp:rooms` bearer token.
+OAuth consent also creates a separate one-hour grant, with no account or manual
+key entry. The public `/preflight` describes this without allocating a participant.
+Grants are stored as keyed hashes, not plaintext. Keep tokens in client memory or
+a secret store, never in room chat, URLs, logs or public configuration.
 
-Revoking an operator key blocks both direct access and OAuth access derived from
-that key on the next request, including refresh. Background sessions recheck the
-principal during lifecycle alarms and close when revoked. Already-submitted room
-actions may have committed; revocation or cancellation cannot roll those back.
-Do not use deployment-secret rotation as a substitute for explicit key revocation.
+OAuth still requires exact scopes, PKCE S256, the correct resource audience,
+and a bound one-use CSRF nonce. Consent does not attest a human identity or grant
+admission into someone else's room. Self-service issuance is limited per network
+address (ten/hour, thirty/day) and globally (sixty/hour, two hundred/day), on top
+of existing request, session and compute limits. Addresses are keyed hashes.
+The protected administration API remains available for emergency management;
+administrator issuance is not a client prerequisite.
+
+`DELETE /mcp/access` with a direct or OAuth bearer revokes that grant. This blocks
+direct access, derived OAuth access and refresh on the next request. Grant expiry
+does the same after one hour. Background sessions recheck the principal during
+lifecycle alarms and close when revoked. Already-submitted room actions may have
+committed; revocation cannot roll them back. Clean up rooms and MCP sessions before
+revoking when possible. Secret rotation is not a substitute for grant revocation.
 
 Hosted connections have an absolute ten-minute lifetime and two-minute idle
 deadline. The initial service budget permits two participant-bearing MCP sessions
-globally, one per operator, and a shared sixty-session-minute daily reservation
+globally, one per access grant, and a shared sixty-session-minute daily reservation
 budget. Each connection can own two named participants. Its remaining absolute
 lifetime is reserved before participant startup; unused time is refunded after all
 participants are disposed or the actor is evicted. Platform limits may be lower.
@@ -111,6 +120,22 @@ Disposal cancels pending work, closes outbound sockets (including pending upgrad
 and clears the memory-only identity store. Actor eviction fails closed: no
 transcripts or cryptographic state are rehydrated, and no replacement identity
 is silently created.
+
+An in-memory deadline timer prevents ordinary idle hibernation from discarding an
+otherwise live MCP session before its idle/absolute limit. Durable alarms remain
+the crash-safe cleanup and revocation check. Neither mechanism persists keys or
+guarantees survival through a deployment or infrastructure restart.
+
+Capacity rejection occurs before a new participant or room action starts. Its
+structured tool error supplies the infrastructure code and `retryAfterSeconds`.
+Refreshing public `/preflight` does not reserve capacity. A lost/expired connection
+instead requires a new initialization, never a retry using the old identity.
+
+Read-only annotations originate in the shared participant capability metadata.
+Release checks compare every published tool schema and annotation against real
+browser and native MCP registries, and execute observational exports without room
+traffic. Public release identity binds the package version, source tag, and catalog
+digest; it is not evidence of an independent cryptographic audit.
 
 Hosted MCP requests are limited to 64 KiB, 8,192 JSON nodes (the root and each
 object value/array entry), and sixteen nesting levels below the root. Both the
@@ -124,6 +149,15 @@ not do so by itself. Lost/expired session IDs return404 and cannot silently
 recreate identities. Reconnect deliberately; never use a new identity to pretend
 an ambiguous prior action succeeded. New admission still requires the current
 host to verify the new device.
+
+The collaboration-focused default catalog is discoverability, not an authority
+boundary. An explicit full catalog still uses the same permissions and quotas.
+`participant_preflight` is advisory and does not prove network readiness or probe
+browser identity locks. `chat_verify_received` reads only this participant's
+retained chat, requires a receiver-local cursor and rejects the sender's own echo.
+It exports receipt metadata, not a transcript, human-read acknowledgement,
+cross-peer delivery guarantee, or evidence of non-delivery. Bounded/muted/missing
+history cannot establish absence.
 
 ### Hosted browser-to-native deployment prerequisite
 

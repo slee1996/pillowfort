@@ -408,3 +408,183 @@ the shared Linux host. Quick Tunnels remain unsuitable as permanent destinations
   is not a total-process or multi-process container RSS limit.
 
 
+## Agent activation and discovery repair — 2026-10-29
+
+Historical snapshot: the manual-key gate described here is superseded by the self-service cutover below.
+
+- The external hands-on report established native host creation/invitation/teardown,
+  but not independent peer admission or collaboration. Shared-profile locking,
+  missing hosted access, and a blocked Chromium download were distinct boundaries;
+  none justified weakening identity locks, TLS, runtime requirements, or admission.
+- Native action failures now resolve as structured `ok:false` results, including
+  stable code/message/retryability. Browser validation and cancellation errors use
+  the same boundary. The underlying single-writer identity lock remains intact.
+- Connection failures explain that another tab or reasoning context is not an
+  isolated browser participant. Local/hosted named sessions and separate browser
+  contexts/profiles remain the supported isolation routes; takeover replaces an
+  owner and must not be used to create a peer.
+- Added ChatGPT custom MCP/OAuth instructions and a public GitHub beta-access
+  request link. Issuance remains manual and capacity-limited, with private key
+  delivery arranged separately. No anonymous allocator, key bypass, new account
+  provider, or increased hosted budget was introduced.
+- Updated both `llms.txt` indexes, combined `llms-full.txt`, canonical setup and
+  workflows, readable/JSON tool catalogs, and hosted discovery headers. Live
+  status/MIME checks passed for those documents and both sitemaps. Singular
+  `llm.txt`/`robot.txt` paths remain 404. Training-crawler restrictions and private
+  room noindex remain intact. Anonymous MCP GET correctly returns an empty 401
+  with the OAuth resource metadata challenge, not a JSON document.
+- Marketing builds no longer repackage the immutable agent download. An explicit
+  pack refuses changed inputs under an existing version; exclusive publication
+  also prevents concurrent overwrite. Production `1.1.1` archive SHA-256 remained
+  `d3a47a03f6e7ad6ee482aca0c12deee0a13df412be2e7502cc98b47350c702b1`.
+- App release gate passed (479 tests, typechecks, pinned OpenMLS verification,
+  production client build); marketing passed lint/typecheck/build and eight
+  existing tests; hosted MCP passed typecheck/build and six existing tests.
+- Real local and production browser participants completed exact-fingerprint
+  admission, six encrypted messages verified in the receiving participant, and
+  room destruction observed on both sides. Real native browser invocations
+  returned structured `stale-room` with no message/operation side effect, followed
+  by observed teardown. Desktop and 390px marketing surfaces were inspected.
+  These were synthetic, single-driver smoke runs with isolated browser identities,
+  not independent external model operators, acquired users, or retention evidence.
+- Fresh aggregate production activity remained visible after deployment.
+  Verification activity contributes to those counters; do not label it organic.
+- Deployed app version `903f7154-2bb2-42be-b8f0-2488281a0b35`, marketing version
+  `0a1b1d03-0078-439a-b81d-feea42ee2a05`, and hosted version
+  `e57a2741-21d9-4eda-b24c-fddcd9b3b03a`, preserving explicit production telemetry.
+- Installed Court Jester verification passed the shared participant-agent file.
+  Native-adapter authoritative tests passed, but the overall result was
+  inconclusive because the unchanged detector export was not covered. Other
+  checked test/script/worker/TSX files encountered no-export or incompatible-test-
+  artifact harness limitations. These are not claimed as Court Jester passes.
+  The static JSON-LD lint warning concerns escaped, application-owned structured
+  data, not untrusted HTML insertion. No gate was disabled to obtain a pass.
+- Search Console performance/indexing reports and the complete authenticated
+  ChatGPT frontend flow remain unavailable to this session. Public fetches are
+  not proof of access from a real search crawler's IPs or evidence of ranking.
+
+## Self-service hosted access and retest repairs — 2026-10-30
+
+- Removed the maintainer-issued key prerequisite. Public `GET /preflight` describes
+  readiness without allocating a participant. `POST /access` with exactly
+  `{"acceptManagedCustody":true}` returns a private one-hour `mcp:rooms` bearer.
+  OAuth creates the same bounded access through consent, without account/key entry.
+  `DELETE /mcp/access` revokes direct or OAuth access and derived refresh.
+- Revocation stays inside the token's protected `/mcp` resource. The first real
+  Worker regression run caught sibling-path audience rejection; the corrected
+  protected subresource passes without relaxing audience, scope, PKCE or CSRF checks.
+  Issuance is rate-limited per address and globally; existing compute quotas remain.
+- Hosted discovery defaults to 23 collaboration tools; the public full local
+  snapshot has 63, and production full hosted discovery exposes 59 supported tools.
+  Full hosted discovery requires `Pillowfort-Toolset: full` at initialization;
+  native full discovery uses `?agent_tools=full`. Toolset selection is immutable
+  during a hosted connection. Local stdio keeps its full catalog.
+- Added advisory `participant_preflight` and receiver-local `chat_verify_received`.
+  Verification requires the intended receiver, exact sender/text and a receiver
+  cursor captured before sending. Old duplicates and sender echoes cannot satisfy
+  it; missing/truncated history is not proof of non-delivery or a human-read receipt.
+- The first production rehearsal exposed ordinary actor hibernation: a separate
+  diagnostic returned `MCP session lost or expired` after 12,289 ms without activity.
+  A bounded deadline timer now preserves memory-only MCP state until idle/absolute
+  expiry; durable alarms remain crash-safe cleanup. Deployment/runtime restarts
+  still fail closed, and keys are never persisted. Added a twelve-second quiet-gap
+  state-preservation regression while retaining the absolute-expiry regression.
+  See [Cloudflare's lifecycle contract](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/).
+- Verification: root `npm run check` passed 481 app/security tests plus typechecks,
+  pinned OpenMLS artifact verification and the client build. `npm run check` in
+  `hosted-mcp` passed eight real Worker/browser regressions and the dry-run build;
+  the same command in `marketing` passed lint, typecheck, build and eight existing
+  rendered tests. Used Node 22.23.4 and Bun 1.4.4, not the unsupported shell defaults.
+- Production: two separately authenticated MCP connections created isolated native
+  participants, privately invited, matched the exact joining fingerprint and observed
+  admission on both peers. Six alternating encrypted messages were verified using
+  the new tool on the intended receiver after its saved cursor. Guest leave and
+  host room destruction were observed, then both named sessions/MCP connections
+  were closed and both grants revoked; subsequent access returned401.
+  One scripted driver, not independent LLM agents, acquisition or retention evidence.
+- Real production browser consent contained zero password/key inputs and completed
+  an S256/loopback callback without any existing key. Its OAuth bearer initialized
+  full MCP discovery; self-revocation returned204, later access401 and refresh400.
+  This is a generic OAuth-client proof, not the unavailable authenticated ChatGPT UI.
+- Public discovery smoke passed twenty status/MIME checks: both identical `llms.txt`
+  indexes, robots/sitemaps, canonical Markdown, full/focused catalogs, protected
+  resource metadata and the expected anonymous MCP401 challenge. Singular
+  `llm.txt`/`robot.txt` remain404. Production `1.1.1` archive SHA-256 remains
+  `d3a47a03f6e7ad6ee482aca0c12deee0a13df412be2e7502cc98b47350c702b1`.
+- Deployed app `7152052b-21a7-4a66-aaad-5f40e897f539`,
+  hosted MCP `595e53e8-53cf-4bb3-b3cc-f451cb54ef42`, and marketing
+  `d090370c-4943-4c83-a664-2d803a43b10b`, explicitly preserving production telemetry.
+- Court Jester checked all thirteen changed executable source/test files.
+  `src/participant/agent.ts` passed authoritative verification; native adapter tests
+  passed but its unchanged detector export left overall coverage inconclusive.
+  Worker imports (`cloudflare:workers`), `.mjs` authoritative-test incompatibility,
+  missing TSX launcher and no-export scripts prevent a blanket pass. Browser-only
+  bridge fuzzing without `location`, and extracted test callbacks without their
+  lexical closures, produced harness-context failures; reported to tool QA, not
+  hidden with production fallbacks. Static legacy/style advisories were inspected.
+  Exact commands, individual results and retained proof JSON are under
+  `/tmp/pillowfort-selfservice.3YCTfr/`; `court-commands.json` inventories the commands.
+  Desktop/mobile marketing and native browser surfaces were exercised. Later
+  screenshot operations stalled in the browser harness; live consent DOM and
+  functional OAuth verification succeeded. No new ChatGPT/GSC access is claimed.
+
+## Browser verification and release parity candidate — 2026-10-30
+
+- The ordinary production UI passed in two separate Chromium processes: a
+  1280×900 desktop host and a 390×844 mobile-sized guest. Used visible controls,
+  not the application bridge, to create a room, exercise manual-copy fallback,
+  verify the guest fingerprint, approve admission, exchange chat and drawing
+  both ways, and finish rock-paper-scissors with matching results.
+  Mobile document width matched its viewport. Both clients observed room
+  destruction, returned home, and closed. This is not Safari/Firefox or
+  physical-device verification.
+- Prepared SDK/Registry candidate `1.1.2`, source tag `v1.1.2`. The new release
+  gate compares the checked-in catalog with real browser and native MCP
+  registries: names, input schemas, annotations, server version, and release
+  digest. It executes observational exports and checks unchanged participant
+  revision/operations. Missing tools, altered schemas, and lost read-only
+  annotations are rejected by real-runtime regression checks.
+- Shared participant capability metadata now carries read-only semantics into
+  local MCP and native WebMCP. Catalog generation no longer patches those hints
+  after discovery. Public app/marketing release JSON and hosted health/preflight
+  identify the same source tag and full-catalog digest.
+- Capacity errors carry `retryAfterSeconds` and distinguish infrastructure
+  rejection from admission/encryption failures. Lost/expired MCP identities
+  return structured reinitialization guidance and are never silently restored.
+  Pending-call closure preserves the warning that a mutation outcome can be
+  unknown. Quotas and cryptographic/admission authority are unchanged.
+- Verification: `npm run check` passed 484 tests, client typechecks, pinned
+  OpenMLS verification, production build, and the real 63-browser/59-native-tool
+  parity gate. `npm --prefix hosted-mcp run check` passed 9 actual Worker
+  regressions and a deploy dry run, including capacity rejection without losing
+  existing participants and the absolute connection deadline.
+  `npm --prefix marketing run check` passed lint/typechecks and 8 rendered checks.
+- A separate Node/browser SDK process and Bun/native participant process each
+  discovered its own action interface, created its own identity, coordinated
+  invitation and exact-fingerprint admission through a private mode-0700
+  rendezvous, receiver-verified the other message, and observed room end.
+  Both runtimes closed and private rendezvous data was removed. An initial
+  smoke-only missing-Origin failure was corrected in the throwaway transport,
+  not hidden with a production fallback. These are deterministic client
+  processes, **not independently reasoning LLMs**; no subagents were used.
+- Full catalog SHA-256:
+  `1fc675e0d8806e3ded1a652d26c6c56f5fe00ea1597eb7308291c0479f26ee5c`.
+  Candidate tarball SHA-256:
+  `aeb1011c58c10168dbf8f5497d73cc75f8d1b3589991432fc05ece0fbd53cddb`.
+  The published `1.1.1` archive is unchanged. Packaging is not publication.
+- Court Jester checked sixteen executable file scopes. The shared agent passed
+  authoritative native tests; `scripts/check-agent-catalog.ts` passed runtime
+  smoke. Ten scopes were inconclusive: unexported scripts, unsupported Worker
+  imports/bootstrap, and unavailable TSX launcher. Four scopes raised generated
+  fixture flags: an agent object missing required methods, intentional CLI
+  argument rejection, and extracted callbacks missing lexical bindings.
+  Findings were inspected/reported to tool QA; no blanket Court Jester pass.
+  Exact commands and individual outputs:
+  `/tmp/pillowfort-selfservice.3YCTfr/parity-court-commands.json`.
+  Cross-process proof: `mixed-client-proof.json` in that directory.
+- Publication remains a separate gate: use the immutable npm tarball, publish
+  matching GitHub source/tag, wait for the tag-triggered checked MCP Registry
+  publication, deploy matching app/hosted/marketing artifacts with production
+  telemetry explicitly enabled, verify live release identity, then promote the
+  npm dist-tag. Do not describe the candidate as shipped until those steps pass.
+

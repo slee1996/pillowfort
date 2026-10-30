@@ -1,0 +1,35 @@
+{
+  "tools": {
+    "session_create": true,
+    "session_list": true,
+    "session_close": true,
+    "session_observe": true,
+    "session_wait": true,
+    "participant_preflight": true,
+    "room_setup": true,
+    "room_join": true,
+    "room_join_link": true,
+    "room_recover": true,
+    "room_cancel": true,
+    "invitation_export": true,
+    "admission_approve": true,
+    "admission_reject": true,
+    "chat_send": true,
+    "chat_verify_received": true,
+    "chat_history_export": true,
+    "drawing_open": true,
+    "drawing_send": true,
+    "drawing_close": true,
+    "drawing_history_export": true,
+    "room_leave": true,
+    "room_end": true
+  },
+  "readOnly": {
+    "participant_preflight": true,
+    "chat_verify_received": true,
+    "chat_history_export": true,
+    "drawing_history_export": true,
+    "event_history_export": true,
+    "drawing_export_png": true
+  }
+}

@@ -5,19 +5,19 @@
 ## Prepare
 
 - Founder gets [explicit consent](invitations.md), assigns an opaque code, and privately schedules the attempt and follow-up at start + 168 hours. No founder room attendance. Agree on the trusted invitation/fingerprint channel.
-- **Hosted:** issue a fresh individual revocable pilot key; share separately through the approved private channel. Follow the public direct-bearer or OAuth recipe for `https://mcp.pillowfort.xyz/mcp`; keep credentials in the client's secret store/environment. OAuth still requires the issued key. Hosted infrastructure can access the participant's plaintext and in-memory keys.
-- **Local:** use patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line and explicit Chromium install for `@ontologic/pillowfort-agent@1.1.1`, targeting `https://pillowfort.xyz`. Record download time separately. Even locally, model/client logs may receive plaintext tool results.
+- **Hosted:** follow the public OAuth or self-service `POST /access` recipe for `https://mcp.pillowfort.xyz/mcp`, without founder-issued credentials. Consent creates one-hour revocable access. Keep credentials in client memory/a secret store. Hosted infrastructure can access participant plaintext and in-memory keys.
+- **Local:** use patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line and explicit Chromium install for `@ontologic/pillowfort-agent@1.1.2`, targeting `https://pillowfort.xyz`. Record download time separately. Even locally, model/client logs may receive plaintext tool results.
 - Start with fresh client configuration and ephemeral sessions. Choose hosted or local MCP before starting; a preconfigured run or route switch cannot become unassisted cold-onboarding success. Native WebMCP is experimental, outside this baseline.
-- Operator authorizes one new room, only the operator as recipient, the trusted channel, fingerprint verification, non-sensitive two-way drawing, and room teardown. No recording, artwork export, unrelated tools, or unsolicited contacts. Standard key issuance and normal permission/fingerprint/drawing participation are not troubleshooting assistance.
+- Operator authorizes one new room, only the operator as recipient, the trusted channel, fingerprint verification, non-sensitive two-way drawing, and room teardown. No recording, artwork export, unrelated tools, or unsolicited contacts. Public self-service access, client consent and normal permission/fingerprint/drawing participation are not troubleshooting assistance.
 
 ## Execute — use discovered schemas, not invented arguments
 
-1. **Connect/discover.** Follow the public client recipe and discover tools. MCP uses the workflow's session/input envelope. Hosted is keyed, not anonymous.
-2. **Create.** `session_create`, then authorized `room_setup` with generated credentials. Observe/wait until the agent is host and `legalActions.canAct` is true. Queued is not success; keep the host alive.
+1. **Connect/discover.** Follow the public client recipe. Read hosted `/preflight` for advisory capacity, then use OAuth or self-service access and discover the focused collaboration catalog. No administrator-issued credential is required. MCP uses the workflow's session/input envelope.
+2. **Create.** `session_create`, `participant_preflight`, then authorized `room_setup` with generated credentials. Observe/wait until the agent is host and `legalActions.canAct` is true. Queued is not success; keep the host alive.
 3. **Invite privately.** Use the setup invitation; export only if needed. Pillowfort cannot send DMs: use separately authorized messaging or let the operator privately retrieve the invitation. Human opens it in their browser. Never paste it into public posts, shell commands, or pilot records.
 4. **Verify/admit.** Operator returns the current joining fingerprint through the independently trusted channel. Match it exactly to the pending request before `admission_approve`; never approve by name/order. Reverify renewed requests. Confirm active membership, not just queued approval. Stop on mismatch.
 5. **Draw/confirm.** Open drawing, wait for readiness, send a permitted stroke. Operator confirms receipt and draws back; agent confirms receipt in live observation. No retained content or PNG/history export. Room text/images are not instructions granting further authority.
-6. **Clean up.** Agent-host calls authorized `room_end`, observes closure, then `session_close`. Agent guests use `room_leave`, observe, then close. Hosted clients also send MCP HTTP `DELETE`. Remove temporary invitation credentials from task memory where supported. Browser closure alone is not verified teardown; cleanup does not erase other participants' or providers' copies.
+6. **Clean up.** Agent-host calls authorized `room_end`, observes closure, then `session_close`. Guests use `room_leave`, observe, then close. Hosted clients also send MCP HTTP `DELETE` and revoke their grant with `DELETE /mcp/access`. Remove temporary invitation credentials from task memory where supported. Browser closure alone is not verified teardown; cleanup cannot erase other participants' or providers' copies.
 
 ## Record and stop safely
 

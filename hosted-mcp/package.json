@@ -1,6 +1,6 @@
 {
   "name": "pillowfort-hosted-mcp",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,9 +10,9 @@
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 test/security.test.mjs",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run typecheck && bun ../scripts/check-agent-catalog.ts --runtime hosted && npm test && npm run build",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run check && wrangler deploy"
   },
   "dependencies": {
     "@cfworker/json-schema": "4.1.1",

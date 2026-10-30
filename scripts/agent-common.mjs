@@ -4,17 +4,24 @@ export const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 export const MAX_WAIT_MS = 30_000;
 
 export class AgentError extends Error {
-  constructor(code, message, retryable = false) {
+  /**
+   * @param {string} code
+   * @param {string} message
+   * @param {boolean} [retryable]
+   * @param {number} [retryAfterSeconds]
+   */
+  constructor(code, message, retryable = false, retryAfterSeconds = undefined) {
     super(message);
     this.name = 'AgentError';
     this.code = code;
     this.retryable = retryable;
+    if (retryAfterSeconds !== undefined) this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
 export function errorResult(error) {
   return { ok: false, error: error instanceof AgentError
-    ? { code: error.code, message: error.message, retryable: error.retryable }
+    ? { code: error.code, message: error.message, retryable: error.retryable, ...(error.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: error.retryAfterSeconds }) }
     : { code: 'INTERNAL_ERROR', message: 'The operation failed. Check the app connection and session state.', retryable: false } };
 }
 

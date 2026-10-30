@@ -124,6 +124,51 @@ const issue = async label => {
   assert.equal(response.status, 201);
   return response.body;
 };
+const selfService = async () => {
+  const response = await request('/access', { method: 'POST', json: { acceptManagedCustody: true } });
+  assert.equal(response.status, 201);
+  return response.body;
+};
+
+test('self-service requires custody consent, cannot elevate lifetime or scope, and revokes without an administrator', async () => {
+  const before = await request('/preflight');
+  assert.equal(before.status, 200);
+  assert.equal(before.body.quota.activeSessions, 0);
+  const browserBootstrap = await request('/access', { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'Content-Type' } });
+  assert.equal(browserBootstrap.status, 204);
+  assert.equal(browserBootstrap.headers['access-control-allow-origin'], origin);
+  for (const json of [{}, { acceptManagedCustody: false }, { acceptManagedCustody: true, expires_in: 86_400 }, { acceptManagedCustody: true, scope: 'admin' }]) {
+    assert.equal((await request('/access', { method: 'POST', json })).status, 400);
+  }
+  assert.equal((await request('/access', { method: 'POST', json: { acceptManagedCustody: true }, headers: { Origin: 'https://untrusted.example' } })).status, 403);
+  const started = Math.floor(Date.now() / 1000);
+  const access = await selfService();
+  assert.equal(access.scope, 'mcp:rooms');
+  assert.equal(access.expires_in, 3600);
+  assert(access.expires_at >= started + 3600 && access.expires_at <= started + 3605);
+  const revocation = new URL(access.revocation_endpoint);
+  assert.equal(revocation.origin, origin);
+  const session = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(access.access_token) });
+  assert.equal(session.status, 200);
+  const headers = { ...mcpHeaders(access.access_token), 'MCP-Session-Id': session.headers['mcp-session-id'], 'MCP-Protocol-Version': '2025-11-25' };
+  try {
+    const listed = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 2, method: 'tools/list' }, headers });
+    assert.equal(listed.status, 200);
+    assert(listed.body.result.tools.some(tool => tool.name === 'chat_verify_received'));
+    assert(!listed.body.result.tools.some(tool => tool.name === 'chat_format' || tool.name.startsWith('ttt_')));
+    const hidden = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'chat_format', arguments: { session: 'not-allocated', input: { bold: true } } } }, headers });
+    assert(hidden.body.error || hidden.body.result.isError, 'Undiscovered tools must not execute in the focused connection.');
+    assert.equal((await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 4, method: 'tools/list' }, headers: { ...headers, 'Pillowfort-Toolset': 'full' } })).status, 409);
+    const after = await request('/preflight');
+    assert.equal(after.body.quota.activeSessions, 0, 'Access, initialization and discovery must not allocate a participant.');
+    assert.equal(after.body.quota.remainingDailySessionSeconds, before.body.quota.remainingDailySessionSeconds);
+  } finally {
+    await request('/mcp', { method: 'DELETE', headers });
+    assert.equal((await request(revocation.pathname, { method: 'DELETE', headers: mcpHeaders(access.access_token) })).status, 204);
+  }
+  assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(access.access_token) })).status, 401);
+  assert.equal((await request(revocation.pathname, { method: 'DELETE', headers: mcpHeaders(access.access_token) })).status, 401);
+});
 
 test('enabled telemetry exports from the real Worker runtime without leaking credentials', async () => {
   const before = telemetryPayloads.length;
@@ -185,19 +230,19 @@ test('unauthenticated traffic cannot consume emergency key-revocation capacity',
   assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(key.key) })).status, 401);
 });
 
-test('native rooms preserve encrypted admission, exactly-once chat, principal isolation, and terminal session closure', { timeout: 45000 }, async () => {
-  const first = await issue('first-principal');
-  const second = await issue('second-principal');
-  const session = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(first.key) });
+test('self-service native rooms preserve encrypted admission, verified receiver chat, principal isolation, and terminal closure', { timeout: 45000 }, async () => {
+  const first = await selfService();
+  const second = await selfService();
+  const session = await request('/mcp', { method: 'POST', json: initialize, headers: { ...mcpHeaders(first.access_token), 'Pillowfort-Toolset': 'full' } });
   assert.equal(session.status, 200);
   const id = session.headers['mcp-session-id'];
   const list = { jsonrpc: '2.0', id: 2, method: 'tools/list' };
-  const sessionHeaders = { ...mcpHeaders(first.key), 'MCP-Session-Id': id, 'MCP-Protocol-Version': '2025-11-25' };
+  const sessionHeaders = { ...mcpHeaders(first.access_token), 'MCP-Session-Id': id, 'MCP-Protocol-Version': '2025-11-25', 'Pillowfort-Toolset': 'full' };
   const tools = await request('/mcp', { method: 'POST', json: list, headers: sessionHeaders });
   assert.equal(tools.status, 200);
   assert(tools.body.result.tools.some(tool => tool.name === 'room_setup'));
   assert(!tools.body.result.tools.some(tool => tool.name.startsWith('cms_') || tool.name.startsWith('fort_pass_')));
-  assert.equal((await request('/mcp', { method: 'POST', json: list, headers: { ...sessionHeaders, Authorization: `Bearer ${second.key}` } })).status, 404);
+  assert.equal((await request('/mcp', { method: 'POST', json: list, headers: { ...sessionHeaders, Authorization: `Bearer ${second.access_token}` } })).status, 404);
   assert.equal((await request('/mcp', { method: 'POST', json: list, headers: { ...sessionHeaders, Origin: 'https://untrusted.example' } })).status, 403);
   let callId = 4;
   const call = async (name, args) => {
@@ -207,8 +252,13 @@ test('native rooms preserve encrypted admission, exactly-once chat, principal is
   };
   assert.deepEqual(await call('session_create', { session: 'first' }), { ok: true, data: { name: 'first', state: 'ready' } });
   assert.deepEqual(await call('session_create', { session: 'second' }), { ok: true, data: { name: 'second', state: 'ready' } });
+  const capacity = (await request('/preflight')).body.quota;
+  assert.equal(capacity.activeSessions, 1);
+  assert.equal(capacity.canStartFullSession, false, 'Participant start spacing is visible without another allocation.');
   assert.equal((await call('session_create', { session: 'third' })).error.code, 'SESSION_LIMIT');
   assert.equal((await call('chat_format', { session: 'first', input: { bold: true } })).ok, true);
+  // Exceed production's ordinary 10-second actor-hibernation window without any request.
+  await delay(12_000);
   const firstSnapshot = (await call('session_observe', { session: 'first' })).data;
   const secondSnapshot = (await call('session_observe', { session: 'second' })).data;
   assert.equal(firstSnapshot.formatting.bold, true);
@@ -245,10 +295,15 @@ test('native rooms preserve encrypted admission, exactly-once chat, principal is
   await observeUntil('first', snapshot => snapshot.legalActions.canAct && snapshot.room.members.some(member => member.name === 'native-guest'), 'host roster update');
   const hostText = 'Native host encrypted regression message';
   const guestText = 'Native guest encrypted regression response';
+  const guestCursor = (await execute('second', 'participant_preflight', {})).latestMessageId;
+  const hostCursor = (await execute('first', 'participant_preflight', {})).latestMessageId;
   await execute('first', 'chat_send', { roomId, text: hostText });
   await observeUntil('second', snapshot => snapshot.messages.some(message => message.from === 'native-host' && message.text === hostText), 'host message delivery');
+  assert.equal((await execute('second', 'chat_verify_received', { roomId, from: 'native-host', text: hostText, afterMessageId: guestCursor })).status, 'received');
+  assert.equal((await call('chat_verify_received', { session: 'first', input: { roomId, from: 'native-host', text: hostText, afterMessageId: hostCursor } })).error.code, 'receiver-required');
   await execute('second', 'chat_send', { roomId, text: guestText });
   await observeUntil('first', snapshot => snapshot.messages.some(message => message.from === 'native-guest' && message.text === guestText), 'guest message delivery');
+  assert.equal((await execute('first', 'chat_verify_received', { roomId, from: 'native-guest', text: guestText, afterMessageId: hostCursor })).status, 'received');
   // Cross-direction delivery drains the previous encrypted control/ACK sequence.
   // Check both transcripts, so duplicated socket events cannot masquerade as success.
   for (const session of ['first', 'second']) {
@@ -267,6 +322,47 @@ test('native rooms preserve encrypted admission, exactly-once chat, principal is
   assert.equal((await call('session_observe', { session: 'second' })).ok, true);
   assert.equal((await request('/mcp', { method: 'DELETE', headers: sessionHeaders })).status, 200);
   assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: sessionHeaders })).status, 404);
+  assert.equal((await request('/preflight')).body.quota.activeSessions, 0);
+  for (const access of [first, second]) assert.equal((await request('/mcp/access', { method: 'DELETE', headers: mcpHeaders(access.access_token) })).status, 204);
+});
+
+test('shared capacity reports a bounded retry and preserves existing participants', { timeout: 50000 }, async () => {
+  const grants = [await selfService(), await selfService(), await selfService()];
+  const connections = [];
+  let id = 1;
+  const call = async (headers, name, args) => {
+    const response = await request('/mcp', { method: 'POST', headers, json: { jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } } });
+    assert.equal(response.status, 200);
+    return response.body.result.structuredContent;
+  };
+  const waitForAllocation = async () => {
+    const quota = (await request('/preflight')).body.quota;
+    if (quota.retryAfterSeconds > 0) await delay(quota.retryAfterSeconds * 1000 + 50);
+    assert.equal((await request('/preflight')).body.quota.canStartFullSession, true);
+  };
+  try {
+    for (let index = 0; index < grants.length; index++) {
+      if (index < 2) await waitForAllocation();
+      const initialized = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(grants[index].access_token) });
+      assert.equal(initialized.status, 200);
+      const headers = { ...mcpHeaders(grants[index].access_token), 'MCP-Session-Id': initialized.headers['mcp-session-id'], 'MCP-Protocol-Version': '2025-11-25' };
+      connections.push(headers);
+      const result = await call(headers, 'session_create', { session: 'capacity-check' });
+      if (index < 2) assert.equal(result.ok, true);
+      else {
+        assert.equal(result.error.code, 'SESSION_CAPACITY');
+        assert.equal(result.error.retryable, true);
+        assert(Number.isInteger(result.error.retryAfterSeconds) && result.error.retryAfterSeconds > 0 && result.error.retryAfterSeconds <= 30);
+        assert.equal((await call(headers, 'session_observe', { session: 'capacity-check' })).error.code, 'SESSION_NOT_FOUND');
+      }
+    }
+    assert.equal((await request('/preflight')).body.quota.activeSessions, 2);
+    for (const headers of connections.slice(0, 2)) assert.equal((await call(headers, 'session_observe', { session: 'capacity-check' })).ok, true);
+  } finally {
+    for (const headers of connections) await request('/mcp', { method: 'DELETE', headers });
+    for (const grant of grants) await request('/mcp/access', { method: 'DELETE', headers: mcpHeaders(grant.access_token) });
+  }
+  assert.equal((await request('/preflight')).body.quota.activeSessions, 0);
 });
 
 test('active requests cannot extend the absolute MCP session lifetime', { timeout: 50000 }, async () => {
@@ -281,6 +377,7 @@ test('active requests cannot extend the absolute MCP session lifetime', { timeou
     const ping = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 3, method: 'ping' }, headers });
     if (ping.status === 404) {
       assert(successfulPings >= 2, 'The session must actually remain usable before expiring.');
+      assert.deepEqual(ping.body.error.data, { code: 'MCP_SESSION_UNAVAILABLE', retryable: false, nextAction: 'initialize-new-connection', identityRestorable: false });
       return;
     }
     assert.equal(ping.status, 200);
@@ -290,7 +387,6 @@ test('active requests cannot extend the absolute MCP session lifetime', { timeou
 });
 
 test('real browser consent preserves Origin and completes the registered OAuth callback', { timeout: 30000 }, async () => {
-  const key = await issue('browser-consent');
   const browser = await chromium.launch();
   let callbackServer;
   try {
@@ -316,19 +412,54 @@ test('real browser consent preserves Origin and completes the registered OAuth c
     url.search = new URLSearchParams({ client_id: clientId, redirect_uri: callback, response_type: 'code', scope: 'mcp:rooms', resource: origin + '/mcp', code_challenge: challenge, code_challenge_method: 'S256', state: 'browser-regression' });
     const page = await browser.newPage({ ignoreHTTPSErrors: true });
     await page.goto(url.href);
-    await page.fill('#operator-key', key.key);
+    const unapproved = await Promise.all([
+      page.waitForResponse(response => response.url() === origin + '/authorize' && response.request().method() === 'POST'),
+      page.click('button[value="allow"]'),
+    ]);
+    assert.equal(unapproved[0].status(), 403, 'OAuth must not issue access without explicit managed-custody consent.');
+    assert.equal(code, undefined);
+    await page.goto(url.href);
+    const consent = await page.locator('input[name="consent"]').inputValue();
+    const cookie = (await page.context().cookies()).find(value => value.name === '__Host-pillowfort-consent');
+    assert(cookie);
+    const form = { consent, approve: 'yes', decision: 'allow' };
+    const cookieHeader = `${cookie.name}=${cookie.value}`;
+    assert.equal((await request('/authorize', { method: 'POST', form, headers: { Origin: 'https://untrusted.example', Cookie: cookieHeader } })).status, 403);
     await page.check('input[name="approve"]');
     await page.click('button[value="allow"]');
     await page.waitForURL(target => target.origin === callbackOrigin, { timeout: 5000 });
     assert(code);
+    assert.equal((await request('/authorize', { method: 'POST', form, headers: { Origin: origin, Cookie: cookieHeader } })).status, 403, 'Consumed consent must not be replayable.');
     const exchanged = await request('/oauth/token', { method: 'POST', form: { grant_type: 'authorization_code', client_id: clientId, redirect_uri: callback, code, code_verifier: verifier, resource: origin + '/mcp' } });
     assert.equal(exchanged.status, 200);
     const session = await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(exchanged.body.access_token) });
     assert.equal(session.status, 200);
-    assert.equal((await request('/admin/keys/' + key.id, { method: 'DELETE', headers: { Authorization: `Bearer ${admin}` } })).status, 204);
+    assert.equal((await request('/mcp/access', { method: 'DELETE', headers: mcpHeaders(exchanged.body.access_token) })).status, 204);
     assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: mcpHeaders(exchanged.body.access_token) })).status, 401);
+    const refreshed = await request('/oauth/token', { method: 'POST', form: { grant_type: 'refresh_token', client_id: clientId, refresh_token: exchanged.body.refresh_token, resource: origin + '/mcp' } });
+    assert([400, 401].includes(refreshed.status), 'Revoked OAuth access must not be refreshed.');
   } finally {
     await browser.close();
     if (callbackServer) await new Promise(resolve => { callbackServer.close(resolve); callbackServer.closeAllConnections(); });
+  }
+});
+
+test('self-service issuance stays bounded while existing grants remain usable', async () => {
+  const tokens = [];
+  const headers = { 'CF-Connecting-IP': '192.0.2.249' };
+  try {
+    for (let index = 0; index < 10; index++) {
+      const response = await request('/access', { method: 'POST', json: { acceptManagedCustody: true }, headers });
+      assert.equal(response.status, 201);
+      tokens.push(response.body.access_token);
+    }
+    const limited = await request('/access', { method: 'POST', json: { acceptManagedCustody: true }, headers });
+    assert.equal(limited.status, 429);
+    assert(Number(limited.headers['retry-after']) > 0);
+    const session = await request('/mcp', { method: 'POST', json: initialize, headers: { ...headers, ...mcpHeaders(tokens[0]) } });
+    assert.equal(session.status, 200, 'Issuance throttling must not revoke an existing credential.');
+    assert.equal((await request('/mcp', { method: 'DELETE', headers: { ...headers, ...mcpHeaders(tokens[0]), 'MCP-Session-Id': session.headers['mcp-session-id'] } })).status, 200);
+  } finally {
+    for (const token of tokens) await request('/mcp/access', { method: 'DELETE', headers: { ...headers, ...mcpHeaders(token) } });
   }
 });
