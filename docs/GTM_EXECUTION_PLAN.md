@@ -615,3 +615,68 @@ Historical snapshot: the manual-key gate described here is superseded by the sel
   by this marketing-only dependency repair. Final promotion still requires the
   matching source tag, Registry publication and deployed release identity.
 
+## Production 1.1.2 release verification — 2026-10-30
+
+- Published implementation commit `ade6c4d` and immutable source tag `v1.1.2`.
+  The [main release check](https://github.com/slee1996/pillowfort/actions/runs/41099401206)
+  passed. The [tag-triggered publisher](https://github.com/slee1996/pillowfort/actions/runs/41100788065)
+  completed successfully, including all four reusable checks and MCP publication.
+- The public npm `latest` tag resolves to `@ontologic/pillowfort-agent@1.1.2`.
+  Its archive and the public marketing download are byte-identical, SHA-256
+  `aeb1011c58c10168dbf8f5497d73cc75f8d1b3589991432fc05ece0fbd53cddb`.
+  The previously published 1.1.1 archive was not rewritten.
+- Verified the active, latest
+  [MCP Registry 1.1.2 record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/1.1.2)
+  advertises the matching npm version and production hosted endpoint.
+
+| Production deployment | Cloudflare version ID |
+| --- | --- |
+| App | `a09746a1-ac8c-42a3-9705-4418cbc67ec9` |
+| Hosted MCP | `28ec4505-6460-46a4-9f01-8bf02ef7e380` |
+| Marketing | `27aa561d-944d-4e59-9e43-778b8b18409c` |
+
+- A live parity script matched the release identity across the app, marketing,
+  hosted health and hosted preflight. Public full catalog and tagged GitHub
+  source matched exactly: 63 tools and tools SHA-256
+  `1fc675e0d8806e3ded1a652d26c6c56f5fe00ea1597eb7308291c0479f26ee5c`.
+  Focused discovery includes `participant_preflight` and `chat_verify_received`.
+  Both origins' `llms.txt` matched byte-for-byte; Markdown guides, server manifest
+  and immutable downloads returned the expected version and content types.
+  The temporary renderer fixture returned 404.
+- The published 1.1.2 SDK's production `autonomous` command passed all eight
+  stages: isolated identities, real MLS room, private invitation, exact
+  fingerprint admission, two-way encrypted receiver verification, room end and
+  complete browser cleanup.
+- A separate real hosted production smoke matched all 23 focused and 59 full
+  tool schemas/annotations, verified observational tools did not mutate state,
+  and retained participant identity across a 12,658 ms quiet interval.
+  Exact-fingerprint admission and receiver-local verification passed both ways.
+  After room end, both named participants and MCP connections closed; grant
+  revocation returned 204 and subsequent reuse returned 401. Closed-session
+  requests returned structured `MCP_SESSION_UNAVAILABLE` diagnostics with
+  `identityRestorable: false`. Public preflight then showed zero active sessions.
+- Self-service access requires neither an account nor a manually issued key.
+  Bearer/OAuth authentication, explicit managed-custody consent and bounded beta
+  quotas remain; hosted operators can access participant plaintext and in-memory
+  keys. Removing onboarding friction does not change that security boundary.
+- Fresh production agent-guide rendering passed at 1280 px and 390 px, with
+  current 1.1.2/self-service instructions, no horizontal overflow and no observed
+  browser errors. The human room/chat/drawing/game flows are recorded above.
+- Production telemetry remained enabled at 0.1 HTTP sampling with
+  `service.version=ade6c4d`. Grafana/Tempo showed fresh HTTP traces from app,
+  marketing and hosted MCP. Unsampled collector-lifetime counters were 12 rooms
+  created, 12 retired, 8 admissions and 56 accepted encrypted application events.
+  The two final encrypted probes account for two additional rooms/admissions;
+  these and the HTTP probes are synthetic verification, not organic adoption.
+  Native Grafana dashboard and its existing SSH forward were left running.
+- Normal verification passed 501 checks (484 root, 9 hosted, 8 marketing), plus
+  type/build/catalog/WASM guards and all four release dependency audits.
+  Court Jester's sixteen-scope results and exact command report above still
+  apply: two passes, ten inconclusive scopes and four inspected generated-fixture
+  failures, not a blanket pass. No independent cryptographic audit or
+  independently reasoning LLM interoperability test is claimed; no subagents
+  were used.
+- Safe machine-readable receipts are retained under
+  `/tmp/pillowfort-selfservice.3YCTfr/`: `release-parity-proof.json`,
+  `release-hosted-proof.json`, and `release-telemetry-proof.json`.
+
