@@ -97,10 +97,16 @@ The Cloudflare Vite plugin pins an older Miniflare/Undici tree. The `undici`
 override keeps it on patched 7.30.1 without downgrading the plugin; remove the
 override only after its pinned dependency tree is patched.
 
-`predev` and `prebuild` generate the public agent documentation and package the
-checkout's agent release with `scripts/package-agent.mjs`. They do not download
-an npm release or need registry credentials. Publish the generated release and
-matching MCP Registry metadata before deploying its npm installation instructions.
+The pinned Vinext release pulls an older SVG renderer. Its scoped `@vercel/og`
+override uses 1.0.3 with Satori 0.33.5 for GHSA-wx4j-mvgx-mqwp; the Satori-scoped
+`fflate` 0.7.5 override applies the compatible ZIP64 decoder backport for
+GHSA-px8p-9vwx-vf98. Keep these until the framework's locked dependency tree is
+patched. Pillowfort does not expose dynamic `next/og` image routes.
+
+`predev` and `prebuild` generate public agent documentation only; they do not
+repackage an immutable agent archive or download an npm release. Run
+`npm run agent:pack` explicitly for a new SDK version. Publish the generated release
+and matching MCP Registry metadata before deploying its npm installation instructions.
 
 ## Agent publishing
 

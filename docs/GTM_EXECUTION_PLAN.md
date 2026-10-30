@@ -588,3 +588,30 @@ Historical snapshot: the manual-key gate described here is superseded by the sel
   telemetry explicitly enabled, verify live release identity, then promote the
   npm dist-tag. Do not describe the candidate as shipped until those steps pass.
 
+## Marketing release audit repair — 2026-10-30
+
+- Owner-authorized source publication pushed `b1d4d59` to `main`. Its release
+  check exposed the real remaining npm audit failure: Satori SVG escaping
+  (GHSA-wx4j-mvgx-mqwp) through Vinext's OG dependency. Root, client and hosted
+  lockfile audits reported zero vulnerabilities.
+- Kept the reviewed framework/React versions. Scoped overrides select
+  `@vercel/og` 1.0.3 / Satori 0.33.5, plus the compatible `fflate` 0.7.5 security
+  backport for GHSA-px8p-9vwx-vf98. Marketing lint, typecheck, production build,
+  eight rendered-page checks and its full npm audit passed with zero findings.
+- The actual agent guide rendered under local workerd on desktop and a
+  390-pixel viewport, with matching document width and current 1.1.2/self-service
+  instructions. No production runtime shims were introduced.
+- A temporary dynamic OG route was removed, not shipped. Direct Node and local
+  workerd image probes exposed upstream HarfBuzz initialization incompatibilities.
+  Pillowfort has no dynamic ImageResponse call sites or advertised OG-generation
+  feature; those probes are not reported as passing functionality.
+- GitHub's 72 open alerts referenced older versions or removed packages, rather
+  than the current lock entries. Checked all reported package/manifests against
+  current root/client/video lock entries, including Remotion 4.0.496 (the four
+  critical alerts target versions below 4.0.410), fast-uri 3.1.9, source-map-js
+  1.2.2 and ws 8.21.0. No alerts were manually dismissed.
+- npm 1.1.2 remains published under `next`, verified byte-identical to the
+  immutable candidate archive. SDK bytes and the full-catalog digest are unchanged
+  by this marketing-only dependency repair. Final promotion still requires the
+  matching source tag, Registry publication and deployed release identity.
+

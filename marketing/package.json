@@ -42,7 +42,13 @@
     "wrangler": "4.153.0"
   },
   "overrides": {
-    "undici": "7.30.1"
+    "undici": "7.30.1",
+    "vinext": {
+      "@vercel/og": "1.0.3"
+    },
+    "satori": {
+      "fflate": "0.7.5"
+    }
   },
   "type": "module"
 }
