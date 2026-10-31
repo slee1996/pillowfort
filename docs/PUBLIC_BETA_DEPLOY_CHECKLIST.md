@@ -49,23 +49,25 @@ npx playwright install --with-deps chromium
 npm run check
 ```
 
-The release-check workflow runs the app gate and a separate marketing gate on
-pushes and pull requests, with read-only repository permissions and no deployment
-secrets. Both packages live in this repository. CI never deploys; optional
-long-form UI suites remain separate.
+The product release-check workflow runs app and hosted-MCP gates on pushes and
+pull requests, with read-only permissions and no deployment secrets. Website/CMS
+checks live in the separate private `slee1996/pillowfort-marketing` repository.
+CI never deploys; optional long-form UI suites remain separate.
 
-CI also audits all four committed npm lockfiles and rejects moderate-or-higher advisories.
+Product CI audits the root, client and hosted-MCP lockfiles and rejects
+moderate-or-higher advisories. The marketing repository owns its website/video audits.
 Before promotion, verify the actual Node/Bun binaries reject the compromised
 eMudhra chains; an OS trust-store update alone may not update bundled roots.
 See [security maintenance](../SECURITY.md#security-maintenance) for the retained
 Rust advisory and its fixed-ciphersuite boundary.
 
-For agent 1.1.1, run `npm run agent:pack`, inspect the generated tarball and
-checksum, publish `marketing/public/downloads/pillowfort-agent-1.1.1.tgz` to npm,
-and register the matching `server.json` release before deploying updated public
-installation instructions. Marketing builds package this checkout, never mirror
-an older published artifact over the patched release. Publication and deployment
-are separate authorized operations, not effects of the local release gate.
+Run `npm run agent:pack` and inspect `dist/agent/pillowfort-agent-VERSION.tgz`
+and its checksum. Packaging remains immutable and product-owned; it does not
+write into a marketing checkout. Publish the matching npm and `server.json`
+release first, then update the marketing repository with
+`npm run product:sync -- PRODUCT_COMMIT`, review its pinned public assets, and
+deploy that repository independently. Publication and deployment are separate
+authorized operations, not effects of the local release gate.
 
 Confirm Cloudflare auth before deploying:
 

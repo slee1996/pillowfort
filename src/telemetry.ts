@@ -14,7 +14,7 @@ export interface TelemetryEnv {
   OTEL_DEPLOYMENT_ENVIRONMENT?: string;
 }
 
-type Service = "pillowfort.app" | "pillowfort.marketing" | "pillowfort.hosted-mcp";
+type Service = "pillowfort.app" | "pillowfort.hosted-mcp";
 type Operation = "page" | "commerce" | "mcp" | "auth" | "health";
 type Lifetime = { waitUntil(promise: Promise<unknown>): void };
 
@@ -31,23 +31,6 @@ function operationFor(service: Service, path: string): Operation | undefined {
         case FORT_PASS_STATUS_PATH:
         case STRIPE_WEBHOOK_PATH: return "commerce";
         default: return undefined; // Includes /ws, every room and all internal DO routes.
-      }
-    case "pillowfort.marketing":
-      switch (path) {
-        case "/":
-        case "/technology":
-        case "/agents":
-        case "/articles":
-        case "/agents/index.md":
-        case "/agents/workflows.md":
-        case "/agents/security.md":
-        case "/agents/tools.md": return "page";
-        case "/admin":
-        case "/api/admin/login":
-        case "/api/admin/logout":
-        case "/api/cms":
-        case "/api/agent": return "auth";
-        default: return /^\/articles\/[^/]{1,240}$/.test(path) ? "page" : undefined;
       }
     case "pillowfort.hosted-mcp":
       switch (path) {

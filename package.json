@@ -18,15 +18,13 @@
     "test:security": "node scripts/run-security-tests.mjs",
     "test:design-snapshots": "bun test test/design-snapshots.test.ts",
     "test:ui": "bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts && bun test --timeout 60000 --max-concurrency 1 test/quad-view.test.ts && bun test --timeout 60000 --max-concurrency 1 test/demo-reel.test.ts && bun test --timeout 60000 --max-concurrency 1 test/full-tour.test.ts && bun test --timeout 60000 --max-concurrency 1 test/game-night.test.ts",
-    "metrics:report": "node scripts/analytics_report.mjs",
     "agent": "node scripts/agent.mjs",
     "agent:mcp": "node scripts/agent.mjs mcp",
     "verify:openmls": "node scripts/verify-openmls-artifacts.mjs",
     "agent:catalog": "node scripts/update-agent-catalog.mjs",
     "agent:catalog:check": "bun scripts/check-agent-catalog.ts",
     "agent:docs": "node scripts/build-agent-docs.mjs",
-    "agent:pack": "node scripts/package-agent.mjs",
-    "pilot:demos": "node scripts/capture-pilot-demos.mjs"
+    "agent:pack": "node scripts/package-agent.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261023.1",

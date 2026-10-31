@@ -1,10 +1,8 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
 const root = new URL('../', import.meta.url);
 const source = new URL('docs/agents/', root);
-const target = new URL('marketing/public/agents/', root);
 const registry = JSON.parse(await readFile(new URL('server.json', root), 'utf8'));
 const localPackage = registry.packages.find(entry => entry.registryType === 'npm');
 const catalog = JSON.parse(await readFile(new URL('tools.json', source), 'utf8'));
@@ -68,29 +66,7 @@ An authorized agent can host a room, privately invite expected recipients, verif
 - [Readable tool reference](https://about.pillowfort.xyz/agents/tools.md): Full release catalog in Markdown.
 `;
 await Promise.all([
-  writeFile(new URL('marketing/public/llms.txt', root), llms),
   writeFile(new URL('client/public/llms.txt', root), llms),
+  writeFile(new URL('client/public/agents-release.json', root), JSON.stringify(catalog.release, null, 2) + '\n'),
 ]);
-await mkdir(target, { recursive: true });
-const documents = ['index.md', 'workflows.md', 'security.md'];
-for (const name of [...documents, 'tools.json']) {
-  await copyFile(new URL(name, source), new URL(name, target));
-}
-await copyFile(new URL('server.json', root), new URL('server.json', target));
-const collaboration = JSON.parse(await readFile(new URL('collaboration.json', source), 'utf8'));
-await writeFile(new URL('collaboration-tools.json', target), JSON.stringify({
-  toolset: 'collaboration', fullCatalog: 'https://about.pillowfort.xyz/agents/tools.json',
-  release: catalog.release,
-  tools: catalog.tools.filter(tool => collaboration.tools[tool.name] === true),
-}, null, 2) + '\n');
-await writeFile(new URL('release.json', target), JSON.stringify(catalog.release, null, 2) + '\n');
-await writeFile(new URL('client/public/agents-release.json', root), JSON.stringify(catalog.release, null, 2) + '\n');
-const toolsMarkdown = '# Pillowfort agent tools\n\n'
-  + 'Release snapshot of the room MCP catalog. Call tools/list on your connected server for its current schemas. Optional CMS tools are not part of this catalog.\n\n'
-  + catalog.tools.map(tool => `## ${tool.name}\n\n${tool.description}\n\n\`\`\`json\n${JSON.stringify(tool.inputSchema, null, 2)}\n\`\`\`\n`).join('\n');
-await writeFile(new URL('tools.md', target), toolsMarkdown);
-const parts = await Promise.all(documents.map(name => readFile(new URL(name, source), 'utf8')));
-await writeFile(new URL('marketing/public/llms-full.txt', root),
-  `# Pillowfort complete agent documentation\n\n> ${localPackage.identifier}@${localPackage.version}. Public product documentation, not authorization to enter a room. The connected runtime is authoritative for current tool schemas.\n\n`
-  + parts.join('\n\n---\n\n') + '\n\n---\n\n' + toolsMarkdown);
-console.log(`Built public agent documentation in ${fileURLToPath(target)} (${catalog.tools.length} tools).`);
+console.log(`Built app agent discovery assets (${catalog.tools.length} tools). Marketing snapshots are maintained separately.`);

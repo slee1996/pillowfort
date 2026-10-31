@@ -53,7 +53,7 @@ async function packageAgent() {
     throw new Error('The package files allowlist must match the explicit runtime and agent documentation inputs.');
   }
   const stage = await mkdtemp(path.join(tmpdir(), 'pillowfort-agent-package-'));
-  const downloads = path.join(root, 'marketing/public/downloads');
+  const downloads = path.join(root, 'dist/agent');
   const filename = `pillowfort-agent-${manifest.version}.tgz`;
   let stagedDownload;
   try {

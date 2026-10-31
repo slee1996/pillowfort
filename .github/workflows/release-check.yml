@@ -41,34 +41,6 @@ jobs:
       - name: Run release gate
         run: npm run check
 
-  marketing:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: marketing
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.23.4'
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            marketing/package-lock.json
-
-      - name: Install shared operational telemetry dependencies
-        run: npm ci
-        working-directory: .
-
-      - name: Install locked marketing dependencies
-        run: npm ci
-
-      - name: Run marketing release gate
-        run: npm run check
-
   hosted-mcp:
     runs-on: ubuntu-latest
     steps:
@@ -109,4 +81,3 @@ jobs:
           npm audit --package-lock-only --audit-level=moderate
           npm --prefix client audit --package-lock-only --audit-level=moderate
           npm --prefix hosted-mcp audit --package-lock-only --audit-level=moderate
-          npm --prefix marketing audit --package-lock-only --audit-level=moderate

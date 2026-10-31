@@ -139,20 +139,20 @@ If you change room rules, websocket behavior, limits, or game logic, you usually
 
 For a deeper system-level walkthrough, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-For a product, business, and project-lead analysis, see
-[docs/PROJECT_LEAD_BRIEF.md](docs/PROJECT_LEAD_BRIEF.md).
+Product/business planning and GTM operations are maintained in the
+[private marketing repository](https://github.com/slee1996/pillowfort-marketing).
 
 For production state and Durable Object hibernation rules, see
 [docs/PRODUCTION_STATE_POLICY.md](docs/PRODUCTION_STATE_POLICY.md).
 
-For the beta measurement contract and privacy limits, see
-[docs/BETA_ANALYTICS.md](docs/BETA_ANALYTICS.md).
+For the beta measurement/cohort plan, see the marketing repository's
+[measurement contract](https://github.com/slee1996/pillowfort-marketing/blob/main/docs/BETA_ANALYTICS.md).
 
 For beta release steps, see
 [docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md](docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md).
 
 For the first revenue test, see
-[docs/FIRST_PAID_SKU.md](docs/FIRST_PAID_SKU.md).
+[the marketing offer plan](https://github.com/slee1996/pillowfort-marketing/blob/main/docs/FIRST_PAID_SKU.md).
 
 For paid beta support and refunds, see
 [docs/FORT_PASS_SUPPORT_RUNBOOK.md](docs/FORT_PASS_SUPPORT_RUNBOOK.md).
@@ -164,7 +164,7 @@ For production hardening and operational log buckets, see
 [docs/PRODUCTION_MONITORING.md](docs/PRODUCTION_MONITORING.md).
 
 For weekly beta funnel review, see
-[docs/METRICS_REVIEW.md](docs/METRICS_REVIEW.md).
+[the marketing review plan](https://github.com/slee1996/pillowfort-marketing/blob/main/docs/METRICS_REVIEW.md).
 
 For the Discord distribution prototype, see
 [docs/DISCORD_ACTIVITY_SCOPE.md](docs/DISCORD_ACTIVITY_SCOPE.md).
@@ -234,14 +234,11 @@ npm install
 cd ..
 ```
 
-`marketing/` is part of this repository with its own package install:
-
-```bash
-npm --prefix marketing ci
-```
-
-See [`marketing/README.md`](marketing/README.md) for its editor, database, and
-build setup. The main app does not require the marketing package to build.
+The website/CMS, GTM plans, pilot materials, branding references, and video tooling
+live in [`slee1996/pillowfort-marketing`](https://github.com/slee1996/pillowfort-marketing)
+(private), not a directory or submodule here. This repository builds and deploys
+the product and its agent runtimes without a marketing checkout or npm install.
+Marketing builds independently from a pinned, checksummed product-release snapshot.
 
 ## Running Locally
 
@@ -691,12 +688,10 @@ If you are trying to understand the app quickly, start here:
 - [`client/src/screens/ChatScreen.tsx`](client/src/screens/ChatScreen.tsx) for the main UI surface
 - [`test/integration.test.ts`](test/integration.test.ts) for expected room behavior
 - [`test/worker.test.ts`](test/worker.test.ts) for Worker routing and Durable Object alarm behavior
-- [`docs/PROJECT_LEAD_BRIEF.md`](docs/PROJECT_LEAD_BRIEF.md) for product strategy and monetization direction
+- [Private marketing repository](https://github.com/slee1996/pillowfort-marketing) for product planning, GTM and content tooling
 - [`docs/PRODUCTION_STATE_POLICY.md`](docs/PRODUCTION_STATE_POLICY.md) for Durable Object state rules
-- [`docs/BETA_ANALYTICS.md`](docs/BETA_ANALYTICS.md) for privacy-safe beta analytics
 - [`docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md`](docs/PUBLIC_BETA_DEPLOY_CHECKLIST.md) for public beta release steps
 - [`docs/PRODUCTION_MONITORING.md`](docs/PRODUCTION_MONITORING.md) for edge hardening and operational buckets
-- [`docs/FIRST_PAID_SKU.md`](docs/FIRST_PAID_SKU.md) for the first host-only paid offer
 - [`docs/DISCORD_ACTIVITY_SCOPE.md`](docs/DISCORD_ACTIVITY_SCOPE.md) for the Discord Activity prototype scope
 
 ## Status

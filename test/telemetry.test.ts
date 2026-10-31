@@ -164,8 +164,7 @@ describe("operational OTLP privacy boundary", () => {
       ["pillowfort.app", "/my-private-custom-room"], ["pillowfort.app", "/room/private"],
       ["pillowfort.app", "/__pillowfort/room-status"], ["pillowfort.app", "/analytics"],
       ["pillowfort.app", "/assets/main.js"], ["pillowfort.app", "/api/unknown"],
-      ["pillowfort.marketing", "/admin/private"], ["pillowfort.marketing", "/articles/private/extra"],
-      ["pillowfort.marketing", "/api/unknown"], ["pillowfort.hosted-mcp", "/mcp/private"],
+      ["pillowfort.hosted-mcp", "/mcp/private"],
       ["pillowfort.hosted-mcp", "/admin/keys/not-a-uuid"], ["pillowfort.hosted-mcp", "/oauth/private"],
     ];
     for (const [service, path] of paths) {
@@ -176,12 +175,10 @@ describe("operational OTLP privacy boundary", () => {
     expect(received).toEqual([]);
   });
 
-  it("classifies public, CMS, OAuth, MCP, and health traffic without exporting slugs or IDs", async () => {
+  it("classifies public, commerce, OAuth, MCP, and health traffic without exporting slugs or IDs", async () => {
     const routes: [Parameters<typeof withOperationalTelemetry>[0], string, string][] = [
       ["pillowfort.app", "/", "page"],
       ["pillowfort.app", "/api/stripe/webhook", "commerce"],
-      ["pillowfort.marketing", `/articles/${PRIVATE}`, "page"],
-      ["pillowfort.marketing", "/api/cms", "auth"],
       ["pillowfort.hosted-mcp", "/mcp", "mcp"],
       ["pillowfort.hosted-mcp", "/oauth/token", "auth"],
       ["pillowfort.hosted-mcp", "/admin/keys/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "auth"],
