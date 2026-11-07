@@ -40,9 +40,9 @@ async function packageAgent() {
   if (manifest.scripts || manifest.devDependencies || manifest.optionalDependencies || manifest.bundledDependencies || manifest.bundleDependencies) {
     throw new Error('The agent package must not contain lifecycle scripts or additional dependency groups.');
   }
-  const dependencies = ['@modelcontextprotocol/sdk', 'playwright'];
+  const dependencies = ['@modelcontextprotocol/server', 'playwright'];
   if (Object.keys(manifest.dependencies ?? {}).sort().join('\n') !== dependencies.sort().join('\n')) {
-    throw new Error('The agent package must contain only the MCP SDK and Playwright runtime dependencies.');
+    throw new Error('The agent package must contain only the MCP server SDK and Playwright runtime dependencies.');
   }
   for (const name of dependencies) {
     const version = manifest.dependencies[name];

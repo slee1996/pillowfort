@@ -63,24 +63,27 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The current release is `@ontologic/pillowfort-agent@1.1.6` and MCP Registry
-`io.github.slee1996/pillowfort` version 1.1.6. It pins Playwright 1.65.0 and
+The current release is `@ontologic/pillowfort-agent@2.0.0` and MCP Registry
+`io.github.slee1996/pillowfort` version 2.0.0. It pins Playwright 1.65.0 and
 Chromium 158.0.8127.18. After upgrading the package, run `install-browser` again;
 upgrading JavaScript dependencies alone does not replace the browser binary.
 
-Hosted MCP permits anonymous `initialize`, `notifications/initialized`, and
-`tools/list` requests. Discovery is stateless, uses the same collaboration/full
-catalogs as authenticated sessions, and allocates no participant. Tool calls
-still require self-service Bearer access or OAuth; authorize and initialize a new
-authenticated connection before executing tools. Origin checks and rate limits
-also apply to public discovery.
+Local and hosted MCP require protocol **2026-07-28**. Hosted MCP permits anonymous
+`server/discover` and `tools/list`; discovery is stateless, exposes the full
+hosted catalog, and allocates no participant. Tool calls require self-service
+Bearer access or OAuth. Clients must support modern discovery and
+`subscriptions/listen`; the SDK 2 client needs explicit version negotiation.
+Legacy initialization, standalone GET/SSE, and MCP transport DELETE are rejected.
+Origin checks and rate limits also apply to public discovery.
 
 Chat supports exact roster `@mentions` (including `@"names with spaces"`),
 highlighting, unread attention, and opt-in generic browser alerts. Local/hosted
 MCP exposes `pillowfort://sessions/{session}/mentions` through resource reads and
-MCP 2025 resource subscriptions. Notifications reach connected clients; waking an
-agent is the client's responsibility. Native WebMCP retains observation/wait
-tools. No offline inbox or durable mention queue is created.
+2026 `subscriptions/listen`. Hosted notifications use an authenticated POST/SSE
+stream; stdio uses its open connection. Updates contain the resource URI and
+standard protocol metadata, not message text. Waking an agent remains the
+client's responsibility. Native WebMCP retains observation/wait tools.
+No offline inbox or durable mention queue is created.
 
 `server.json` includes the registry title, website, and public SVG icon.
 To release these changes, deploy the hosted Worker with
@@ -323,13 +326,15 @@ node scripts/agent.mjs discover --url http://localhost:3000
 node scripts/agent.mjs jsonl --url http://localhost:3000
 ```
 
-JSON-lines mode keeps named sessions alive across requests. Each line returns an
-`{id, ok, data}` or `{id, ok:false, error:{code,message,retryable}}` result:
+JSON-lines mode keeps server-minted participant handles alive across requests.
+Each line returns an `{id, ok, data}` or
+`{id, ok:false, error:{code,message,retryable}}` result. Save `data.session` from
+the first result and substitute it for `ALICE_HANDLE` in later requests:
 
 ```json
-{"id":1,"tool":"session_create","arguments":{"session":"alice"}}
-{"id":2,"tool":"room_setup","arguments":{"session":"alice","input":{"displayName":"Alice","confirm":true}}}
-{"id":3,"tool":"session_observe","arguments":{"session":"alice"}}
+{"id":1,"tool":"session_create","arguments":{}}
+{"id":2,"tool":"room_setup","arguments":{"session":"ALICE_HANDLE","input":{"displayName":"Alice","confirm":true}}}
+{"id":3,"tool":"session_observe","arguments":{"session":"ALICE_HANDLE"}}
 ```
 
 Room creation returns the invitation credentials explicitly. Treat those results

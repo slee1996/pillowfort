@@ -5,12 +5,11 @@ import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import type { Tool } from '@modelcontextprotocol/client';
 import { PillowfortHostedAgent } from '../src/participant/hostedAgent';
-import { createAgentMcpServer } from './agent-mcp.mjs';
+import { createAgentMcpHandler } from './agent-mcp.mjs';
 import { AgentError, errorResult } from './agent-common.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -31,12 +30,15 @@ let relay: ChildProcess | undefined;
 const nativeAgent = new PillowfortHostedAgent({ baseURL: 'http://127.0.0.1', createWebSocket: url => new WebSocket(url) });
 
 async function checkRuntime(runtime: 'browser' | 'hosted', app?: string) {
-  const server = runtime === 'hosted' ? createAgentMcpServer({ agent: nativeAgent, includeCMS: false }) : undefined;
-  const client = new Client({ name: 'pillowfort-release-gate', version: manifest.version });
+  const handler = runtime === 'hosted' ? createAgentMcpHandler({ agent: nativeAgent, includeCMS: false }) : undefined;
+  const client = new Client({ name: 'pillowfort-release-gate', version: manifest.version }, {
+    versionNegotiation: { mode: { pin: '2026-07-28' } },
+  });
   try {
-    if (server) {
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    if (handler) {
+      await client.connect(new StreamableHTTPClientTransport(new URL('https://pillowfort-catalog.invalid/mcp'), {
+        fetch: (input, init) => handler.fetch(new Request(input, init)),
+      }));
     } else {
       if (!app) throw new Error('The browser catalog check requires its local app URL.');
       await client.connect(new StdioClientTransport({
@@ -57,28 +59,29 @@ async function checkRuntime(runtime: 'browser' | 'hosted', app?: string) {
     }
     // Exercise observational tools through a real MCP client and real participant.
     // Stateful mutations are covered by the existing encrypted integration suites.
-    const created = await client.callTool({ name: 'session_create', arguments: { session: 'catalog-check' } });
-    if (created.isError) throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: participant creation failed.`);
+    const created = await client.callTool({ name: 'session_create', arguments: {} });
+    const session = (created.structuredContent as { data?: { session?: string } } | undefined)?.data?.session;
+    if (created.isError || typeof session !== 'string') throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: participant creation failed.`);
     const observe = async () => {
-      const result = await client.callTool({ name: 'session_observe', arguments: { session: 'catalog-check' } });
+      const result = await client.callTool({ name: 'session_observe', arguments: { session } });
       const content = result.structuredContent as { ok?: boolean; data?: { revision: number; operations: unknown } } | undefined;
       if (result.isError || content?.ok !== true || !content.data) throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: participant observation failed.`);
       return content.data;
     };
     const before = await observe();
     for (const name of ['participant_preflight', 'chat_history_export', 'drawing_history_export', 'event_history_export']) {
-      const result = await client.callTool({ name, arguments: { session: 'catalog-check', input: {} } });
-      if (result.isError || result.structuredContent?.ok !== true) throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: ${name} did not execute.`);
+      const result = await client.callTool({ name, arguments: { session, input: {} } });
+      if (result.isError || (result.structuredContent as { ok?: boolean } | undefined)?.ok !== true) throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: ${name} did not execute.`);
       if (expected.get(name)?.annotations?.readOnlyHint !== true) throw new AgentError('CATALOG_MISMATCH', `${runtime}: ${name} lost read-only semantics.`);
     }
     const after = await observe();
     if (after.revision !== before.revision || !isDeepStrictEqual(after.operations, before.operations)) throw new AgentError('READ_ONLY_MUTATION', `${runtime}: observational tools changed participant state.`);
-    const closed = await client.callTool({ name: 'session_close', arguments: { session: 'catalog-check', confirm: true } });
+    const closed = await client.callTool({ name: 'session_close', arguments: { session, confirm: true } });
     if (closed.isError) throw new AgentError('CATALOG_EXECUTION_FAILED', `${runtime}: participant closure failed.`);
     return tools.length;
   } finally {
     await client.close();
-    await server?.close();
+    await handler?.close();
   }
 }
 

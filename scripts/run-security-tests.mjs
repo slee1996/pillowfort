@@ -18,6 +18,7 @@ const groups = [
     "test/participant-mentions.test.ts",
     "test/browser-mentions.test.ts",
     "test/mcp-mentions.test.ts",
+    "test/mcp-2026.test.ts",
     "test/protocol-v4.test.ts",
     "test/application-events-v4.test.ts",
     "test/secure-game-reducer.test.ts",

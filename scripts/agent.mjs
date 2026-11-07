@@ -13,7 +13,7 @@ const HELP = `Pillowfort agent CLI — real ephemeral encrypted browser sessions
 
 This local CLI requires Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, and Chromium. Hosted MCP and native WebMCP are separate connection choices: https://about.pillowfort.xyz/agents
 Version-pinned npm package:
-  npm exec --yes --package=@ontologic/pillowfort-agent@1.1.6 -- pillowfort-agent --help
+  npm exec --yes --package=@ontologic/pillowfort-agent@2.0.0 -- pillowfort-agent --help
 
 Commands with the installed executable:
   pillowfort-agent install-browser
@@ -47,15 +47,16 @@ Options:
                             SENSITIVE: protect this file. No state is ever exported.
   --help, -h                Print this help to stderr.
 
-JSON-lines mode accepts one request per line, returns one JSON result per line:
+JSON-lines mode accepts one request per line, returns one JSON result per line.
+session_create takes {} and returns a server-minted UUID in data.session.
+Replace SESSION_HANDLE below with that returned value before sending later lines:
   {"id":1,"tool":"discover","arguments":{}}
-  {"id":2,"tool":"session_create","arguments":{"session":"alice"}}
-  {"id":3,"tool":"session_create","arguments":{"session":"bob"}}
-  {"id":4,"tool":"session_observe","arguments":{"session":"alice"}}
-  {"id":5,"tool":"session_wait","arguments":{"session":"alice","afterRevision":0,"timeoutMs":1000}}
-  {"id":6,"tool":"session_close","arguments":{"session":"bob","confirm":true}}
+  {"id":2,"tool":"session_create","arguments":{}}
+  {"id":3,"tool":"session_observe","arguments":{"session":"SESSION_HANDLE"}}
+  {"id":4,"tool":"session_wait","arguments":{"session":"SESSION_HANDLE","afterRevision":0,"timeoutMs":1000}}
+  {"id":5,"tool":"session_close","arguments":{"session":"SESSION_HANDLE","confirm":true}}
 
-Invoke discovered room tools with {"session":"alice","input":{...}} arguments.
+Invoke discovered room tools with {"session":"SESSION_HANDLE","input":{...}}.
 Invoke discovered cms_* tools with their advertised arguments directly.
 Tool names and action schemas come from the running app, never screen clicking.
 Actions are processed in input order; session_wait permits subsequent actions.
@@ -76,7 +77,9 @@ MCP client configuration after installing the tarball in a local directory:
   {"mcpServers":{"pillowfort":{"command":"node","args":[
     "/absolute/install/node_modules/@ontologic/pillowfort-agent/scripts/agent.mjs",
     "mcp","--url","https://pillowfort.xyz"]}}}
-The source checkout's absolute scripts/agent.mjs path also works. MCP uses stdio;
+The source checkout's absolute scripts/agent.mjs path also works. MCP uses the
+2026-07-28 protocol over stdio: server/discover and subscriptions/listen, without
+initialize or protocol session IDs. A 2026-capable MCP client is required.
 stdout contains only protocol messages. Do not use non-silent npm run wrappers.
 `;
 

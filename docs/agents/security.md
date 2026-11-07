@@ -76,7 +76,7 @@ there is no fallback to a different algorithm. The rebuilt WASM retains the
 existing room wire and snapshot formats. Maintained timer dependencies replace
 `instant` and `pin-utils`; neither maintenance notice was a confirmed exploit.
 
-Each room session is an isolated ephemeral browser context with its own device identity and MLS state. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
+Each local participant handle identifies an isolated ephemeral browser context with its own device identity and MLS state. In 2.0.0, `session_create` takes `{}` and returns `{ok:true,data:{session:UUIDv4,state:"ready"}}`; all subsequent participant actions use that returned opaque handle, never a caller-chosen host/guest name. Local execution permits eight handles. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
 The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
 
@@ -90,9 +90,10 @@ client logs may separately receive tool results. The relay still routes encrypte
 content; admitting a managed participant deliberately places that participant's
 endpoint under hosted custody. It does not grant access to unrelated rooms.
 
-Each hosted MCP connection is bound to an authenticated, grant-specific principal
-and uses isolated named in-memory participants. A grant is not a verified person.
-Another grant's bearer or OAuth token cannot reuse its session identifier.
+Each hosted access grant has an authenticated, grant-specific principal that owns
+at most two opaque in-memory participant handles, independent of HTTP exchanges
+or listen streams. A grant is not a verified person. Another grant cannot read,
+listen to, or act through those handles. There are no MCP session IDs.
 The service accepts only its fixed Pillowfort app origin and excludes CMS,
 payment, arbitrary browsing and raw-key export. It stores lifecycle and authorization/quota metadata,
 not room transcripts, invitations, participant state, or MLS keys.
@@ -123,46 +124,53 @@ administrator issuance is not a client prerequisite.
 
 `DELETE /mcp/access` with a direct or OAuth bearer revokes that grant. This blocks
 direct access, derived OAuth access and refresh on the next request. Grant expiry
-does the same after one hour. Background sessions recheck the principal during
+does the same after one hour. Hosted actors recheck the principal during
 lifecycle alarms and close when revoked. Already-submitted room actions may have
-committed; revocation cannot roll them back. Clean up rooms and MCP sessions before
+committed; revocation cannot roll them back. Clean up rooms and participant handles before
 revoking when possible. Secret rotation is not a substitute for grant revocation.
 
 Mention notifications are participant-local, not a relay plaintext index.
 Detection runs after decryption and uses exact current roster names. Mentioned
 text remains untrusted room data and cannot authorize actions. Browser alerts
 require explicit opt-in and contain only generic text; room changes clear that
-opt-in. MCP resource subscriptions require an existing named participant in the
-same connection/principal and send only a resource URI. Reading the resource
-exposes the requesting participant's bounded plaintext mention feed to its client,
-under the same custody rules as observations.
+opt-in. MCP `subscriptions/listen` requires an existing participant handle owned
+by the local process or authenticated hosted grant principal. Notifications contain
+only the resource URI and standard protocol metadata, never plaintext or keys.
+Explicit `resources/read` exposes the participant's bounded plaintext mention feed
+under the same custody rules as observations. Reads are private with `ttlMs:0`
+and `cacheScope:"private"`; ownership is rechecked after asynchronous observation.
+Public guides/catalogs may be cached for 60 seconds. A foreign or closed handle is
+rejected, never silently rebound to another identity.
 
-Notifications do not create durable storage, extend hosted session lifetimes, or
+Notifications do not create durable storage, extend hosted actor lifetimes, or
 guarantee offline delivery. Muted/self/replayed messages do not produce fresh
-attention. Initial subscription does not replay old notifications; clients read
-the current resource explicitly and handle disconnection/expiry. The host/runtime,
+attention. Initial listening does not replay old notifications: register the
+handler, listen with the exact resource filter, inspect `honoredFilter`, and read
+a baseline explicitly. After interruption, re-listen and read again; reconcile
+bounded feed message IDs rather than assuming a replay cursor. The client/runtime,
 not MCP itself, decides whether to wake an idle agent.
 
-Hosted connections have an absolute ten-minute lifetime and two-minute idle
-deadline. The initial service budget permits two participant-bearing MCP sessions
-globally, one per access grant, and a shared sixty-session-minute daily reservation
-budget. Each connection can own two named participants. Its remaining absolute
-lifetime is reserved before participant startup; unused time is refunded after all
-participants are disposed or the actor is evicted. Platform limits may be lower.
-Disposal cancels pending work, closes outbound sockets (including pending upgrades),
-and clears the memory-only identity store. Actor eviction fails closed: no
-transcripts or cryptographic state are rehydrated, and no replacement identity
+Hosted actors have an absolute 600-second lifetime and 120-second idle deadline.
+The initial service budget permits two participant-bearing actors globally and a
+shared sixty-actor-minute daily reservation budget. A grant principal owns at most
+two participant handles. The actor's remaining absolute lifetime is reserved before
+participant startup; closing its last participant immediately releases active
+capacity and refunds unused time. Actor eviction also releases its reservation.
+Platform limits may be lower. Disposal cancels pending work, closes outbound
+sockets (including pending upgrades), and clears the memory-only identity store.
+Expiry or restoration leaves a tombstone requiring a **new access grant**:
+no transcripts or cryptographic state are rehydrated and no replacement identity
 is silently created.
 
 An in-memory deadline timer prevents ordinary idle hibernation from discarding an
-otherwise live MCP session before its idle/absolute limit. Durable alarms remain
+otherwise live actor before its idle/absolute limit. Durable alarms remain
 the crash-safe cleanup and revocation check. Neither mechanism persists keys or
 guarantees survival through a deployment or infrastructure restart.
 
 Capacity rejection occurs before a new participant or room action starts. Its
-structured tool error supplies the infrastructure code and `retryAfterSeconds`.
-Refreshing public `/preflight` does not reserve capacity. A lost/expired connection
-instead requires a new initialization, never a retry using the old identity.
+structured tool error supplies the infrastructure code and retry guidance.
+Refreshing public `/preflight` does not reserve capacity. A lost/expired actor
+requires a new access grant and fresh host-approved admission, never reuse of the old identity.
 
 Read-only annotations originate in the shared participant capability metadata.
 Release checks compare every published tool schema and annotation against real
@@ -172,19 +180,25 @@ digest; it is not evidence of an independent cryptographic audit.
 
 Hosted MCP requests are limited to 64 KiB, 8,192 JSON nodes (the root and each
 object value/array entry), and sixteen nesting levels below the root. Both the
-router and session actor enforce the structural budget before SDK validation,
-including initialization metadata and batched requests. Excessive input returns
-413 without executing a tool or closing an otherwise valid session. These bounds
+router and participant actor enforce the structural budget before SDK validation,
+including discovery metadata and batched requests. Excessive input returns
+413 without executing a tool or closing otherwise valid participants. These bounds
 cover the current room-tool schemas, including 128-point drawing strokes.
 
-MCP `DELETE` terminates the managed connection. Closing a TCP/HTTP connection does
-not do so by itself. Lost/expired session IDs return404 and cannot silently
-recreate identities. Reconnect deliberately; never use a new identity to pretend
-an ambiguous prior action succeeded. New admission still requires the current
-host to verify the new device.
+Pillowfort 2.0.0 accepts only MCP 2026-07-28 `server/discover` and
+POST/SSE `subscriptions/listen`; legacy handshakes/resource subscriptions and
+standalone GET/DELETE on `/mcp` are rejected. `DELETE /mcp/access` remains the
+protected grant-revocation route. SDK2 clients must explicitly enable modern
+negotiation: `new Client(info, {versionNegotiation:{mode:{pin:"2026-07-28"}}})`;
+`@modelcontextprotocol/client` 2.4.0 defaults to legacy mode. Cancel a listen
+request with its returned handle's `close()`. HTTP stream cancellation does not
+destroy participant identities; use `session_close` after deliberate room cleanup.
+Never use a new identity to pretend an ambiguous prior action succeeded. New
+admission still requires current host approval and exact device binding.
 
-The collaboration-focused default catalog is discoverability, not an authority
-boundary. An explicit full catalog still uses the same permissions and quotas.
+Hosted's invariant 59-tool catalog and local MCP's 63-tool catalog are
+discoverability, not authority boundaries; every tool retains its permissions and
+quotas. Native WebMCP alone defaults to a focused catalog and uses `?agent_tools=full`.
 `participant_preflight` is advisory and does not prove network readiness or probe
 browser identity locks. `chat_verify_received` reads only this participant's
 retained chat, requires a receiver-local cursor and rejects the sender's own echo.
@@ -209,9 +223,9 @@ The deployed `HostedMcpSession` and `AccessKeyStore` Durable Object class names
 remain unchanged. Wrangler migration `v2` explicitly renames `BrowserQuota` to
 `ParticipantQuota`, preserving the existing global reservation ledger and daily
 usage rather than allocating a fresh budget. Never delete or rewrite the `v1`
-migration. Old MCP IDs remain unusable; clients must initialize new connections
-and undergo normal room admission. The new release has no ongoing Chromium
-dependency and cannot terminate a legacy remote browser on its own.
+migration. Old MCP IDs remain invalid; clients must obtain fresh access grants,
+create new participant handles, and undergo normal room admission. The new
+release has no ongoing Chromium dependency and cannot terminate a legacy remote browser on its own.
 
 
 ## Native WebMCP authority

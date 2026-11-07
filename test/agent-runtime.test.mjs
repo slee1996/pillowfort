@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { readAgentResource } from '../scripts/agent-guidance.mjs';
 
 const entrypoint = new URL('../scripts/agent.mjs', import.meta.url).href;
 const sdkEntrypoint = new URL('../scripts/agent-sdk.mjs', import.meta.url).href;
@@ -18,6 +19,10 @@ const runtimeCases = [
   ['26.11.99', false], ['26.12.0', false], ['26.12.1', true], ['26.13.0', true],
   ['27.0.0', true],
 ];
+
+test('unknown agent resources return the MCP 2026 InvalidParams error', async () => {
+  await assert.rejects(readAgentResource('pillowfort://agents/unknown'), { code: -32602 });
+});
 
 test('the CLI refuses unpatched and unsupported Node releases before starting a participant', () => {
   for (const [version, supported] of runtimeCases) {

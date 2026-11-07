@@ -1,26 +1,18 @@
 {
   "release": {
-    "version": "1.1.6",
-    "sourceTag": "v1.1.6",
-    "sourceUrl": "https://github.com/slee1996/pillowfort/tree/v1.1.6",
-    "toolsSha256": "b928cf8a63d1293b1eff6ca026b16ed64e99f6b1767a724b8dd518f51381e6cd"
+    "version": "2.0.0",
+    "sourceTag": "v2.0.0",
+    "sourceUrl": "https://github.com/slee1996/pillowfort/tree/v2.0.0",
+    "toolsSha256": "aee04f5f22328cd5946ee04e986ee339a4b3523ecb5b161d13840d615c0a6967"
   },
   "tools": [
     {
       "name": "session_create",
-      "description": "Create a named, isolated participant session with real MLS encryption and ordinary human-client permissions. No automatic device approval. Storage is ephemeral and closing destroys its local identity and keys.",
+      "description": "Create an isolated participant with real MLS encryption and ordinary human-client permissions. Takes no arguments and returns a server-minted opaque session handle. No automatic device approval. Closing destroys its ephemeral identity and keys.",
       "inputSchema": {
         "type": "object",
-        "properties": {
-          "session": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
-          }
-        },
-        "required": [
-          "session"
-        ],
+        "properties": {},
+        "required": [],
         "additionalProperties": false
       },
       "annotations": {
@@ -32,7 +24,7 @@
     },
     {
       "name": "session_list",
-      "description": "List named sessions and readiness without exposing credentials or cryptographic state.",
+      "description": "List this owner’s active opaque participant handles and readiness without exposing credentials or cryptographic state.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -54,8 +46,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "confirm": {
             "type": "boolean",
@@ -84,8 +76,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           }
         },
         "required": [
@@ -108,8 +100,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "afterRevision": {
             "type": "integer",
@@ -144,8 +136,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -175,8 +167,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -236,8 +228,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -299,8 +291,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -355,8 +347,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -404,8 +396,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -443,8 +435,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -489,8 +481,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -547,8 +539,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -605,8 +597,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -680,8 +672,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -734,8 +726,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -765,8 +757,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -813,8 +805,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -873,8 +865,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -914,8 +906,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -950,8 +942,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -990,8 +982,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1043,8 +1035,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1092,8 +1084,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1145,8 +1137,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1191,8 +1183,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1237,8 +1229,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1283,8 +1275,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1329,8 +1321,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1396,8 +1388,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1449,8 +1441,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1503,8 +1495,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1550,8 +1542,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1590,8 +1582,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1636,8 +1628,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1682,8 +1674,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1728,8 +1720,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1775,8 +1767,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1815,8 +1807,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1861,8 +1853,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1907,8 +1899,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -1953,8 +1945,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2002,8 +1994,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2048,8 +2040,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2088,8 +2080,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2135,8 +2127,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2183,8 +2175,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2229,8 +2221,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2275,8 +2267,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2326,8 +2318,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2374,8 +2366,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2414,8 +2406,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2460,8 +2452,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2506,8 +2498,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2552,8 +2544,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2592,8 +2584,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2632,8 +2624,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2686,8 +2678,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2726,8 +2718,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2757,8 +2749,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2797,8 +2789,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
@@ -2843,8 +2835,8 @@
         "properties": {
           "session": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
-            "description": "Name of an isolated, ephemeral encrypted participant session."
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Opaque server-minted handle for an isolated, ephemeral encrypted participant. Obtain it from session_create; never choose or reuse a handle."
           },
           "input": {
             "type": "object",
