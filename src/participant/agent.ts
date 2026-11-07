@@ -21,7 +21,8 @@ export interface PillowfortAgent {
   capabilities(): AgentCapability[];
   execute(name: string, input: unknown): Promise<AgentResult>;
   observe(): AgentSnapshot;
-  waitForChange(afterRevision: number, timeoutMs: number): Promise<AgentSnapshot>;
+  waitForChange(afterRevision: number, timeoutMs: number, waitId?: string): Promise<AgentSnapshot>;
+  cancelWait(waitId: string): void;
 }
 export type RegisterAgentAction = (name: string, description: string, schema: Schema, destructive: boolean,
   run: (input: Record<string, any>) => unknown | Promise<unknown>, roomTraffic?: boolean) => void;
@@ -82,6 +83,7 @@ export function createParticipantAgent({ store, controller, events: participantE
   let drawingId = 0;
   const typing = new Map<string, ReturnType<typeof setTimeout>>();
   const waiters = new Set<() => void>();
+  const cancellableWaits = new Map<string, () => void>();
   const actions = new Map<string, { capability: AgentCapability; run: (input: Record<string, any>) => unknown | Promise<unknown> }>();
   const touch = () => { revision++; for (const wake of [...waiters]) wake(); };
   const record = (type: string, data: JSONValue) => {
@@ -211,9 +213,9 @@ export function createParticipantAgent({ store, controller, events: participantE
     return { status: "queued", operationId: id, roomId, ...(invitationUrl ? { roomSecret: checked.secret, invitationUrl } : {}) };
   };
   const connectionFields = { displayName: memberName, roomId: roomIdSchema, roomSecret: secretSchema, takeover: { type: "boolean" } as Schema, confirm };
-  add("room_setup", "Create an actual MLS-encrypted room. Optional roomId/password are generated securely; returned creation credentials must be retained. Joiners still require host fingerprint approval. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "confirm"]), true, input => startConnection("setup", input));
-  add("room_join", "Join with invitation credentials; observe pendingJoinFingerprint and ask the host to approve that exact fingerprint. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "roomId", "roomSecret", "confirm"]), true, input => startConnection("join", input));
-  add("room_join_link", "Join using a same-origin invitation link containing a sensitive bearer password in its fragment. Never navigate to the link or log it. Host approval is still required; pending authentication must use room_recover instead.", object({ invitationUrl: { ...text(2048), description: "Sensitive full invitation URL; never include it in observations or logs." }, displayName: memberName, takeover: { type: "boolean" }, confirm }, ["invitationUrl", "displayName", "confirm"]), true, async input => {
+  add("room_setup", "Create an actual MLS-encrypted room. Optional roomId/password are generated securely; returned creation credentials must be retained. Joiners still require explicit host approval; out-of-band fingerprint comparison is optional extra assurance. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "confirm"]), true, input => startConnection("setup", input));
+  add("room_join", "Join with invitation credentials and wait for explicit host approval. For optional extra verification, share the current pendingJoinFingerprint with the host over a trusted channel. May take over another tab only when takeover:true.", object(connectionFields, ["displayName", "roomId", "roomSecret", "confirm"]), true, input => startConnection("join", input));
+  add("room_join_link", "Join using a same-origin invitation link containing a sensitive bearer password in its fragment. Never navigate to the link or log it. Host approval is still required; out-of-band fingerprint comparison is optional extra assurance. Pending authentication must use room_recover instead.", object({ invitationUrl: { ...text(2048), description: "Sensitive full invitation URL; never include it in observations or logs." }, displayName: memberName, takeover: { type: "boolean" }, confirm }, ["invitationUrl", "displayName", "confirm"]), true, async input => {
     const invitation = parseRoomInvitationUrl(input.invitationUrl, origin);
     delete input.invitationUrl;
     if (!invitation) fail("invalid-invitation", "Use a complete invitation link from this origin, with its password in the fragment and no query parameters.");
@@ -237,13 +239,13 @@ export function createParticipantAgent({ store, controller, events: participantE
     if (!state.password) fail("credential-unavailable", "This participant does not have an invitation password to export.");
     return { roomId: state.roomId, roomSecret: state.password, invitationUrl: createRoomInvitationUrl(origin, state.roomId!, state.password) };
   });
-  for (const action of ["approve", "reject"] as const) sendAction(`admission_${action}`, `${action === "approve" ? "Approve" : "Reject"} precisely the pending admission matching both id and invitation-bound fingerprint. Approval is never automatic.`, { admissionId: text(128), deviceFingerprint: text(256) }, ["admissionId", "deviceFingerprint"], true, `admission-${action}`, (state, input) => {
+  for (const action of ["approve", "reject"] as const) sendAction(`admission_${action}`, `${action === "approve" ? "Approve" : "Reject"} precisely the selected pending admission using its exact admissionId and invitation-bound deviceFingerprint from pendingAdmissions. Approval requires host authority and caller policy, never automatic admission. Out-of-band comparison with the guest's current pendingJoinFingerprint is optional extra assurance; if chosen, compare over a trusted channel and do not approve a mismatch.`, { admissionId: text(128), deviceFingerprint: text(256) }, ["admissionId", "deviceFingerprint"], true, `admission-${action}`, (state, input) => {
     requireHost(state);
     const pending = state.pendingAdmissions.find(admission => admission.admissionId === input.admissionId);
     if (!pending || pending.deviceFingerprint !== input.deviceFingerprint) fail("stale-admission", "Admission id/fingerprint no longer match. Observe pendingAdmissions and verify the joining device.");
     if (pending.status !== "pending") fail("admission-busy", "This admission is already being approved. Wait for its outcome.", true);
   }, input => ({ admissionId: input.admissionId }));
-  sendAction("chat_send", "Send formatted encrypted chat (up to 2000 Unicode characters). Omitted style uses the current local formatting preference. Sender-local appearance is not peer receipt: verify the intended recipient's messages before claiming delivery.", { text: text(2000), style: styleSchema }, ["text"], false, "chat", (_state, input) => {
+  sendAction("chat_send", "Send formatted encrypted chat (up to 2000 Unicode characters). Target exact current roster names with @name or @\"display name\"; quoted names use JSON string escaping. Mention metadata appears only after the receiving participant decrypts and applies the message. Omitted style uses the current local formatting preference. Sender-local appearance is not peer receipt: verify the intended recipient's messages before claiming delivery.", { text: text(2000), style: styleSchema }, ["text"], false, "chat", (_state, input) => {
     if (!input.text.trim()) fail("invalid-input", "Chat must contain non-whitespace text.");
   }, input => {
     const raw = input.style ?? formatStore.getState().getStyle();
@@ -381,7 +383,7 @@ export function createParticipantAgent({ store, controller, events: participantE
 
   function visibleMessages(limit: number, beforeId = Infinity, maxBytes = 48 * 1024) {
     const retained = store.getState().messages;
-    const output: { id: number; kind: string; from: string | null; text: string; timestamp: string; style: JSONValue }[] = [];
+    const output: { id: number; kind: string; from: string | null; text: string; timestamp: string; style: JSONValue; mentions: string[]; replayed?: true }[] = [];
     let bytes = 0;
     for (let index = retained.length - 1; index >= 0 && output.length < limit; index--) {
       const message = retained[index];
@@ -389,6 +391,7 @@ export function createParticipantAgent({ store, controller, events: participantE
       const item = {
         id: message.id, kind: message.kind, from: message.from ?? null, text: message.text, timestamp: message.timestamp,
         style: message.style ? { bold: message.style.bold === true, italic: message.style.italic === true, underline: message.style.underline === true, color: message.style.color ?? null } : null,
+        mentions: message.mentions ?? [], ...(message.replayed ? { replayed: true as const } : {}),
       };
       const size = UTF8.encode(JSON.stringify(item)).byteLength;
       if (bytes + size > maxBytes) break;
@@ -396,6 +399,31 @@ export function createParticipantAgent({ store, controller, events: participantE
       output.push(item);
     }
     return output.reverse();
+  }
+  function ownMentions(state: GameStore) {
+    const messages: { id: number; from: string; text: string; timestamp: string; mentions: string[] }[] = [];
+    const ownName = state.name.normalize("NFC");
+    let latestMessageId = 0;
+    let retainedCount = 0;
+    let bytes = 2; // Include the serialized array brackets and separators in the byte cap.
+    let full = false;
+    if (!disposed && state.roomId && ownName) {
+      for (let index = state.messages.length - 1; index >= 0; index--) {
+        const message = state.messages[index];
+        if (message.kind !== "chat" || !message.from || message.replayed
+          || message.from.normalize("NFC") === ownName
+          || !message.mentions?.includes(ownName)) continue;
+        retainedCount++;
+        latestMessageId = Math.max(latestMessageId, message.id);
+        if (full) continue;
+        const item = { id: message.id, from: message.from, text: message.text, timestamp: message.timestamp, mentions: message.mentions };
+        const size = UTF8.encode(JSON.stringify(item)).byteLength + (messages.length ? 1 : 0);
+        if (messages.length >= 16 || bytes + size > 16 * 1024) { full = true; continue; }
+        bytes += size;
+        messages.push(item);
+      }
+    }
+    return { latestMessageId, messages: messages.reverse(), retainedCount, liveOnly: true };
   }
   function observe(): AgentSnapshot {
     const state = store.getState();
@@ -414,6 +442,7 @@ export function createParticipantAgent({ store, controller, events: participantE
         hostOffer: state.hostOffer ? { oldHost: state.hostOffer.oldHost } : null,
         pendingAdmissions: state.isHost ? state.pendingAdmissions.slice(0, 8).map(item => ({ admissionId: item.admissionId, deviceFingerprint: item.deviceFingerprint, status: item.status })) : [], pendingJoinFingerprint: state.pendingJoinFingerprint },
       messages: visibleMessages(16, Infinity, 16 * 1024), drawings: drawings.slice(-4), typing: [...typing.keys()],
+      mentions: ownMentions(state),
       games: {
         vote: vote ? { target: vote.target, starter: vote.starter, myVote: vote.myVote ?? null, endsAt: vote.endsAt } : null,
         rps: rps ? { p1: rps.p1, p2: rps.p2, phase: rps.phase, koth: rps.koth ?? false, myPick: rps.myPick ?? null, challengedBy: rps.challengedBy ?? null, result: rps.phase === "result" && rps.result ? { pick1: rps.result.pick1, pick2: rps.result.pick2, winner: rps.result.winner } : null } : null,
@@ -491,20 +520,31 @@ export function createParticipantAgent({ store, controller, events: participantE
       serial = result;
       return result;
     },
-    waitForChange: (afterRevision, timeoutMs) => {
+    waitForChange: (afterRevision, timeoutMs, waitId) => {
       if (!Number.isSafeInteger(afterRevision) || afterRevision < 0 || !Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000) return Promise.reject(new AgentError("invalid-input", "afterRevision must be a nonnegative integer; timeoutMs must be between 0 and 30000."));
+      if (waitId !== undefined && (typeof waitId !== "string" || waitId.length === 0 || waitId.length > 128)) return Promise.reject(new AgentError("invalid-input", "waitId must be a nonempty string of at most 128 characters."));
+      if (waitId !== undefined && cancellableWaits.has(waitId)) return Promise.reject(new AgentError("busy", "waitId already identifies a pending change wait.", true));
       if (disposed || revision > afterRevision || timeoutMs === 0) return Promise.resolve(observe());
       if (waiters.size >= 64) return Promise.reject(new AgentError("busy", "At most 64 change waits may be pending.", true));
       // Keep the client-compatible ES2020 Promise API.
       return new Promise<AgentSnapshot>(resolve => {
         let settled = false;
-        const finish = () => { if (settled) return; settled = true; clearTimeout(timer); waiters.delete(wake); resolve(observe()); };
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          waiters.delete(wake);
+          if (waitId !== undefined) cancellableWaits.delete(waitId);
+          resolve(observe());
+        };
         const wake = () => { if (disposed || revision > afterRevision) finish(); };
         const timer = setTimeout(finish, timeoutMs);
         waiters.add(wake);
+        if (waitId !== undefined) cancellableWaits.set(waitId, finish);
         wake();
       });
     },
+    cancelWait: waitId => { cancellableWaits.get(waitId)?.(); },
     dispose: () => {
       if (disposed) return;
       disposed = true;

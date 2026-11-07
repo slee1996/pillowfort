@@ -21,7 +21,7 @@ The core product idea is simple:
 
 1. Pick a screen name and save the generated room password.
 2. Create a fort, open **Invite**, and choose **Copy invite link**.
-3. Share the link privately; approve your friend's matching device fingerprint.
+3. Share the link privately; approve the expected joining request. Optionally compare device fingerprints over a trusted channel for extra assurance; do not approve a mismatch.
 4. Chat, doodle, and play small games together.
 5. Knock the fort down, or let it expire.
 
@@ -63,7 +63,30 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The MCP Registry manifest targets `io.github.slee1996/pillowfort` release 1.1.2.
+The current release is `@ontologic/pillowfort-agent@1.1.6` and MCP Registry
+`io.github.slee1996/pillowfort` version 1.1.6. It pins Playwright 1.65.0 and
+Chromium 158.0.8127.18. After upgrading the package, run `install-browser` again;
+upgrading JavaScript dependencies alone does not replace the browser binary.
+
+Hosted MCP permits anonymous `initialize`, `notifications/initialized`, and
+`tools/list` requests. Discovery is stateless, uses the same collaboration/full
+catalogs as authenticated sessions, and allocates no participant. Tool calls
+still require self-service Bearer access or OAuth; authorize and initialize a new
+authenticated connection before executing tools. Origin checks and rate limits
+also apply to public discovery.
+
+Chat supports exact roster `@mentions` (including `@"names with spaces"`),
+highlighting, unread attention, and opt-in generic browser alerts. Local/hosted
+MCP exposes `pillowfort://sessions/{session}/mentions` through resource reads and
+MCP 2025 resource subscriptions. Notifications reach connected clients; waking an
+agent is the client's responsibility. Native WebMCP retains observation/wait
+tools. No offline inbox or durable mention queue is created.
+
+`server.json` includes the registry title, website, and public SVG icon.
+To release these changes, deploy the hosted Worker with
+`npm --prefix hosted-mcp run deploy`, then publish the manifest with
+`mcp-publisher publish server.json` using the registry owner's authenticated
+publisher. Local verification alone does not update the live registry score.
 Hosted participants run under managed custody: their runtime and model/operator
 can access their admitted room content. Hosted participants do not gain access to
 unrelated rooms. Read the custody guide before inviting a hosted agent.
@@ -312,8 +335,12 @@ JSON-lines mode keeps named sessions alive across requests. Each line returns an
 Room creation returns the invitation credentials explicitly. Treat those results
 as sensitive. Setup/join return a queued operation, not proof of connection;
 observe `connection` and `operations`, or use `session_wait` with the last
-`revision`. A joiner exposes its pending fingerprint; the host must verify it
-and call `admission_approve` with the matching admission ID and fingerprint.
+`revision`. The host must select an expected pending request under the caller's
+policy and call `admission_approve` with that `pendingAdmissions` entry's exact
+`admissionId` and `deviceFingerprint`, plus `confirm:true`. Independent comparison
+with the guest's current `pendingJoinFingerprint` over a trusted channel is
+optional extra assurance; if chosen, do not approve a mismatch. Invitation
+possession and display names do not prove recipient identity.
 Connected actions require the current `roomId`, preventing accidental stale-room
 commands. Network actions report queued status honestly; inspect observations
 for outcomes rather than blindly retrying a mutation.

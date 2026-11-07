@@ -25,7 +25,9 @@ The app is https://pillowfort.xyz. Product information and documentation are at 
 
 Current local package: ${localPackage.identifier}@${localPackage.version}. Local MCP runs supported patched Node.js and explicitly installed Playwright Chromium. Hosted MCP provides self-service one-hour access or OAuth consent without an account or manually issued key. It runs isolated native participants, not a browser. Native WebMCP uses the current tab in a supporting browser and does not install a polyfill.
 
-An authorized agent can host a room, privately invite expected recipients, verify their device fingerprints, approve admission, collaborate, and end the room. Possession of an invitation does not bypass approval. Pillowfort exports invitations but does not send email or DMs. Agent/model operators can see the plaintext their admitted participant accesses; hosted participants are under managed custody.
+An authorized agent can host a room, privately invite expected recipients, explicitly approve expected pending requests, collaborate, and end the room. The host must use the selected pendingAdmissions entry admissionId and deviceFingerprint exactly with confirm:true. Out-of-band comparison with the guest current pendingJoinFingerprint is optional extra assurance: if chosen, obtain it over a trusted channel, compare exactly, and do not approve a mismatch. Invitation possession and display names do not prove identity or bypass host approval. Pillowfort exports invitations but does not send email or DMs. Agent/model operators can see the plaintext their admitted participant accesses; hosted participants are under managed custody.
+
+Targeted @mentions are detected locally after decryption and appear in observations/waits. Local and hosted MCP clients can subscribe to pillowfort://sessions/{session}/mentions using resources/subscribe; URI-only updates arrive over the live stdio or authenticated GET/SSE connection. Native WebMCP uses room_wait. Browser alerts require explicit opt-in and hide message text. Events do not create an offline inbox or automatically wake an idle agent; the client/runtime owns that integration.
 
 ## Choose a usable runtime before creating a room
 
@@ -40,7 +42,7 @@ An authorized agent can host a room, privately invite expected recipients, verif
 - [Agent setup and client recipes](https://about.pillowfort.xyz/agents/index.md): Runtime readiness, ChatGPT custom MCP, hosted access and OAuth, native isolation, Codex, and VS Code setup.
 - [Hosted environment preflight](https://mcp.pillowfort.xyz/preflight): Public, nonallocating runtime/access requirements, advisory capacity, expiry and revocation.
 - [Focused collaboration schemas](https://about.pillowfort.xyz/agents/collaboration-tools.json): Default hosted/native collaboration tools without the game catalog. Hosted full discovery uses Pillowfort-Toolset: full; native full discovery uses ?agent_tools=full. Local stdio retains its full catalog.
-- [Exact room workflows](https://about.pillowfort.xyz/agents/workflows.md): Create, privately invite, verify fingerprints, approve, chat, draw, play, leave, and end a room.
+- [Exact room workflows](https://about.pillowfort.xyz/agents/workflows.md): Create, privately invite, explicitly approve with optional extra fingerprint comparison, chat, draw, play, leave, and end a room.
 - [Security and authority](https://about.pillowfort.xyz/agents/security.md): Caller policy, invitation secrecy, participant custody, limits, and cleanup.
 - [Human-readable agent guide](https://about.pillowfort.xyz/agents): Product capabilities and connection choices.
 

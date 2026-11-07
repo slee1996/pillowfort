@@ -103,9 +103,10 @@ Run this against the deployed URL, not only local development:
 5. Join from a second browser profile or device with each password. Confirm a
    wrong custom password is rejected before a host approval prompt and can be
    corrected in the same browser.
-6. Approve the pending device from People, compare the displayed safety
-   fingerprints out of band, then send one styled message from each participant
-   and confirm text and style arrive in order.
+6. Approve an expected pending device from People without an out-of-band
+   fingerprint exchange, then send one styled message from each participant
+   and confirm text and style arrive in order. Also exercise the optional
+   comparison flow over a trusted channel; a mismatch must not be approved.
 7. Reload and recover the original device by re-entering the exact saved
    password, for both the new default and custom-password rooms. Confirm the
    existing identity resumes rather than requiring an unintended new admission.

@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261023.1",
-    "@playwright/test": "1.59.1",
+    "@playwright/test": "1.65.0",
     "sharp": "0.35.5",
     "wrangler": "4.153.0"
   },
@@ -41,7 +41,7 @@
     "@opentelemetry/otlp-transformer": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0",
-    "playwright": "1.59.1",
+    "playwright": "1.65.0",
     "zustand": "5.0.11"
   },
   "overrides": {

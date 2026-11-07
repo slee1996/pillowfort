@@ -128,7 +128,7 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
         <ol className="invite-steps" aria-label="How to invite">
           <li><span aria-hidden="true">1</span><div><strong>Copy the invite link</strong><p>Everything they need is included.</p></div></li>
           <li><span aria-hidden="true">2</span><div><strong>Paste it in your chat</strong><p>Send it privately to your friend.</p></div></li>
-          <li><span aria-hidden="true">3</span><div><strong>{isHost ? "Let your friend in" : "The host lets them in"}</strong><p>{isHost ? "Keep this fort open. Check their fingerprint when they join." : "Ask the host to stay here and approve their device."}</p></div></li>
+          <li><span aria-hidden="true">3</span><div><strong>{isHost ? "Let your friend in" : "The host lets them in"}</strong><p>{isHost ? "Keep this fort open to approve their device. For extra assurance, you can compare fingerprints over another chat or call." : "Ask the host to stay here and approve their device. For extra assurance, they can compare fingerprints over another chat or call."}</p></div></li>
         </ol>
         <p className="invite-privacy"><PeriodIcon kind="lock" size={18} /><span>Anyone with this link can ask to join. The host still decides who gets in.</span></p>
         <details className="entry-details invite-manual" onToggle={(event) => { if (!event.currentTarget.open) setShowSecret(false); }}>

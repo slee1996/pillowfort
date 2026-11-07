@@ -3,6 +3,7 @@ import { AuthorizationError, CimdFetchError, OAuthProvider, OAuthError, type Aut
 import type { AuthenticatedProps, Env } from './env';
 import { readByteLimitedText } from '../../src/requestBody';
 import catalog from '../../docs/agents/tools.json';
+import { discover } from './discovery';
 
 const SCOPE = 'mcp:rooms';
 export const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -433,9 +434,11 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
             providerRequest = new Request(request, { body });
           }
         }
+        const discovery = url.pathname === '/mcp' && request.method === 'POST' && !request.headers.has('Authorization')
+          ? await discover(request.clone() as typeof request) : null;
         const response = url.pathname === '/access'
           ? request.method === 'OPTIONS' ? new Response(null, { status: 204 }) : await selfServiceAccess(request, env)
-          : await providerFor(env).fetch(providerRequest, env, ctx);
+          : discovery ?? await providerFor(env).fetch(providerRequest, env, ctx);
         const headers = new Headers(response.headers);
         headers.delete('Access-Control-Allow-Credentials');
         headers.set('Cache-Control', 'no-store');

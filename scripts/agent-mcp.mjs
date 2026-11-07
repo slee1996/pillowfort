@@ -1,24 +1,122 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-common.mjs';
+import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, SubscribeRequestSchema, UnsubscribeRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { AgentError, boundedJSON, errorResult, MAX_INPUT_BYTES, MAX_WAIT_MS } from './agent-common.mjs';
 import { createAgentToolRegistry } from './agent-tools.mjs';
 import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResource, getAgentPrompt } from './agent-guidance.mjs';
 
 /** @typedef {import('@modelcontextprotocol/sdk/server/index.js').Server} PillowfortMcpServer */
 
+const MENTION_URI = /^pillowfort:\/\/sessions\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/mentions$/;
+const MENTION_TEMPLATE = {
+  uriTemplate: 'pillowfort://sessions/{session}/mentions', name: 'session-mentions',
+  title: 'Live participant mentions', mimeType: 'application/json',
+  description: 'Bounded own-mention chat for a named participant in this connection. Ephemeral and live-only, not an offline inbox. Subscribe using MCP 2025 resources/subscribe; updates contain only the URI. Session and connection expiry end subscriptions.',
+};
+
+function mentionSession(uri) {
+  const match = MENTION_URI.exec(uri);
+  if (!match || match[0] !== uri) throw new McpError(ErrorCode.InvalidParams, 'Expected pillowfort://sessions/{session}/mentions with an exact named participant session.');
+  return match[1];
+}
+
+function unavailableSession() {
+  return new McpError(ErrorCode.InvalidParams, 'The named participant session is unavailable. Call session_list or create a named session first.');
+}
+
 /** Dynamic JSON Schema catalogs require the SDK's lower-level Server API. */
 export function createAgentMcpServer({
   agent, tools = [], instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
-  resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError,
+  resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError, onClose,
 }) {
-  const server = new Server({ name: 'pillowfort', version: '1.1.2' }, {
-    capabilities: { tools: {}, resources: {}, prompts: {} },
+  const server = new Server({ name: 'pillowfort', version: '1.1.6' }, {
+    capabilities: { tools: {}, resources: { subscribe: true }, prompts: {} },
     instructions,
     jsonSchemaValidator,
   });
+  let closed = false;
+  const subscriptions = new Map();
+  const active = subscription => !closed && subscriptions.get(subscription.uri) === subscription && !subscription.abort.signal.aborted && !subscription.sessionSignal.aborted;
+  const stop = subscription => {
+    if (subscriptions.get(subscription.uri) === subscription) subscriptions.delete(subscription.uri);
+    subscription.sessionSignal.removeEventListener('abort', subscription.onSessionClosed);
+    subscription.abort.abort();
+  };
+  server.onclose = () => {
+    if (closed) return;
+    closed = true;
+    for (const subscription of subscriptions.values()) stop(subscription);
+    onClose?.();
+  };
+  const observeSession = async (name, signal) => {
+    let snapshot;
+    try { snapshot = await agent.observe(name); }
+    catch { throw unavailableSession(); }
+    if (closed || signal.aborted) throw unavailableSession();
+    return snapshot;
+  };
+  const sessionSignal = name => {
+    if (closed) throw unavailableSession();
+    try { return agent.sessionSignal(name); }
+    catch { throw unavailableSession(); }
+  };
+  const watch = async (subscription, snapshot) => {
+    let revision = snapshot.revision;
+    let cursor = snapshot.mentions.latestMessageId;
+    try {
+      while (active(subscription)) {
+        snapshot = await agent.wait(subscription.name, revision, MAX_WAIT_MS, { signal: subscription.abort.signal });
+        if (!active(subscription)) return;
+        revision = snapshot.revision;
+        const latest = snapshot.mentions.latestMessageId;
+        if (latest > cursor) {
+          cursor = latest;
+          await server.sendResourceUpdated({ uri: subscription.uri });
+        }
+      }
+    } catch {
+      // Closed, stale, or failed participant waits terminate this live subscription.
+      // Never attach a replacement participant with the same name implicitly.
+    } finally { stop(subscription); }
+  };
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources }));
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
-  server.setRequestHandler(ReadResourceRequestSchema, async request => ({ contents: [await resourceLoader(request.params.uri)] }));
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [MENTION_TEMPLATE] }));
+  server.setRequestHandler(ReadResourceRequestSchema, async request => {
+    const uri = request.params.uri;
+    if (!uri.startsWith('pillowfort://sessions/')) return { contents: [await resourceLoader(uri)] };
+    const name = mentionSession(uri);
+    const snapshot = await observeSession(name, sessionSignal(name));
+    return { contents: [{ uri, mimeType: 'application/json', text: boundedJSON({ session: name, revision: snapshot.revision, ...snapshot.mentions, ephemeral: true }, 32 * 1024) }] };
+  });
+  server.setRequestHandler(SubscribeRequestSchema, async request => {
+    const uri = request.params.uri;
+    const name = mentionSession(uri);
+    let subscription = subscriptions.get(uri);
+    if (!subscription) {
+      const signal = sessionSignal(name);
+      if (subscriptions.size >= 16) throw new McpError(ErrorCode.InvalidParams, 'At most 16 live mention resources may be subscribed per connection.');
+      subscription = { uri, name, sessionSignal: signal, abort: new AbortController() };
+      subscription.onSessionClosed = () => stop(subscription);
+      subscriptions.set(uri, subscription);
+      signal.addEventListener('abort', subscription.onSessionClosed, { once: true });
+      subscription.ready = observeSession(name, signal).then(snapshot => {
+        if (!active(subscription)) throw unavailableSession();
+        subscription.done = watch(subscription, snapshot);
+      }).catch(error => { stop(subscription); throw error; });
+    }
+    await subscription.ready;
+    return {};
+  });
+  server.setRequestHandler(UnsubscribeRequestSchema, async request => {
+    const uri = request.params.uri;
+    mentionSession(uri);
+    const subscription = subscriptions.get(uri);
+    if (subscription) {
+      stop(subscription);
+      await subscription.ready.catch(() => {});
+      await subscription.done;
+    }
+    return {};
+  });
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listAgentPrompts() }));
   server.setRequestHandler(GetPromptRequestSchema, async request => getAgentPrompt(request.params.name, request.params.arguments, { resourceLoader, resourceDefinitions: resources }));
   let registryPromise;
@@ -57,7 +155,7 @@ function toolResult(result) {
 /** Owns stdio and signal handlers until EOF/close. Never writes diagnostics to stdout. */
 export async function runAgentMcp({ agent, tools = [], input = process.stdin, output = process.stdout, diagnostics = process.stderr }) {
   const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
-  const server = createAgentMcpServer({ agent, tools });
+  const server = createAgentMcpServer({ agent, tools, onClose: () => onEnd() });
   const transport = new StdioServerTransport(input, output, { maxBufferSize: MAX_INPUT_BYTES + 16 * 1024 });
   let closing;
   let finish;
@@ -88,7 +186,6 @@ export async function runAgentMcp({ agent, tools = [], input = process.stdin, ou
     process.exitCode = 1;
     void close();
   };
-  server.onclose = onEnd;
   server.onerror = () => {
     diagnostics.write('Pillowfort MCP transport error: check JSON-RPC framing and message size.\n');
     process.exitCode = 1;

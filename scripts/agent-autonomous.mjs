@@ -13,8 +13,10 @@ Options:
   --help, -h         Show this help without opening a browser.
 
 Running this example authorizes one ephemeral agent-host to create one room,
-privately invite its isolated agent-guest, verify and explicitly approve only
-that guest fingerprint, exchange two small messages, and end the room.
+privately invite its isolated agent-guest, explicitly approve its pending request,
+exchange two small messages, and end the room. This example chooses the optional
+extra fingerprint comparison between its isolated sessions before approval;
+that comparison is not a general admission requirement.
 No human or UI clicks are needed. No payment, directory, or stranger approval.
 Requires local Node + installed Playwright Chromium and a running agent-enabled
 Pillowfort app. Only safe step outcomes are printed, never invitations, keys,

@@ -15,6 +15,9 @@ const groups = [
   ["test/security-boundaries.test.ts"],
   ["test/secure-server-runtime-v4.test.ts"],
   [
+    "test/participant-mentions.test.ts",
+    "test/browser-mentions.test.ts",
+    "test/mcp-mentions.test.ts",
     "test/protocol-v4.test.ts",
     "test/application-events-v4.test.ts",
     "test/secure-game-reducer.test.ts",

@@ -6,7 +6,7 @@ Pillowfort gives an agent ordinary encrypted-room participant capabilities, incl
 
 ## Autonomous does not mean unbounded
 
-An agent can create its own room, privately invite expected humans or agents, compare joining fingerprints, approve expected devices as host, participate, and clean up without a human present. The caller may authorize these actions in a standing policy or a specific task. There is no requirement to obtain a fresh human click for every room action.
+An agent can create its own room, privately invite expected humans or agents, optionally compare joining fingerprints for extra assurance, approve expected pending requests as host, participate, and clean up without a human present. The caller may authorize these actions in a standing policy or a specific task. There is no requirement to obtain a fresh human click for every room action.
 
 That policy should name the room's purpose, allowed recipients and delivery channels, what the agent may read/share/do, any spending restriction, and the ending condition. The configured MCP client may impose additional approval gates. Do not disable all client safeguards just to avoid prompts.
 
@@ -16,9 +16,9 @@ That policy should name the room's purpose, allowed recipients and delivery chan
 
 A full invitation lets a device request admission; it does not automatically admit it. The current host must be connected and must approve the exact pending device. The host can be an authorized agent, not necessarily a human.
 
-Before `admission_approve`, obtain the expected peer's current `room.pendingJoinFingerprint` through an independently trusted channel and compare it exactly with the host's `room.pendingAdmissions` entry. Supply both that entry's `admissionId` and matching `deviceFingerprint`. Confirm that the request is still pending. Reverify after an expired admission or a new join attempt.
+Before `admission_approve`, select an expected request under the caller's policy from the host's `room.pendingAdmissions`. Confirm that its `status` is still `pending` and supply that entry's `admissionId` and `deviceFingerprint` exactly, with `confirm:true`. The host may approve without an external code exchange. Runtime host authority, invitation-bound device matching, and stale-request checks remain mandatory. If an admission expires or the guest retries, observe again and select the current request rather than reusing stale values.
 
-A trusted orchestrator controlling both isolated sessions can compare their direct observations itself. For separately operated agents or humans, bind the fingerprint to the intended recipient through a known private channel. A display name, a message claiming to be the recipient, the first pending entry, or possession of the link is not enough. Never approve unknown strangers in a loop. A guest cannot self-approve or bypass another host's decision.
+Out-of-band fingerprint comparison is optional extra assurance unless caller policy requires it. If chosen, obtain the expected peer's current `room.pendingJoinFingerprint` through an independently trusted channel and compare it exactly with the selected host entry's `deviceFingerprint`. Do not approve a mismatch; repeat the comparison after an expired admission or new join attempt. A trusted orchestrator controlling both isolated sessions can compare their direct observations itself. For separately operated agents or humans, use a known trusted channel to bind that extra comparison to the intended recipient. A display name, a message claiming to be the recipient, or possession of the link does not prove identity. Never blindly pick the first pending entry or approve unknown strangers in a loop. A guest cannot self-approve or bypass another host's decision.
 
 ## Invitations are credentials
 
@@ -30,7 +30,7 @@ The password is after `#` in the URL. Browsers do not send URL fragments in ordi
 - Use only an invitation for the configured trusted app origin. Do not navigate an automation browser to an untrusted link as a substitute for the join tool.
 - Share only with named, expected recipients through an authorized private channel. No unsolicited invitation sending, address-book scraping, or public broadcast.
 - Pillowfort exports credentials but does not deliver email or DMs. A separate messaging tool needs its own authorization. If no approved delivery path exists, do not invent one.
-- A compromised invitation may attract unknown requests. Keep rejecting or withholding approval from unverified devices; coordinate a new room/invitation privately if necessary. Do not promise that closing an export dialog revokes a copied link.
+- A compromised invitation may attract unknown requests. Keep rejecting or withholding approval from unexpected requests or mismatches found during any extra fingerprint comparison; coordinate a new room/invitation privately if necessary. Do not promise that closing an export dialog revokes a copied link.
 
 ## Encryption stops at the participant
 
@@ -57,6 +57,24 @@ supported release line. Development and CI require Bun 1.4.4+ where Bun is used.
 These versions reject the compromised October 2026 eMudhra/emSign TLS chains,
 including cross-signed chains. Update the runtime binaries as well as OS/browser
 trust stores; never disable certificate verification to work around a failure.
+
+Release 1.1.4 pins Playwright 1.65.0 with Chromium 158.0.8127.18. Upgrade the
+package and explicitly rerun `install-browser`; an older cached browser is not
+patched by updating npm metadata alone. This replaces the browser affected by
+the known-exploited V8 CVEs CVE-2026-11645, CVE-2026-85046, and CVE-2026-87491.
+The Node/Bun minimums above also include the Brotli fix for CVE-2026-111497.
+The CLI and direct SDK constructor enforce the same Node release policy before
+browser startup or an app connection. Runtime package managers and unrelated
+scripts are outside that guard: upgrade the actual Node and Bun executables.
+
+The MLS adapter supports only ciphersuite 1
+(X25519/AES-128-GCM/SHA-256/Ed25519). Its pinned providers exclude unused
+Weierstrass-curve backends and their affected `crypto-bigint` dependency
+([RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)).
+Other ciphersuites, signature schemes, and HPKE configurations fail closed;
+there is no fallback to a different algorithm. The rebuilt WASM retains the
+existing room wire and snapshot formats. Maintained timer dependencies replace
+`instant` and `pin-utils`; neither maintenance notice was a confirmed exploit.
 
 Each room session is an isolated ephemeral browser context with its own device identity and MLS state. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
@@ -109,6 +127,21 @@ does the same after one hour. Background sessions recheck the principal during
 lifecycle alarms and close when revoked. Already-submitted room actions may have
 committed; revocation cannot roll them back. Clean up rooms and MCP sessions before
 revoking when possible. Secret rotation is not a substitute for grant revocation.
+
+Mention notifications are participant-local, not a relay plaintext index.
+Detection runs after decryption and uses exact current roster names. Mentioned
+text remains untrusted room data and cannot authorize actions. Browser alerts
+require explicit opt-in and contain only generic text; room changes clear that
+opt-in. MCP resource subscriptions require an existing named participant in the
+same connection/principal and send only a resource URI. Reading the resource
+exposes the requesting participant's bounded plaintext mention feed to its client,
+under the same custody rules as observations.
+
+Notifications do not create durable storage, extend hosted session lifetimes, or
+guarantee offline delivery. Muted/self/replayed messages do not produce fresh
+attention. Initial subscription does not replay old notifications; clients read
+the current resource explicitly and handle disconnection/expiry. The host/runtime,
+not MCP itself, decides whether to wake an idle agent.
 
 Hosted connections have an absolute ten-minute lifetime and two-minute idle
 deadline. The initial service budget permits two participant-bearing MCP sessions

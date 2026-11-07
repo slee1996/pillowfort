@@ -118,6 +118,32 @@ after(async () => {
 });
 
 const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'security-regression', version: '1.0.0' } } };
+
+test('public discovery exposes both catalogs without granting tool execution or allocating participants', async () => {
+  const headers = { Accept: 'application/json, text/event-stream' };
+  const before = (await request('/preflight')).body;
+  const initialized = await request('/mcp', { method: 'POST', json: initialize, headers });
+  assert.equal(initialized.status, 200);
+  assert.equal(initialized.headers['mcp-session-id'], undefined);
+  assert.equal(initialized.body.result.serverInfo.name, 'pillowfort');
+  assert.equal((await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', method: 'notifications/initialized' }, headers })).status, 202);
+  for (const toolset of ['collaboration', 'full']) {
+    const listed = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 2, method: 'tools/list' }, headers: { ...headers, 'Pillowfort-Toolset': toolset } });
+    assert.equal(listed.status, 200);
+    assert(listed.body.result.tools.some(tool => tool.name === 'chat_verify_received'));
+    assert.equal(listed.body.result.tools.some(tool => tool.name.startsWith('ttt_')), toolset === 'full');
+  }
+  const call = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'session_create', arguments: { session: 'unauthorized' } } };
+  for (const json of [call, [initialize, call]]) {
+    const denied = await request('/mcp', { method: 'POST', json, headers });
+    assert.equal(denied.status, 401);
+    assert(denied.headers['www-authenticate']);
+  }
+  assert.equal((await request('/mcp', { method: 'POST', json: initialize, headers: { ...headers, Authorization: 'Bearer invalid' } })).status, 401);
+  const after = (await request('/preflight')).body;
+  assert.equal(after.quota.activeSessions, before.quota.activeSessions);
+  assert.equal(after.quota.remainingDailySessionSeconds, before.quota.remainingDailySessionSeconds);
+});
 const mcpHeaders = key => ({ Authorization: `Bearer ${key}`, Accept: 'application/json, text/event-stream' });
 const issue = async label => {
   const response = await request('/admin/keys', { method: 'POST', json: { label, expiresInDays: 1 }, headers: { Authorization: `Bearer ${admin}` } });

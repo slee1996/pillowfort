@@ -75,14 +75,14 @@ export function AdmissionApprovalDialog() {
             <div className="notice-text" id="admission-approval-description" ref={explanationRef} tabIndex={-1}>
               <strong>A device with this fort&apos;s invitation wants to join.</strong>
               <p className="notice-subtext">
-                Before approving, compare this device fingerprint with your friend over a call or another trusted channel outside this fort.
-                Approve only if it matches and you expect them now.
+                Approve only requests you expect. For extra assurance, you can compare this device fingerprint with your friend over another chat or call.
+                If you compare and it doesn&apos;t match, don&apos;t approve.
               </p>
               <p className="notice-subtext">
                 Device fingerprint: {pending.deviceFingerprint}
               </p>
               <p className="notice-subtext">
-                This request expires shortly. If it disappears before you can compare, ask your friend to join again.
+                This request expires shortly. If it disappears, ask your friend to join again.
               </p>
               {admissions.length > 1 && (
                 <p className="notice-subtext">{admissions.length - 1} more request(s) waiting.</p>

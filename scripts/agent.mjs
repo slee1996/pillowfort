@@ -5,6 +5,7 @@ import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { PillowfortAgent, AgentError, errorResult, boundedJSON, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES } from './agent-sdk.mjs';
+import { checkRuntime } from './agent-runtime.mjs';
 import { createAgentToolRegistry } from './agent-tools.mjs';
 import { runAgentMcp } from './agent-mcp.mjs';
 
@@ -12,7 +13,7 @@ const HELP = `Pillowfort agent CLI — real ephemeral encrypted browser sessions
 
 This local CLI requires Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line, and Chromium. Hosted MCP and native WebMCP are separate connection choices: https://about.pillowfort.xyz/agents
 Version-pinned npm package:
-  npm exec --yes --package=@ontologic/pillowfort-agent@1.1.2 -- pillowfort-agent --help
+  npm exec --yes --package=@ontologic/pillowfort-agent@1.1.6 -- pillowfort-agent --help
 
 Commands with the installed executable:
   pillowfort-agent install-browser
@@ -164,18 +165,6 @@ async function runJSONLines(agent) {
 function diagnostic(error) {
   const failure = errorResult(error).error;
   process.stderr.write(`${failure.code}: ${failure.message}\n`);
-}
-
-function checkRuntime() {
-  const [major, minor, patch] = process.versions.node.split('.').map(Number);
-  const supported = (major === 22 && (minor > 23 || (minor === 23 && patch >= 4)))
-    || (major === 24 && (minor > 22 || (minor === 22 && patch >= 1)))
-    || (major === 26 && (minor > 12 || (minor === 12 && patch >= 1)))
-    || major > 26;
-  if (!supported) {
-    throw new AgentError('UNSUPPORTED_RUNTIME', 'Pillowfort agent requires patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line. Upgrade Node before installing Chromium or connecting to an app.');
-  }
-  return { node: process.version, minimum: '^22.23.4 || ^24.22.1 || >=26.12.1', platform: process.platform, arch: process.arch };
 }
 
 function playwrightInstallation() {
