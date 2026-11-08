@@ -211,16 +211,23 @@ after(async () => {
 const discovery = { jsonrpc: '2.0', id: 1, method: 'server/discover' };
 
 test('public modern discovery exposes one full catalog without allocating identities or permitting tools', async () => {
-  const headers = { Accept: 'application/json, text/event-stream' };
   const before = (await request('/preflight')).body;
-  const discovered = await request('/mcp', { method: 'POST', json: discovery, headers });
+  const headers = { Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': before.mcp.protocolVersion };
+  const publicRequest = method => ({
+    jsonrpc: '2.0', id: 1, method,
+    params: { _meta: { 'io.modelcontextprotocol/protocolVersion': before.mcp.protocolVersion } },
+  });
+  const discoveryMethod = before.mcp.discovery.methods.find(method => method === 'server/discover');
+  const listingMethod = before.mcp.discovery.methods.find(method => method === 'tools/list');
+  assert(discoveryMethod && listingMethod, 'Preflight must let an anonymous client discover and inspect the catalog.');
+  const discovered = await request('/mcp', { method: 'POST', json: publicRequest(discoveryMethod), headers });
   assert.equal(discovered.status, 200);
   assert.equal(discovered.headers['mcp-session-id'], undefined);
   assert.equal(discovered.body.result.resultType, 'complete');
   assert.equal(discovered.body.result._meta['io.modelcontextprotocol/serverInfo'].name, 'pillowfort');
   let names;
   for (const toolset of [undefined, 'collaboration', 'full']) {
-    const listed = await request('/mcp', { method: 'POST', json: { jsonrpc: '2.0', id: 2, method: 'tools/list' }, headers: { ...headers, ...(toolset ? { 'Pillowfort-Toolset': toolset } : {}) } });
+    const listed = await request('/mcp', { method: 'POST', json: publicRequest(listingMethod), headers: { ...headers, ...(toolset ? { 'Pillowfort-Toolset': toolset } : {}) } });
     assert.equal(listed.status, 200);
     const actual = listed.body.result.tools.map(tool => tool.name).sort();
     assert(actual.includes('chat_verify_received') && actual.includes('chat_format') && actual.some(name => name.startsWith('ttt_')));

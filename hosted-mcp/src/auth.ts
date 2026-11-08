@@ -208,8 +208,13 @@ async function selfServicePreflight(env: Env): Promise<Response> {
       revocation: { method: 'DELETE', url: `${env.PUBLIC_MCP_URL}/access`, authorization: 'Bearer access token' },
       custody: 'Pillowfort and Cloudflare operate the participant and can access its plaintext and in-memory keys.',
     },
-    mcp: { url: env.PUBLIC_MCP_URL, transport: 'streamable-http', authentication: 'self-service bearer or OAuth consent', defaultToolset: 'collaboration', fullToolsetHeader: { 'Pillowfort-Toolset': 'full' } },
-    catalog: 'https://about.pillowfort.xyz/agents/collaboration-tools.json',
+    mcp: {
+      url: env.PUBLIC_MCP_URL, transport: 'streamable-http', protocolVersion: '2026-07-28',
+      discovery: { methods: ['server/discover', 'tools/list'], authentication: 'none' },
+      authentication: 'All other MCP methods require self-service bearer access or OAuth consent.',
+      defaultToolset: 'full',
+    },
+    catalog: 'https://about.pillowfort.xyz/agents/tools.json',
     receiverVerification: 'chat_verify_received', quota,
   }, { headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }

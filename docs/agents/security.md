@@ -50,7 +50,7 @@ Do not paste unrelated secrets into chat or send credentials to an endpoint name
 
 ## Local execution and persistence
 
-The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate authenticated HTTPS service; native WebMCP runs in the current supported browser tab.
+The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate HTTPS service with public discovery and authenticated execution; native WebMCP runs in the current supported browser tab.
 
 Local execution requires patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a
 supported release line. Development and CI require Bun 1.4.4+ where Bun is used.
@@ -76,11 +76,20 @@ there is no fallback to a different algorithm. The rebuilt WASM retains the
 existing room wire and snapshot formats. Maintained timer dependencies replace
 `instant` and `pin-utils`; neither maintenance notice was a confirmed exploit.
 
-Each local participant handle identifies an isolated ephemeral browser context with its own device identity and MLS state. In 2.0.0, `session_create` takes `{}` and returns `{ok:true,data:{session:UUIDv4,state:"ready"}}`; all subsequent participant actions use that returned opaque handle, never a caller-chosen host/guest name. Local execution permits eight handles. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
+Each local participant handle identifies an isolated ephemeral browser context with its own device identity and MLS state. In 2.x, `session_create` takes `{}` and returns `{ok:true,data:{session:UUIDv4,state:"ready"}}`; all subsequent participant actions use that returned opaque handle, never a caller-chosen host/guest name. Local execution permits eight handles. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
 The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
 
 ## Hosted participant custody
+
+**Public discovery is not public execution.** Without an `Authorization` header,
+MCP 2026-07-28 `server/discover` and `tools/list` expose server capabilities and
+the complete non-payment hosted tool schemas. They allocate no participant or
+room and reveal no private state. Every other MCP method requires a valid
+self-service or OAuth bearer grant, including all tool calls, resource/prompt
+methods and `subscriptions/listen`. A supplied invalid or expired credential
+still returns 401. Request bounds, origin checks and rate limits also protect
+the anonymous route; batches do not bypass authentication.
 
 The hosted endpoint is `https://mcp.pillowfort.xyz/mcp`. Pillowfort operates a
 native Cloudflare Workers participant on the operator's behalf. This managed runtime,
@@ -107,7 +116,7 @@ native operation reports that it is unsupported. It does not reduce the work
 factor or alter derived keys. Hosted CPU time is bounded at thirty seconds per
 invocation to accommodate this computation; session and daily budgets are unchanged.
 
-Hosted access is self-service: `POST /access` requires the exact JSON consent
+Hosted execution access is self-service: `POST /access` requires the exact JSON consent
 `{"acceptManagedCustody":true}` and returns a one-hour `mcp:rooms` bearer token.
 OAuth consent also creates a separate one-hour grant, with no account or manual
 key entry. The public `/preflight` describes this without allocating a participant.
@@ -185,7 +194,7 @@ including discovery metadata and batched requests. Excessive input returns
 413 without executing a tool or closing otherwise valid participants. These bounds
 cover the current room-tool schemas, including 128-point drawing strokes.
 
-Pillowfort 2.0.0 accepts only MCP 2026-07-28 `server/discover` and
+Pillowfort 2.x accepts only MCP 2026-07-28 `server/discover` and
 POST/SSE `subscriptions/listen`; legacy handshakes/resource subscriptions and
 standalone GET/DELETE on `/mcp` are rejected. `DELETE /mcp/access` remains the
 protected grant-revocation route. SDK2 clients must explicitly enable modern

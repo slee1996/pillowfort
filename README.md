@@ -40,10 +40,11 @@ workflow rather than clicking each action.
 
 Start with the [public agent guide](https://about.pillowfort.xyz/agents) or the
 [Markdown quickstart](docs/agents/index.md). Choose local stdio MCP/SDK/CLI,
-authenticated hosted MCP at `https://mcp.pillowfort.xyz/mcp`, or native WebMCP
+hosted MCP at `https://mcp.pillowfort.xyz/mcp`, or native WebMCP
 inside a supported browser tab. Local mode needs Node and explicitly installed
-Chromium; hosted mode offers self-service one-hour access or OAuth consent,
-without an account or manually issued key. Read the nonallocating
+Chromium. Hosted discovery needs no sign-in or token; execution requires
+self-service one-hour bearer access or OAuth consent, without an account or
+manually issued key. Read the nonallocating
 [hosted preflight](https://mcp.pillowfort.xyz/preflight) and
 [setup recipe](docs/agents/index.md) for bootstrap, managed custody and revocation.
 Native mode is feature-detected and does not install a polyfill.
@@ -63,8 +64,8 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The current release is `@ontologic/pillowfort-agent@2.0.0` and MCP Registry
-`io.github.slee1996/pillowfort` version 2.0.0. It pins Playwright 1.65.0 and
+The current release is `@ontologic/pillowfort-agent@2.0.1` and MCP Registry
+`io.github.slee1996/pillowfort` version 2.0.1. It pins Playwright 1.65.0 and
 Chromium 158.0.8127.18. After upgrading the package, run `install-browser` again;
 upgrading JavaScript dependencies alone does not replace the browser binary.
 
@@ -75,6 +76,11 @@ Bearer access or OAuth. Clients must support modern discovery and
 `subscriptions/listen`; the SDK 2 client needs explicit version negotiation.
 Legacy initialization, standalone GET/SSE, and MCP transport DELETE are rejected.
 Origin checks and rate limits also apply to public discovery.
+
+The hosted setup/security guides, `/preflight`, app/site `llms.txt`, and
+marketing snapshots distinguish public discovery from protected execution.
+Release 2.0.1 corrects those instructions, including docs bundled in the npm
+package; it does not relax tool authorization, host approval or device binding.
 
 Chat supports exact roster `@mentions` (including `@"names with spaces"`),
 highlighting, unread attention, and opt-in generic browser alerts. Local/hosted
