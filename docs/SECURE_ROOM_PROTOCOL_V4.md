@@ -148,7 +148,9 @@ duplicate or unknown fragment fields, malformed encoding, and invalid room IDs.
 No invitation password is added to localStorage or sessionStorage.
 
 The guest explicitly submits Join; link navigation alone does not authenticate
-or approve a device. Host approval and matching fingerprints remain mandatory.
+or approve a device. Host approval and the exact cryptographic device binding
+remain mandatory. Comparing displayed fingerprints over another trusted channel
+is an optional extra identity check, not a prerequisite for approval.
 Existing secure recovery takes precedence over a link for a different room.
 Fragments are not sent in HTTP requests or referrers, but the full original link
 is visible to recipients, sharing providers, clipboard managers and privileged

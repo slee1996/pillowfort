@@ -4,6 +4,7 @@ import { JsonTraceSerializer } from "@opentelemetry/otlp-transformer";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { AlwaysOnSampler, BasicTracerProvider, TraceIdRatioBasedSampler, type ReadableSpan, type SpanExporter, type SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { FORT_PASS_CHECKOUT_PATH, FORT_PASS_CODE_PATH, FORT_PASS_REDEEM_PATH, FORT_PASS_STATUS_PATH, STRIPE_WEBHOOK_PATH } from "./routes";
+import catalog from "../docs/agents/tools.json";
 
 export interface TelemetryEnv {
   OTEL_ENABLED?: string;
@@ -17,6 +18,7 @@ export interface TelemetryEnv {
 type Service = "pillowfort.app" | "pillowfort.hosted-mcp";
 type Operation = "page" | "commerce" | "mcp" | "auth" | "health";
 type Lifetime = { waitUntil(promise: Promise<unknown>): void };
+type Scope = "pillowfort.operational" | "pillowfort.volume" | "pillowfort.mcp.tools" | "pillowfort.mcp.tools.trace";
 
 // Only this classifier sees paths. Its output never contains a route, slug, or ID.
 function operationFor(service: Service, path: string): Operation | undefined {
@@ -193,18 +195,19 @@ interface State {
 }
 
 const MAX_CACHED_ENVS = 8;
-const states = new Map<TelemetryEnv, Map<Service | "pillowfort.volume", State>>();
+const states = new Map<TelemetryEnv, Map<Service | Exclude<Scope, "pillowfort.operational">, State>>();
 
-function stateFor(service: Service, env: TelemetryEnv, volume = false): State | undefined {
+function stateFor(service: Service, env: TelemetryEnv, scope: Scope = "pillowfort.operational"): State | undefined {
   if (env.OTEL_ENABLED !== "true") return;
-  const key = volume ? "pillowfort.volume" : service;
+  const key = scope === "pillowfort.operational" ? service : scope;
+  const unsampled = scope === "pillowfort.volume" || scope === "pillowfort.mcp.tools";
   let services = states.get(env);
   const cached = services?.get(key);
   if (cached && cached.endpoint === env.OTEL_EXPORTER_OTLP_ENDPOINT
     && cached.headers === env.OTEL_EXPORTER_OTLP_HEADERS && cached.sampleRate === env.OTEL_SAMPLE_RATE
     && cached.version === env.OTEL_SERVICE_VERSION && cached.environment === env.OTEL_DEPLOYMENT_ENVIRONMENT) return cached;
   const config = configurationFor(env);
-  if (!config || (!volume && config.sampleRate === 0)) return;
+  if (!config || (!unsampled && config.sampleRate === 0)) return;
   const processor = new RequestSpanProcessor(new FetchSpanExporter(config));
   const provider = new BasicTracerProvider({
     resource: resourceFromAttributes({
@@ -215,7 +218,7 @@ function stateFor(service: Service, env: TelemetryEnv, volume = false): State | 
       "telemetry.sdk.language": SDK_INFO["telemetry.sdk.language"],
       "telemetry.sdk.version": SDK_INFO["telemetry.sdk.version"],
     }),
-    sampler: volume ? new AlwaysOnSampler() : new TraceIdRatioBasedSampler(config.sampleRate),
+    sampler: unsampled ? new AlwaysOnSampler() : new TraceIdRatioBasedSampler(config.sampleRate),
     spanProcessors: [processor],
     spanLimits: {
       attributeCountLimit: 4, attributeValueLengthLimit: 32,
@@ -224,7 +227,7 @@ function stateFor(service: Service, env: TelemetryEnv, volume = false): State | 
     },
   });
   const state: State = {
-    tracer: provider.getTracer(volume ? "pillowfort.volume" : "pillowfort.operational"), processor,
+    tracer: provider.getTracer(scope), processor,
     endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT, headers: env.OTEL_EXPORTER_OTLP_HEADERS,
     sampleRate: env.OTEL_SAMPLE_RATE, version: env.OTEL_SERVICE_VERSION,
     environment: env.OTEL_DEPLOYMENT_ENVIRONMENT,
@@ -299,7 +302,7 @@ export function recordRoomActivity(env: TelemetryEnv, ctx: Lifetime, activity: R
     default: return;
   }
   try {
-    const state = stateFor("pillowfort.app", env, true);
+    const state = stateFor("pillowfort.app", env, "pillowfort.volume");
     if (!state) return;
     const span = state.tracer.startSpan("room.activity", {
       kind: SpanKind.INTERNAL,
@@ -309,4 +312,111 @@ export function recordRoomActivity(env: TelemetryEnv, ctx: Lifetime, activity: R
   } catch {
     // Counting must never delay or fail an authenticated room transition.
   }
+}
+
+type McpToolError = "none" | "invalid_input" | "unknown_tool" | "busy" | "quota" | "timeout" | "connection" | "session" | "internal";
+let mcpTools: Record<string, true> | undefined;
+
+// Only exact, known codes are classified. Messages, stacks, and arbitrary codes
+// never become attributes, status descriptions, or events.
+function mcpToolError(code: unknown, tool: string): McpToolError {
+  switch (code) {
+    case -32602: // MCP InvalidParams: distinguish an unknown name without reading the message.
+      return tool === "_unknown" ? "unknown_tool" : "invalid_input";
+    case "INVALID_INPUT": case "INVALID_SESSION": case "SIZE_LIMIT": case "invalid-input":
+    case "invalid-target": case "invalid-name": case "invalid-room": case "invalid-secret":
+    case "confirmation-required": case "invalid-invitation": case "unauthorized":
+    case "incompatible-context": case "stale-room": case "stale-member":
+      return "invalid_input";
+    case "UNKNOWN_TOOL": case "unknown-tool": return "unknown_tool";
+    case "BUSY": case "busy": case "active-room": return "busy";
+    case "SESSION_LIMIT": case "PRINCIPAL_SESSION_LIMIT": case "SESSION_CAPACITY":
+    case "SESSION_START_RATE": case "DAILY_SESSION_BUDGET":
+      return "quota";
+    case "TIMEOUT": case "timeout": return "timeout";
+    case "CONNECTION_FAILED": case "BRIDGE_ERROR": case "reconnecting": case "unavailable": case "delivery-unavailable":
+    case "drawing-not-queued": case "recovery-required": case "no-recovery":
+      return "connection";
+    case "STALE_SESSION": case "CLOSED": case "SESSION_CLOSED": case "SESSION_EXISTS": case "SESSION_NOT_FOUND":
+    case "SESSION_NOT_READY": case "MCP_SESSION_UNAVAILABLE": case "closed":
+    case "room-closed": case "credential-unavailable":
+      return "session";
+    default: return "internal";
+  }
+}
+
+function thrownMcpToolError(error: unknown, tool: string): McpToolError {
+  try {
+    return mcpToolError(typeof error === "object" && error !== null && "code" in error ? error.code : undefined, tool);
+  } catch {
+    return "internal";
+  }
+}
+
+function returnedMcpToolError(result: unknown, tool: string): McpToolError {
+  try {
+    if (typeof result !== "object" || result === null || !("ok" in result) || result.ok !== false) return "none";
+    return thrownMcpToolError("error" in result ? result.error : undefined, tool);
+  } catch {
+    return "internal";
+  }
+}
+
+function finishMcpTool(span: Span | undefined, state: State | undefined, ctx: Lifetime, error: McpToolError, endTime: number): void {
+  if (!span || !state) return;
+  try {
+    span.setAttribute("pillowfort.outcome", error === "none" ? "success" : "error");
+    span.setAttribute("pillowfort.error", error);
+    if (error !== "none") span.setStatus({ code: SpanStatusCode.ERROR });
+    span.end(endTime);
+    const pending = state.processor.flush(span);
+    if (pending) ctx.waitUntil(pending.catch(() => {}));
+  } catch {
+    // Export and lifetime failures must not replace a tool result or exception.
+  }
+}
+
+/** One content-free count span plus an independently sampled diagnostic span. */
+export async function withMcpToolTelemetry<T>(
+  env: TelemetryEnv,
+  ctx: Lifetime,
+  toolName: string,
+  handler: () => Promise<T>,
+): Promise<T> {
+  if (env.OTEL_ENABLED !== "true") return handler();
+  mcpTools ??= Object.fromEntries(catalog.tools.map(tool => [tool.name, true as const]));
+  const tool = Object.hasOwn(mcpTools, toolName) ? toolName : "_unknown";
+  let countState: State | undefined;
+  let traceState: State | undefined;
+  let countSpan: Span | undefined;
+  let traceSpan: Span | undefined;
+  try {
+    countState = stateFor("pillowfort.hosted-mcp", env, "pillowfort.mcp.tools");
+    traceState = stateFor("pillowfort.hosted-mcp", env, "pillowfort.mcp.tools.trace");
+    const options = {
+      kind: SpanKind.INTERNAL,
+      startTime: Date.now(),
+      attributes: { "pillowfort.tool": tool },
+    };
+    countSpan = countState?.tracer.startSpan("mcp.tool.call", options, ROOT_CONTEXT);
+    traceSpan = traceState?.tracer.startSpan("mcp.tool.call", options, ROOT_CONTEXT);
+  } catch {
+    // Invalid configuration or SDK failure disables telemetry, not tool execution.
+  }
+  if (!countSpan && !traceSpan) return handler();
+  let result: T;
+  try {
+    result = await handler();
+  } catch (error) {
+    const endTime = Date.now();
+    const category = thrownMcpToolError(error, tool);
+    finishMcpTool(countSpan, countState, ctx, category, endTime);
+    finishMcpTool(traceSpan, traceState, ctx, category, endTime);
+    throw error;
+  }
+  const endTime = Date.now();
+  const category = returnedMcpToolError(result, tool);
+  finishMcpTool(countSpan, countState, ctx, category, endTime);
+  finishMcpTool(traceSpan, traceState, ctx, category, endTime);
+  return result;
 }

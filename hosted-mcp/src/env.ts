@@ -5,6 +5,7 @@ import type { ParticipantQuota } from './quota';
 import type { TelemetryEnv } from '../../src/telemetry';
 
 export interface Env extends TelemetryEnv {
+  /** Principal-bound application actors; the binding name is stable across deployments. */
   MCP_SESSIONS: DurableObjectNamespace<HostedMcpSession>;
   MCP_ACCESS_KEYS: DurableObjectNamespace<AccessKeyStore>;
   MCP_QUOTAS: DurableObjectNamespace<ParticipantQuota>;

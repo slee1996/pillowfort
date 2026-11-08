@@ -5,13 +5,20 @@ import { showToast } from "../xp/Toast";
 import type { RoomTheme } from "../../../../src/participant/protocol";
 import { isCredentialSystemMessage } from "../../../../src/participant/roomSecret";
 import { copyTextWithFallback } from "../../services/clipboard";
+import type { MentionPermission } from "../../hooks/useMentionAttention";
 
 interface RoomMenuProps {
   onPickerOpen: (type: string) => void;
   onRequestExit: () => void;
+  mentionNotifications: {
+    enabled: boolean;
+    permission: MentionPermission;
+    requesting: boolean;
+    toggleNotifications: () => Promise<void>;
+  };
 }
 
-export function RoomMenu({ onPickerOpen, onRequestExit }: RoomMenuProps) {
+export function RoomMenu({ onPickerOpen, onRequestExit, mentionNotifications }: RoomMenuProps) {
   const isHost = useGameStore((s) => s.isHost);
   const name = useGameStore((s) => s.name);
   const roomId = useGameStore((s) => s.roomId);
@@ -160,6 +167,27 @@ export function RoomMenu({ onPickerOpen, onRequestExit }: RoomMenuProps) {
         </section>
         <section className="room-tool-section" aria-labelledby="room-transcript-title">
           <h3 id="room-transcript-title">On this device</h3>
+          <button
+            id="btn-mention-notifications"
+            type="button"
+            className="room-tool-action"
+            aria-pressed={mentionNotifications.enabled}
+            aria-describedby="mention-notification-status"
+            disabled={mentionNotifications.requesting || mentionNotifications.permission === "unsupported" || mentionNotifications.permission === "denied"}
+            onClick={() => void mentionNotifications.toggleNotifications()}
+          >
+            {mentionNotifications.requesting ? "Requesting permission…" : mentionNotifications.enabled ? "Turn off mention alerts" : "Enable mention alerts"}
+          </button>
+          <p id="mention-notification-status" role="status">
+            {mentionNotifications.permission === "unsupported"
+              ? "Browser alerts are unsupported here. In-app mention attention still works."
+              : mentionNotifications.permission === "denied"
+                ? "Browser permission denied. Change site settings to allow alerts; in-app attention still works."
+                : mentionNotifications.permission === "granted"
+                  ? `Permission granted. Alerts are ${mentionNotifications.enabled ? "on" : "off"} for this tab and fort.`
+                  : "Alerts are off. Enable them to ask for browser permission."}
+            {" "}Alerts hide message text. This choice is not saved.
+          </p>
           <button type="button" className="room-tool-action" onClick={saveChat}>Save chat</button>
           <button
             type="button"

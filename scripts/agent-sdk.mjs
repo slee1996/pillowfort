@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { PillowfortBrowserAgent } from './agent-browser.mjs';
 import { AgentError } from './agent-common.mjs';
+import { checkRuntime } from './agent-runtime.mjs';
 
 export { AgentError, errorResult, boundedJSON, validateBaseURL, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-common.mjs';
 
@@ -8,6 +9,7 @@ export { AgentError, errorResult, boundedJSON, validateBaseURL, MAX_INPUT_BYTES,
 export class PillowfortAgent extends PillowfortBrowserAgent {
   /** @param {Omit<import('./agent-browser.mjs').BrowserAgentOptions, 'launchBrowser'> & {headed?: boolean}} options */
   constructor({ headed = false, ...options } = {}) {
+    checkRuntime();
     super({
       ...options,
       launchBrowser: async ({ timeout }) => {

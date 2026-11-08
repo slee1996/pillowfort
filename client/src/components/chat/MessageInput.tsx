@@ -8,6 +8,8 @@ import { showToast } from "../xp/Toast";
 import { Button } from "../xp/Button";
 import { FormatToolbar } from "./FormatToolbar";
 import { PeriodIcon } from "../xp/PeriodIcon";
+import { formatMention } from "../../../../src/participant/mentions";
+import { mentionQuery, type MentionQuery } from "../../services/mentionComposer";
 
 let lastTypingSent = 0;
 
@@ -30,6 +32,9 @@ export function MessageInput({
   const gameDialogRef = useRef<HTMLDialogElement>(null);
   const gamesButtonRef = useRef<HTMLButtonElement>(null);
   const [gamesOpen, setGamesOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<MentionQuery | null>(null);
+  const [selectedMention, setSelectedMention] = useState(0);
+  const composingRef = useRef(false);
   const hostAvailable = members.length >= 2 && !!members[0] && members[0] !== name;
 
   useLayoutEffect(() => {
@@ -43,6 +48,34 @@ export function MessageInput({
   useEffect(() => {
     setGamesOpen(false);
   }, [roomId, isHost]);
+
+  useEffect(() => {
+    setSuggestions(null);
+    setSelectedMention(0);
+  }, [roomId, members]);
+
+  useEffect(() => {
+    document.getElementById(`mention-option-${selectedMention}`)?.scrollIntoView({ block: "nearest" });
+  }, [selectedMention, suggestions]);
+
+  const refreshSuggestions = () => {
+    const input = inputRef.current;
+    if (!input || composingRef.current) return;
+    setSuggestions(mentionQuery(input.value, input.selectionStart, input.selectionEnd, members));
+    setSelectedMention(0);
+  };
+
+  const selectMention = (member: string) => {
+    const input = inputRef.current;
+    if (!input || !suggestions) return;
+    const insertion = `${formatMention(member)} `;
+    if (input.value.length - (suggestions.end - suggestions.start) + insertion.length > input.maxLength) return;
+    input.setRangeText(insertion, suggestions.start, suggestions.end, "end");
+    input.focus();
+    setSuggestions(null);
+    setSelectedMention(0);
+    handleInput();
+  };
 
   const closeGames = () => {
     gameDialogRef.current?.close();
@@ -74,10 +107,12 @@ export function MessageInput({
       memberCount: members.length,
     });
     inputRef.current!.value = "";
+    setSuggestions(null);
     inputRef.current!.focus();
   };
 
   const handleInput = () => {
+    refreshSuggestions();
     const now = Date.now();
     if (now - lastTypingSent > 2000) {
       send("typing");
@@ -114,24 +149,74 @@ export function MessageInput({
           ref={inputRef}
           rows={3}
           aria-label="Message"
-          aria-describedby="compose-keyboard-help"
+          aria-describedby="compose-keyboard-help compose-mention-help"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-controls={suggestions ? "mention-suggestions" : undefined}
+          aria-activedescendant={suggestions ? `mention-option-${selectedMention}` : undefined}
           placeholder="Say something…"
           maxLength={2000}
           autoComplete="off"
           enterKeyHint="send"
           className="xp-input message-input-field"
           onKeyDown={(event) => {
-            if (
-              event.key !== "Enter" ||
-              event.shiftKey ||
-              event.nativeEvent.isComposing ||
-              event.nativeEvent.keyCode === 229
-            ) return;
+            if (composingRef.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+            if (suggestions) {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setSuggestions(null);
+                return;
+              }
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                setSelectedMention((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + suggestions.names.length) % suggestions.names.length);
+                return;
+              }
+              if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+                event.preventDefault();
+                if (!event.repeat) selectMention(suggestions.names[selectedMention] ?? suggestions.names[0]!);
+                return;
+              }
+            }
+            if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
             if (!event.repeat) handleSend();
           }}
           onInput={handleInput}
+          onSelect={refreshSuggestions}
+          onBlur={() => setSuggestions(null)}
+          onCompositionStart={() => {
+            composingRef.current = true;
+            setSuggestions(null);
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+            refreshSuggestions();
+          }}
         />
+        {suggestions && (
+          <div id="mention-suggestions" className="mention-suggestions" role="listbox" aria-label="Mention a participant">
+            {suggestions.names.map((member, index) => (
+              <button
+                key={member}
+                id={`mention-option-${index}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === selectedMention}
+                className="mention-suggestion"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => selectMention(member)}
+              >
+                {formatMention(member)}
+              </button>
+            ))}
+          </div>
+        )}
+        <span id="compose-mention-help" className="compose-mention-help">
+          Mention someone with @name or @&quot;display name&quot;. ↑↓ to choose · Enter or Tab to insert · Esc to dismiss.
+        </span>
         <div className="message-compose-actions">
           <div className="message-input-controls">
             <button

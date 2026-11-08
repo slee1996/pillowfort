@@ -6,18 +6,26 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { readAgentResource } from '../scripts/agent-guidance.mjs';
 
 const entrypoint = new URL('../scripts/agent.mjs', import.meta.url).href;
+const sdkEntrypoint = new URL('../scripts/agent-sdk.mjs', import.meta.url).href;
+const runtimeCases = [
+  ['20.20.0', false],
+  ['22.22.99', false], ['22.23.3', false], ['22.23.4', true], ['22.24.0', true],
+  ['23.3.0', false],
+  ['24.21.99', false], ['24.22.0', false], ['24.22.1', true], ['24.23.0', true],
+  ['25.0.0', false],
+  ['26.11.99', false], ['26.12.0', false], ['26.12.1', true], ['26.13.0', true],
+  ['27.0.0', true],
+];
+
+test('unknown agent resources return the MCP 2026 InvalidParams error', async () => {
+  await assert.rejects(readAgentResource('pillowfort://agents/unknown'), { code: -32602 });
+});
 
 test('the CLI refuses unpatched and unsupported Node releases before starting a participant', () => {
-  const cases = [
-    ['22.23.3', false], ['22.23.4', true], ['22.24.0', true],
-    ['23.3.0', false],
-    ['24.22.0', false], ['24.22.1', true], ['24.23.0', true],
-    ['25.0.0', false],
-    ['26.12.0', false], ['26.12.1', true], ['26.13.0', true],
-  ];
-  for (const [version, supported] of cases) {
+  for (const [version, supported] of runtimeCases) {
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
       const version = process.argv[1];
       process.argv.length = 1;
@@ -28,6 +36,61 @@ test('the CLI refuses unpatched and unsupported Node releases before starting a 
     assert.equal(result.status, supported ? 0 : 1, `${version}: ${result.stderr}`);
     if (!supported) {
       assert.equal(JSON.parse(result.stdout).error.code, 'UNSUPPORTED_RUNTIME');
+    }
+  }
+});
+
+test('direct SDK consumers enforce the same runtime boundaries before browser startup or app connection', () => {
+  for (const [version, supported] of runtimeCases) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      const version = process.argv[1];
+      Object.defineProperty(process.versions, 'node', { value: version });
+      const { PillowfortAgent, AgentError, errorResult } = await import(${JSON.stringify(sdkEntrypoint)});
+      const { chromium } = await import('playwright');
+      let launches = 0;
+      chromium.launch = async () => { launches++; throw new Error('A runtime boundary test must not launch Chromium.'); };
+      if (${JSON.stringify(supported)}) {
+        const agent = new PillowfortAgent({ baseURL: 'https://pillowfort.invalid' });
+        assert.ok(agent instanceof PillowfortAgent);
+        await agent.close();
+      } else {
+        assert.throws(() => new PillowfortAgent({ baseURL: 'https://pillowfort.invalid' }), error => {
+          assert.ok(error instanceof AgentError);
+          const result = errorResult(error);
+          assert.equal(result.ok, false);
+          assert.equal(result.error.code, 'UNSUPPORTED_RUNTIME');
+          assert.equal(result.error.retryable, false);
+          assert.match(result.error.message, /requires patched Node/);
+          return true;
+        });
+      }
+      assert.equal(launches, 0);
+    `, version], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(result.status, 0, `${version}: ${result.stderr}`);
+    assert.equal(result.stdout, '', version);
+    assert.equal(result.stderr, '', version);
+  }
+});
+
+test('unsupported CLI runtimes keep structured failures and MCP stdout protocol-safe', () => {
+  for (const command of ['install-browser', 'doctor', 'discover', 'jsonl', 'mcp', 'autonomous']) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      process.argv.length = 1;
+      Object.defineProperty(process.versions, 'node', { value: '24.22.0' });
+      const { main } = await import(${JSON.stringify(entrypoint)});
+      await main([${JSON.stringify(command)}, '--url', 'https://pillowfort.invalid']);
+    `], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(result.status, 1, `${command}: ${result.stderr}`);
+    if (command === 'mcp') {
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /^UNSUPPORTED_RUNTIME: /);
+    } else {
+      const failure = JSON.parse(result.stdout);
+      assert.equal(failure.ok, false);
+      assert.equal(failure.error.code, 'UNSUPPORTED_RUNTIME');
+      assert.equal(failure.error.retryable, false);
+      assert.equal(result.stderr, '');
     }
   }
 });

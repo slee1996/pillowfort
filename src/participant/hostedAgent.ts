@@ -157,7 +157,7 @@ export class PillowfortHostedAgent {
     const session = this.session(sessionName);
     const copied = JSON.parse(boundedJSON(input)) as Record<string, unknown>;
     const paced = typeof copied.roomId === 'string' && session.runtime!.agent.capabilities().some(capability => capability.name === name && capability.roomTraffic);
-    const deadline = Date.now() + this.timeoutMs;
+    const deadline = Date.now() + (name === 'room_next_event' ? MAX_WAIT_MS + 5000 : this.timeoutMs);
     const run = async () => {
       if (session.abort.signal.aborted) throw new AgentError('SESSION_CLOSED', 'The session closed before this action was submitted.');
       if (paced) {
@@ -187,10 +187,24 @@ export class PillowfortHostedAgent {
     return this.call(session, () => session.runtime!.agent.observe());
   }
 
-  wait(name: string, afterRevision: number, timeoutMs = MAX_WAIT_MS): Promise<AgentSnapshot> {
+  sessionSignal(name: string): AbortSignal { return this.session(name).abort.signal; }
+
+  async wait(name: string, afterRevision: number, timeoutMs = MAX_WAIT_MS, { signal }: { signal?: AbortSignal } = {}): Promise<AgentSnapshot> {
     if (!Number.isSafeInteger(afterRevision) || afterRevision < 0 || !Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > MAX_WAIT_MS) throw new AgentError('INVALID_INPUT', 'afterRevision must be a nonnegative safe integer; timeoutMs must be an integer from 0 to 30000.');
     const session = this.session(name);
-    return this.call(session, () => session.runtime!.agent.waitForChange(afterRevision, timeoutMs), timeoutMs + 5000);
+    if (signal?.aborted) throw new AgentError('CANCELLED', 'This change wait was cancelled.');
+    if (!signal) return this.call(session, () => session.runtime!.agent.waitForChange(afterRevision, timeoutMs), timeoutMs + 5000);
+    const waitId = crypto.randomUUID();
+    const abort = () => session.runtime!.agent.cancelWait(waitId);
+    signal.addEventListener('abort', abort, { once: true });
+    try {
+      const snapshot = await this.call(session, () => {
+        if (signal.aborted) throw new AgentError('CANCELLED', 'This change wait was cancelled.');
+        return session.runtime!.agent.waitForChange(afterRevision, timeoutMs, waitId);
+      }, timeoutMs + 5000);
+      if (signal.aborted) throw new AgentError('CANCELLED', 'This change wait was cancelled.');
+      return snapshot;
+    } finally { signal.removeEventListener('abort', abort); }
   }
 
   async closeSession(name: string) {

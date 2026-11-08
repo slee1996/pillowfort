@@ -1,10 +1,10 @@
 {
   "uid": "pillowfort-operational",
   "title": "Pillowfort · Operations and room volume",
-  "description": "Allowlisted HTTP traces and unsampled aggregate room/application-event counts. Best-effort operational signals, not billing, unique-user, or chat-only analytics.",
+  "description": "Allowlisted HTTP traces, unsampled room/application-event counts and hosted MCP tool calls/latency. Best-effort operational signals, not billing, unique-user, or chat-only analytics.",
   "tags": ["pillowfort", "operational"],
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": false,
   "refresh": "30s",
   "timezone": "browser",
@@ -164,6 +164,86 @@
       "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
       "targets": [{"refId": "A", "expr": "sum by (pillowfort_activity) (rate(pillowfort_volume_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_activity=~\"room[.](created|retired)|member[.]admitted\"}[$__rate_interval]))", "legendFormat": "{{pillowfort_activity}}"}]
+    },
+    {
+      "id": 14, "type": "text", "title": "Hosted MCP tool execution",
+      "gridPos": {"x": 0, "y": 46, "w": 24, "h": 4},
+      "options": {
+        "mode": "markdown",
+        "content": "**Hosted-MCP only; unsampled completed tool calls, not HTTP requests or users.** Counts and real execution durations remain enabled at `OTEL_SAMPLE_RATE=0`; sampled diagnostic traces below respect that rate and never add metrics. Tool names are catalog-allowlisted (`_unknown` otherwise); only success/error and fixed error categories are recorded. No arguments, results, content, IDs or client identities. Totals are received calls since collector reset, not selected-range/all-time totals; rate and latency charts use the time picker. Wait tools include their actual wait time. Best-effort export can drop calls; missing data means **No telemetry**, not zero. Counters reset on collector restart; no historical backfill."
+      }
+    },
+    {
+      "id": 15, "type": "table", "title": "Tool calls by tool and outcome · collector totals",
+      "gridPos": {"x": 0, "y": 50, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"showHeader": true},
+      "transformations": [{
+        "id": "organize",
+        "options": {
+          "excludeByName": {"Time": true},
+          "indexByName": {"pillowfort_tool": 0, "pillowfort_outcome": 1, "Value": 2},
+          "renameByName": {"pillowfort_tool": "Tool", "pillowfort_outcome": "Outcome", "Value": "Calls"}
+        }
+      }],
+      "targets": [{
+        "refId": "A", "instant": true, "format": "table",
+        "expr": "sum by (pillowfort_tool, pillowfort_outcome) (pillowfort_mcp_tools_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\"})"
+      }]
+    },
+    {
+      "id": 16, "type": "timeseries", "title": "Tool calls / second · tool and outcome",
+      "gridPos": {"x": 12, "y": 50, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{
+        "refId": "A", "exemplar": false,
+        "expr": "sum by (pillowfort_tool, pillowfort_outcome) (rate(pillowfort_mcp_tools_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\"}[$__rate_interval]))",
+        "legendFormat": "{{pillowfort_tool}} · {{pillowfort_outcome}}"
+      }]
+    },
+    {
+      "id": 17, "type": "timeseries", "title": "Tool errors / second · bounded category",
+      "gridPos": {"x": 0, "y": 58, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{
+        "refId": "A", "exemplar": false,
+        "expr": "sum by (pillowfort_error) (rate(pillowfort_mcp_tools_calls_total{service_name=~\"$service\",deployment_environment_name=\"$environment\",pillowfort_outcome=\"error\"}[$__rate_interval]))",
+        "legendFormat": "{{pillowfort_error}}"
+      }]
+    },
+    {
+      "id": 18, "type": "timeseries", "title": "Tool execution duration · p50 / p95",
+      "gridPos": {"x": 12, "y": 58, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "pillowfort-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "noValue": "No telemetry"}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {
+          "refId": "A", "exemplar": false,
+          "expr": "histogram_quantile(0.50, sum by (le, pillowfort_tool) (rate(pillowfort_mcp_tools_duration_seconds_bucket{service_name=~\"$service\",deployment_environment_name=\"$environment\"}[$__rate_interval])))",
+          "legendFormat": "{{pillowfort_tool}} · p50"
+        },
+        {
+          "refId": "B", "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum by (le, pillowfort_tool) (rate(pillowfort_mcp_tools_duration_seconds_bucket{service_name=~\"$service\",deployment_environment_name=\"$environment\"}[$__rate_interval])))",
+          "legendFormat": "{{pillowfort_tool}} · p95"
+        }
+      ]
+    },
+    {
+      "id": 19, "type": "table", "title": "Sampled tool diagnostics · up to 20 matches",
+      "gridPos": {"x": 0, "y": 66, "w": 24, "h": 10},
+      "datasource": {"type": "tempo", "uid": "pillowfort-tempo"},
+      "options": {"showHeader": true},
+      "targets": [{
+        "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20,
+        "query": "{ resource.service.name =~ \"$service\" && resource.deployment.environment.name = \"$environment\" && name = \"mcp.tool.call\" }"
+      }]
     }
   ],
   "links": [{"title": "Trace lookup in Explore", "url": "/explore?left=%7B%22datasource%22%3A%22pillowfort-tempo%22%7D", "targetBlank": false}]

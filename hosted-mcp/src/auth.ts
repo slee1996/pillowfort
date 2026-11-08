@@ -3,6 +3,7 @@ import { AuthorizationError, CimdFetchError, OAuthProvider, OAuthError, type Aut
 import type { AuthenticatedProps, Env } from './env';
 import { readByteLimitedText } from '../../src/requestBody';
 import catalog from '../../docs/agents/tools.json';
+import { discover } from './discovery';
 
 const SCOPE = 'mcp:rooms';
 export const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -20,7 +21,7 @@ const policies = {
   issuance: { window: 86_400_000, perAddress: 20, global: 20 },
   accessHour: { window: 3_600_000, perAddress: 10, global: 60 },
   accessDay: { window: 86_400_000, perAddress: 30, global: 200 },
-  initialization: { window: 86_400_000, perAddress: 100, global: 500 },
+  participantStart: { window: 86_400_000, perAddress: 100, global: 500 },
 } as const;
 type RateKind = keyof typeof policies;
 type KeyRecord = { id: string; hash: string; label: string; createdAt: number; expiresAt: number; revokedAt: number | null };
@@ -102,9 +103,16 @@ export class AccessKeyStore extends DurableObject<Env> {
     return this.ctx.storage.sql.exec('SELECT id FROM operator_keys WHERE id = ? AND revokedAt IS NULL AND expiresAt > ?', id, Date.now()).toArray().length === 1;
   }
 
-  revoke(id: string): void {
+  expiresAt(id: string): number | null {
+    if (typeof id !== 'string' || !UUID.test(id)) return null;
+    return this.ctx.storage.sql.exec<{ expiresAt: number }>('SELECT expiresAt FROM operator_keys WHERE id = ? AND revokedAt IS NULL AND expiresAt > ?', id, Date.now()).toArray()[0]?.expiresAt ?? null;
+  }
+
+  async revoke(id: string): Promise<void> {
     if (!UUID.test(id)) return;
     this.ctx.storage.sql.exec('UPDATE operator_keys SET revokedAt = COALESCE(revokedAt, ?) WHERE id = ?', Date.now(), id);
+    // Close pending calls and subscriptions, not merely future authenticated POSTs.
+    await this.env.MCP_SESSIONS.get(this.env.MCP_SESSIONS.idFromName(id)).revoke(id);
   }
 
   async allow(kind: RateKind, address: string): Promise<boolean> {
@@ -200,8 +208,13 @@ async function selfServicePreflight(env: Env): Promise<Response> {
       revocation: { method: 'DELETE', url: `${env.PUBLIC_MCP_URL}/access`, authorization: 'Bearer access token' },
       custody: 'Pillowfort and Cloudflare operate the participant and can access its plaintext and in-memory keys.',
     },
-    mcp: { url: env.PUBLIC_MCP_URL, transport: 'streamable-http', authentication: 'self-service bearer or OAuth consent', defaultToolset: 'collaboration', fullToolsetHeader: { 'Pillowfort-Toolset': 'full' } },
-    catalog: 'https://about.pillowfort.xyz/agents/collaboration-tools.json',
+    mcp: {
+      url: env.PUBLIC_MCP_URL, transport: 'streamable-http', protocolVersion: '2026-07-28',
+      discovery: { methods: ['server/discover', 'tools/list'], authentication: 'none' },
+      authentication: 'All other MCP methods require self-service bearer access or OAuth consent.',
+      defaultToolset: 'full',
+    },
+    catalog: 'https://about.pillowfort.xyz/agents/tools.json',
     receiverVerification: 'chat_verify_received', quota,
   }, { headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }
@@ -322,7 +335,7 @@ async function admin(request: Request, env: Env): Promise<Response> {
 }
 
 const apiMethods: Record<string, readonly string[]> = {
-  '/mcp': ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  '/mcp': ['POST', 'OPTIONS'],
   '/mcp/access': ['DELETE', 'OPTIONS'],
   '/access': ['POST', 'OPTIONS'],
 };
@@ -364,10 +377,6 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
             return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
           }
           if (!apiHandler.fetch) return error(503, 'temporarily_unavailable');
-          if (request.method === 'POST' && !request.headers.has('MCP-Session-Id')
-            && !await store(environment).allow('initialization', principalId)) {
-            return error(429, 'rate_limit_exceeded', { 'Retry-After': '3600' });
-          }
           return apiHandler.fetch(request, environment, ctx as ExecutionContext<AuthenticatedProps>);
         },
       },
@@ -433,9 +442,11 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
             providerRequest = new Request(request, { body });
           }
         }
+        const discovery = url.pathname === '/mcp' && request.method === 'POST' && !request.headers.has('Authorization')
+          ? await discover(request.clone() as typeof request) : null;
         const response = url.pathname === '/access'
           ? request.method === 'OPTIONS' ? new Response(null, { status: 204 }) : await selfServiceAccess(request, env)
-          : await providerFor(env).fetch(providerRequest, env, ctx);
+          : discovery ?? await providerFor(env).fetch(providerRequest, env, ctx);
         const headers = new Headers(response.headers);
         headers.delete('Access-Control-Allow-Credentials');
         headers.set('Cache-Control', 'no-store');
@@ -443,9 +454,9 @@ export function createAuthorizedWorker(apiHandler: ExportedHandler<Env, unknown,
         if (methods && request.headers.has('Origin')) {
           headers.set('Access-Control-Allow-Origin', request.headers.get('Origin')!);
           headers.append('Vary', 'Origin');
-          headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-          headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, MCP-Session-Id, MCP-Protocol-Version, Last-Event-ID, Pillowfort-Toolset');
-          headers.set('Access-Control-Expose-Headers', 'MCP-Session-Id, MCP-Protocol-Version, WWW-Authenticate, Retry-After');
+          headers.set('Access-Control-Allow-Methods', methods.join(', '));
+          headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name');
+          headers.set('Access-Control-Expose-Headers', 'MCP-Protocol-Version, WWW-Authenticate, Retry-After');
         }
         return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
       } catch (cause) {

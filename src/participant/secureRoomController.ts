@@ -1704,7 +1704,7 @@ export class SecureRoomController {
       relayContext,
     });
     if (result.kind !== "already-processed") {
-      this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId);
+      this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId, this.replayingBacklog);
       if (result.kind === "inbound-commit" && relayContext.kind === "commit" &&
           relayContext.retirementDeviceId !== undefined) {
         this.consumeRetirementBarrier({
