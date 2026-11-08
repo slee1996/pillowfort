@@ -464,7 +464,7 @@ export function createParticipantAgent({ store, controller, events: participantE
       room: { theme: state.roomTheme, fortPass: state.fortPass ? { themePack: state.fortPass.themePack ?? null } : null, safetyCode: state.roomSafetyCode, host: state.members[0] ?? null,
         members: state.members.slice(0, 20).map(name => ({ name, status: state.memberPresence[name]?.status ?? "available", awayText: state.memberPresence[name]?.awayText ?? null, muted: state.mutedNames.has(name) })),
         hostOffer: state.hostOffer ? { oldHost: state.hostOffer.oldHost } : null,
-        pendingAdmissions: state.isHost ? state.pendingAdmissions.slice(0, 8).map(item => ({ admissionId: item.admissionId, deviceFingerprint: item.deviceFingerprint, status: item.status })) : [], pendingJoinFingerprint: state.pendingJoinFingerprint },
+        pendingAdmissions: state.isHost ? state.pendingAdmissions.slice(0, 8).map(item => ({ admissionId: item.admissionId, deviceFingerprint: item.deviceFingerprint, status: item.status, expiresAt: item.expiresAt })) : [], pendingJoinFingerprint: state.pendingJoinFingerprint },
       messages: visibleMessages(16, Infinity, 16 * 1024), drawings: drawings.slice(-4), typing: [...typing.keys()],
       mentions: ownMentions(state),
       attention: { cursor: attention.cursor(), liveOnly: true, capacity: 128 },
@@ -508,8 +508,8 @@ export function createParticipantAgent({ store, controller, events: participantE
     }
     if (state.roomId && state.isHost && state.pendingAdmissions !== previous.pendingAdmissions) {
       for (const pending of state.pendingAdmissions) {
-        if (!previous.pendingAdmissions.some(old => old.admissionId === pending.admissionId && old.deviceFingerprint === pending.deviceFingerprint && old.status === pending.status)) {
-          attention.push("admission", { admissionId: pending.admissionId, deviceFingerprint: pending.deviceFingerprint, status: pending.status, requiresFreshObservation: true });
+        if (!previous.pendingAdmissions.some(old => old.admissionId === pending.admissionId && old.deviceFingerprint === pending.deviceFingerprint && old.status === pending.status && old.expiresAt === pending.expiresAt)) {
+          attention.push("admission", { admissionId: pending.admissionId, deviceFingerprint: pending.deviceFingerprint, status: pending.status, expiresAt: pending.expiresAt, requiresFreshObservation: true });
         }
       }
       for (const pending of previous.pendingAdmissions) {

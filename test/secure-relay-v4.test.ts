@@ -1760,6 +1760,8 @@ describe("protocol-v4 durable cleanup and bounded disconnects", () => {
       envelope: envelope(state.roomInstance, addCommitId, "group", ids(8)),
     }, { now: tick(clock), nextGrantTokenId: ids() })).state;
     state = await ackAll(state, ids, clock);
+    // Exercise a lost admission-timeout effect while the host is still within its disconnect grace.
+    clock.now = admissionDeadline - 2;
     state = accepted(disconnectSecureRelayDeviceV4(state, host, {
       now: tick(clock), nextGrantTokenId: ids(),
     })).state;
@@ -2227,6 +2229,44 @@ describe("protocol-v4 terminal room control", () => {
     expect(serialized).not.toContain(host.connectionId);
     expect(serialized).not.toContain(admitted.guest.connectionId);
     expect(importSecureRelayStateV4(serialized)).not.toBeNull();
+  });
+});
+
+describe("delayed host admission approval", () => {
+  it("keeps the same admission live for three minutes and retires it after the completion margin", async () => {
+    const { ids, clock, state: initial } = await setupRoom();
+    const guest = actor(ids(), ids(), "invitation");
+    const admissionId = ids();
+    const signaturePublicKey = ids(32);
+    const keyPackage = ids(8);
+    const joinedAt = tick(clock);
+    let state = accepted(await reduceSecureRelayV4(initial, guest, {
+      kind: "join", requestId: admissionId, signaturePublicKey,
+      hello: hello(initial.roomInstance, guest.deviceId, keyPackage),
+      memberBinding: await memberBinding(
+        "admission", initial.roomInstance, guest.deviceId, admissionId, signaturePublicKey, keyPackage, ids,
+      ),
+    }, { now: joinedAt, nextGrantTokenId: ids() })).state;
+    const legacy = structuredClone(state);
+    const legacyGuest = legacy.members.find(member => member.deviceId === guest.deviceId);
+    if (!legacyGuest) throw new Error("Missing pending guest");
+    legacyGuest.admissionExpiresAt = joinedAt + 30_000;
+    const restoredLegacy = importSecureRelayStateV4(exportSecureRelayStateV4(legacy));
+    if (!restoredLegacy) throw new Error("Existing pending admission must survive deployment");
+    const expiredLegacy = accepted(advanceSecureRelayV4(restoredLegacy, { now: joinedAt + 30_000, nextGrantTokenId: ids() })).state;
+    expect(expiredLegacy.members.find(member => member.deviceId === guest.deviceId)?.status).toBe("retired");
+    legacyGuest.admissionExpiresAt = joinedAt + 30_001;
+    expect(importSecureRelayStateV4(JSON.stringify(legacy))).toBeNull();
+    state = accepted(advanceSecureRelayV4(state, { now: joinedAt + 180_000, nextGrantTokenId: ids() })).state;
+    expect(state.members.find(member => member.deviceId === guest.deviceId)).toMatchObject({
+      status: "pending", admissionId, keyPackage,
+    });
+    const restored = importSecureRelayStateV4(exportSecureRelayStateV4(state));
+    expect(restored).not.toBeNull();
+    state = accepted(advanceSecureRelayV4(state, { now: joinedAt + 185_000, nextGrantTokenId: ids() })).state;
+    expect(state.members.find(member => member.deviceId === guest.deviceId)).toMatchObject({
+      status: "retired", admissionId: null, keyPackage: null,
+    });
   });
 });
 

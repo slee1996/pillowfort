@@ -1629,6 +1629,7 @@ export class SecureRoomController {
       admissionId: pending.admissionId,
       deviceFingerprint: pending.deviceFingerprint,
       status: pending.status,
+      expiresAt: pending.expiresAt,
     })));
   }
 

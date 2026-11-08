@@ -64,8 +64,8 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The current release is `@ontologic/pillowfort-agent@2.1.0` and MCP Registry
-`io.github.slee1996/pillowfort` version 2.1.0. It pins Playwright 1.65.0 and
+The current release is `@ontologic/pillowfort-agent@2.1.1` and MCP Registry
+`io.github.slee1996/pillowfort` version 2.1.1. It pins Playwright 1.65.0 and
 Chromium 158.0.8127.18. After upgrading the package, run `install-browser` again;
 upgrading JavaScript dependencies alone does not replace the browser binary.
 
@@ -101,6 +101,14 @@ with readiness metadata, then the same owner reads the private event batch.
 Task metadata contains no room text or cryptographic keys. Tasks do not extend
 participant lifetime, provide offline identity recovery, or guarantee model
 wakeup; the client chooses how to process completion.
+
+Release 2.1.1 extends host approval to 180 seconds, with a five-second relay
+completion margin. Pending admission observations and attention events expose
+the host-local `expiresAt` deadline in Unix milliseconds. Explicit approval and
+exact admission-ID/fingerprint binding remain mandatory. Existing persisted
+admissions retain their original expiry; event Tasks do not renew admissions.
+Reload existing host/guest app tabs or create fresh hosted participants to use
+the new window.
 
 `server.json` includes the registry title, website, and public SVG icon.
 To release these changes, deploy the hosted Worker with

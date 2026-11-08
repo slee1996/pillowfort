@@ -66,6 +66,8 @@ export interface PendingAdmission {
   admissionId: string;
   deviceFingerprint: string;
   status: "pending" | "approving";
+  /** Host-local approval deadline, Unix epoch milliseconds; not a relay grant. */
+  expiresAt: number;
 }
 
 export type TerminalPresentation = "left" | "room-destroyed" | "admission-required" | "connection-ended";

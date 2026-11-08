@@ -20,6 +20,12 @@ Before `admission_approve`, select an expected request under the caller's policy
 
 Out-of-band fingerprint comparison is optional extra assurance unless caller policy requires it. If chosen, obtain the expected peer's current `room.pendingJoinFingerprint` through an independently trusted channel and compare it exactly with the selected host entry's `deviceFingerprint`. Do not approve a mismatch; repeat the comparison after an expired admission or new join attempt. A trusted orchestrator controlling both isolated sessions can compare their direct observations itself. For separately operated agents or humans, use a known trusted channel to bind that extra comparison to the intended recipient. A display name, a message claiming to be the recipient, or possession of the link does not prove identity. Never blindly pick the first pending entry or approve unknown strangers in a loop. A guest cannot self-approve or bypass another host's decision.
 
+New admissions provide a 180-second host-approval window and a 185-second relay
+deadline. Pending observations/events expose the host-local `expiresAt` in Unix
+milliseconds; it is advisory, never approval authority. Fingerprint/ID checks,
+pending-request limits and short order-grant deadlines remain unchanged.
+Existing persisted requests retain their original expiry across deployment.
+
 ## Invitations are credentials
 
 `room_setup` returns the generated room secret and invitation URL. `invitation_export` explicitly exports the current room's secret and link. Both results are sensitive even though ordinary observations omit credentials. Retain them privately only as needed for the task and exact recovery.
@@ -222,9 +228,9 @@ destroy participant identities; use `session_close` after deliberate room cleanu
 Never use a new identity to pretend an ambiguous prior action succeeded. New
 admission still requires current host approval and exact device binding.
 
-Hosted's invariant 59-tool catalog and local MCP's 63-tool catalog are
-discoverability, not authority boundaries; every tool retains its permissions and
-quotas. Native WebMCP alone defaults to a focused catalog and uses `?agent_tools=full`.
+Hosted and local MCP catalogs are discoverability, not authority boundaries;
+every tool retains its permissions and quotas. Native WebMCP alone defaults to
+a focused catalog and uses `?agent_tools=full`.
 `participant_preflight` is advisory and does not prove network readiness or probe
 browser identity locks. `chat_verify_received` reads only this participant's
 retained chat, requires a receiver-local cursor and rejects the sender's own echo.

@@ -6,7 +6,7 @@ Pillowfort.xyz is distinct from Pillowfort.social: it is a small live hangout, n
 
 The app is https://pillowfort.xyz. Product information and documentation are at https://about.pillowfort.xyz. The hosted room MCP endpoint is https://mcp.pillowfort.xyz/mcp: server/discover and tools/list are public without sign-in or a token; execution is authenticated. The marketing CMS /api/agent is a separate, editor-only service, not a room transport.
 
-Current local package: @ontologic/pillowfort-agent@2.1.0. Local MCP runs supported patched Node.js and explicitly installed Playwright Chromium. Hosted discovery exposes the full non-payment catalog without allocating a participant; omit Authorization for anonymous requests. Every other MCP method, including tools/call, resource/prompt methods and subscriptions/listen, requires self-service one-hour bearer access or OAuth consent, without an account or manually issued key. Invalid supplied credentials still fail. Hosted execution runs isolated native participants, not a browser. Native WebMCP uses the current tab in a supporting browser and does not install a polyfill.
+Current local package: @ontologic/pillowfort-agent@2.1.1. Local MCP runs supported patched Node.js and explicitly installed Playwright Chromium. Hosted discovery exposes the full non-payment catalog without allocating a participant; omit Authorization for anonymous requests. Every other MCP method, including tools/call, resource/prompt methods and subscriptions/listen, requires self-service one-hour bearer access or OAuth consent, without an account or manually issued key. Invalid supplied credentials still fail. Hosted execution runs isolated native participants, not a browser. Native WebMCP uses the current tab in a supporting browser and does not install a polyfill.
 
 An authorized agent can host a room, privately invite expected recipients, explicitly approve expected pending requests, collaborate, and end the room. The host must use the selected pendingAdmissions entry admissionId and deviceFingerprint exactly with confirm:true. Out-of-band comparison with the guest current pendingJoinFingerprint is optional extra assurance: if chosen, obtain it over a trusted channel, compare exactly, and do not approve a mismatch. Invitation possession and display names do not prove identity or bypass host approval. Pillowfort exports invitations but does not send email or DMs. Agent/model operators can see the plaintext their admitted participant accesses; hosted participants are under managed custody.
 
@@ -35,12 +35,12 @@ Call session_create with {} and retain data.session, the server-minted opaque pa
 
 ## Connections and distribution
 
-- [Published npm release](https://registry.npmjs.org/%40ontologic%2Fpillowfort-agent/2.1.0): Machine-readable package metadata, runtime requirements, and verified distribution links for @ontologic/pillowfort-agent@2.1.0.
+- [Published npm release](https://registry.npmjs.org/%40ontologic%2Fpillowfort-agent/2.1.1): Machine-readable package metadata, runtime requirements, and verified distribution links for @ontologic/pillowfort-agent@2.1.1.
 - [Latest official MCP Registry record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.slee1996%2Fpillowfort/versions/latest): Published package and hosted transport metadata; catalog discovery is public and execution requires authorization.
-- [MCP distribution manifest](https://about.pillowfort.xyz/agents/server.json): Machine-readable release 2.1.0, package arguments, and remote endpoint; contains no operator credentials.
+- [MCP distribution manifest](https://about.pillowfort.xyz/agents/server.json): Machine-readable release 2.1.1, package arguments, and remote endpoint; contains no operator credentials.
 - [Release identity](https://about.pillowfort.xyz/agents/release.json): Exact source tag, version, and full-catalog SHA-256; compare with app /agents-release.json and hosted /health before running.
 - [Hosted authorization discovery](https://mcp.pillowfort.xyz/.well-known/oauth-protected-resource/mcp): Public OAuth resource metadata, not an access token or room invitation.
-- [Released source code](https://github.com/slee1996/pillowfort/tree/v2.1.0): Product and integration implementation for this distribution.
+- [Released source code](https://github.com/slee1996/pillowfort/tree/v2.1.1): Product and integration implementation for this distribution.
 
 ## Product information
 

@@ -42,7 +42,8 @@ export const MAX_SECURE_RELAY_STATE_BYTES_V4 = 4 * 1024 * 1024;
 export const SECURE_ORDER_GRANT_TTL_MS_V4 = 5_000;
 export const SECURE_APPLICATION_APPROVAL_TTL_MS_V4 = 5_000;
 export const SECURE_COMMIT_APPROVAL_TTL_MS_V4 = 5_000;
-export const SECURE_ADMISSION_TTL_MS_V4 = 30_000;
+// Three minutes for host approval, plus the existing five-second completion margin.
+export const SECURE_ADMISSION_TTL_MS_V4 = 185_000;
 export const SECURE_HOST_TRANSFER_TTL_MS_V4 = 30_000;
 export const SECURE_ACTIVE_DISCONNECT_GRACE_MS_V4 = 120_000;
 
@@ -1430,7 +1431,9 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
     if (member.admissionId === null) continue;
     const joinRecord = replayById.get(member.admissionId);
     if (!joinRecord || joinRecord.kind !== "join-request" || joinRecord.deviceId !== member.deviceId
-      || member.admissionExpiresAt !== joinRecord.acceptedAt + SECURE_ADMISSION_TTL_MS_V4) {
+      // Retain the original deadline of admissions persisted before the window increased.
+      || (member.admissionExpiresAt !== joinRecord.acceptedAt + SECURE_ADMISSION_TTL_MS_V4
+        && member.admissionExpiresAt !== joinRecord.acceptedAt + 30_000)) {
       return null;
     }
     if (member.proofGrant && !recentMessages.some((record) => record.id === member.proofGrant!.tokenId

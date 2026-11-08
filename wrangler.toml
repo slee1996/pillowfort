@@ -29,5 +29,5 @@ enabled = false
 OTEL_ENABLED = "false"
 OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.pillowfort.xyz"
 OTEL_DEPLOYMENT_ENVIRONMENT = "production"
-OTEL_SERVICE_VERSION = "2.1.0"
+OTEL_SERVICE_VERSION = "2.1.1"
 OTEL_SAMPLE_RATE = "0.1"

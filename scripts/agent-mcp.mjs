@@ -102,7 +102,7 @@ export function createAgentMcpServer(options, ownerState) {
     resourceLoader = readAgentResource, maxActiveCalls = 64, jsonSchemaValidator,
     onToolError, observeToolCall, onClose,
   } = options;
-  const server = new Server({ name: 'pillowfort', version: '2.1.0' }, {
+  const server = new Server({ name: 'pillowfort', version: '2.1.1' }, {
     supportedProtocolVersions: [PROTOCOL_VERSION],
     capabilities: { tools: {}, resources: { subscribe: true }, prompts: {}, ...(options.taskStore ? { extensions: { [TASK_EXTENSION]: {} } } : {}) },
     instructions, jsonSchemaValidator,

@@ -1839,7 +1839,14 @@ describe("protocol-v4 durable secure room engine", () => {
       await harness.handleKeyPackage(await makeFrame(unrelatedAdmissionId, new Uint8Array([15, 16, 17])));
       await harness.mapUiAction("admission-approve", { admissionId: stateModule.randomSecureRoomIdV4(16) });
       const wrongAdmissionCannotApprove = grantIntents.length === 0 && addCalls.length === 0;
-      await harness.mapUiAction("admission-approve", { admissionId: approvedAdmissionId });
+      const approvalClock = Date.now;
+      const delayedApprovalAt = approvalClock() + 90_000;
+      Date.now = () => delayedApprovalAt;
+      try {
+        await harness.mapUiAction("admission-approve", { admissionId: approvedAdmissionId });
+      } finally {
+        Date.now = approvalClock;
+      }
       const approvalStillDoesNotAdvanceBeforeGrant = addCalls.length === 0 && grantIntents.length === 1;
       establishAdmissionBarrier = true;
       await grantIntents[0].run({

@@ -206,6 +206,15 @@ Pending admissions cannot send normal group traffic or use the active-member
 resume protocol. Expired, rejected, or inconsistent admissions are cancelled
 and require a fresh admission.
 
+The host allows 180 seconds for explicit approval after receiving a valid
+KeyPackage. The relay admission deadline is 185 seconds from accepting the join,
+retaining a five-second completion margin under timely delivery; network delays
+can reduce that margin. Order and commit approval grants retain their separate
+short deadlines. Participant observations and admission attention expose the
+host-local `expiresAt` deadline, not a relay authorization. Existing persisted
+admissions retain their original deadline rather than being extended on reload.
+
+
 ### Resume
 
 Resume proves possession of the already-active device credential; it does not
