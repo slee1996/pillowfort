@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Protocol Technical Appendix</title>
+  <title>Protocol Technical Appendix — Evidence edition 2</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -28,7 +28,7 @@
 id="pillowfort-v4-cs1-wire-contract-and-failure-semantics">Pillowfort
 v4-CS1: Wire Contract and Failure Semantics</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · 9 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 2 · 9 November 2026
 </div>
 <p>This appendix specifies the consent-based succession profile of
 protocol v4. It separates required wire checks, endpoint persistence,
@@ -38,14 +38,16 @@ for deliberately weakened models, implementation tests, and browser
 measurements. None is an independent security audit or an unbounded
 proof.</p>
 <p><strong>Tested implementation:</strong> <a
-href="https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a"><code>10fe8f8b490c9e890d5a642bc25568e985c2fe8a</code></a>.
+href="https://github.com/slee1996/pillowfort/tree/c726c5eccafacb6fe6c881be3fcc174287c2f86f"><code>c726c5eccafacb6fe6c881be3fcc174287c2f86f</code></a>.
 The <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>, <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>, and <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
-evidence bundle</a> identify the checked scope.</p>
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+evidence bundle</a> identify the checked scope. Retained light-load
+latency and browser-fault records identify their earlier measured
+revision separately.</p>
 <h2 id="a.-profile-and-interoperability">A. Profile and
 interoperability</h2>
 <p><strong>Profile identifier: <code>pf-v4-cs1</code> (9 November
@@ -695,6 +697,69 @@ unavailable.</strong> It cannot forge candidate acceptance, but
 acceptance is not cryptographic evidence that replacement was necessary.
 This consequence follows directly from making the relay the
 connectivity/deadline oracle.</p>
+<h3 id="f.4-terminal-room-retirement">F.4 Terminal room retirement</h3>
+<p>A retired room has no host authority and no succession policy. Both
+explicit shutdown and exhaustion after host loss must clear the previous
+delegation before state validation and persistence. Keeping a signed
+policy after clearing its authorizing host produces an invalid snapshot;
+relaxing validation is not a repair.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Starting state / input</th>
+<th>Guard</th>
+<th>Durable mutation</th>
+<th>Emitted effect or retry</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Current host sends <code>close-room</code></td>
+<td>Authenticated current host; own delivery backlog empty;
+<code>authorizationMessageId</code> references a retained accepted
+application</td>
+<td>Retire members; clear host, succession policy, grant, pending
+transfer/operations and queued orders; retain exact control replay
+record</td>
+<td>Validate and persist before terminal notification</td>
+</tr>
+<tr>
+<td>Retired snapshot stored</td>
+<td>Complete valid terminal state</td>
+<td>Storage commit succeeds</td>
+<td>Send <code>room-retired</code> to authenticated attached devices in
+the retired membership snapshot</td>
+</tr>
+<tr>
+<td>Endpoint receives terminal notice</td>
+<td>Exact room and authenticated transport</td>
+<td>Retire local cryptographic state</td>
+<td>Present terminal screen; ordinary sending remains unavailable</td>
+</tr>
+<tr>
+<td>Exact close request repeated</td>
+<td>Retained request and fingerprint match</td>
+<td>Preserve retirement; do not revive delegation</td>
+<td>Replay terminal outcome</td>
+</tr>
+</tbody>
+</table>
+<p>Applying the signed close application event precedes the relay’s
+durable terminal notice; it is not evidence that retirement was stored.
+The production failure returned <code>persistence-failed</code> before
+that notice. The regression
+<code>persists explicit retirement after a signed succession policy was installed</code>
+failed before correction and now checks export/import, absent
+delegation, retired members and exact retry. A production browser
+execution at <code>c726c5e</code> confirms the terminal screen after an
+acknowledged signed policy. This concrete serialization path is not
+represented in the reduced TLC models.</p>
 <h2 id="g.-executed-model-scope-and-implementation-mapping">G. Executed
 model scope and implementation mapping</h2>
 <p>The models implement the existing plan’s stages: M1 delivery; M2
@@ -772,45 +837,62 @@ new policy</td>
 path</td>
 <td>No epoch merge or Byzantine agreement claim</td>
 </tr>
+<tr>
+<td>Explicit room retirement</td>
+<td>Signed-policy shutdown regression; strict state export/import and
+exact retry; production terminal-screen execution</td>
+<td>Concrete serialization/notification path is not modeled by TLC</td>
+</tr>
 </tbody>
 </table>
 <h2 id="h.-reproduction-and-measurement-interpretation">H. Reproduction
 and measurement interpretation</h2>
+<h3 id="h.1-current-implementation-and-models">H.1 Current
+implementation and models</h3>
 <pre><code>git clone https://github.com/slee1996/pillowfort.git
 cd pillowfort
-git checkout --detach 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+git checkout --detach c726c5eccafacb6fe6c881be3fcc174287c2f86f
 npm ci
 npm --prefix client ci
 npx playwright install chromium
 npm run check
-bun test test/secure-relay-v4.test.ts --test-name-pattern &#39;M4 successor crash boundaries&#39;
+bun test ./test/secure-game-reducer.test.ts ./test/secure-relay-v4.test.ts ./test/secure-relay-persistence-v4.test.ts ./test/secure-transport-v4.test.ts ./test/application-events-v4.test.ts
+bun test ./test/secure-relay-v4.test.ts --test-name-pattern &#39;persists explicit retirement after a signed succession policy&#39;
 curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar --output /tmp/tla2tools-1.7.4.jar
-python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models
-bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-benchmarks
+python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models</code></pre>
+<p>Use Node/Bun versions required by the lockfiles, Java 21 or
+compatible, the pinned TLC JAR hash enforced by the runner, and Chromium
+for pinned Playwright 1.65.0. The source archive omits the earlier
+<code>paper/</code> publication subtree, not runtime or test inputs.
+Cloning the pinned commit includes that subtree; explicit
+<code>./test/...</code> selection keeps archived source copies out of
+test discovery.</p>
+<h3 id="h.2-retained-light-load-latency-and-browser-fault-records">H.2
+Retained light-load latency and browser-fault records</h3>
+<p>The latency samples and four browser-fault executions are retained
+from <code>10fe8f8b490c9e890d5a642bc25568e985c2fe8a</code>; neither is
+presented as a new measurement of <code>c726c5e</code>. From the clone
+above, reproduce that earlier environment separately:</p>
+<pre><code>git worktree add ../pillowfort-latency-10fe8f8b490c 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+cd ../pillowfort-latency-10fe8f8b490c
+npm ci
+npm --prefix client ci
+npm run build
+bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-light-load
 bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-browser-faults</code></pre>
-<p>Use Node/Bun versions required by the checked lockfiles, Java 21 or
-compatible, the pinned TLC JAR hash enforced by the runner, and the
-Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact
-generated configurations, sample arrays and platform data are included
-in the public evidence artifact. The browser script uses temporary local
-rooms, actual host approval and explicit candidate acceptance; it
-neither disables production rate limits nor shortens the 120-second
-grace.</p>
-<p>Latency is measured from UI submission to observed application in a
-recipient DOM. It includes grant exchange, persistence, MLS, host
-preview, queueing and rendering. The slow-host profile adds 100 ms
-before delivering each host preview without changing cryptography. Each
-run sends one message at a time, then waits 500 ms after completion;
-there is no catch-up burst after a scheduler stall. Reported throughput
-is the <strong>achieved closed-loop paced rate</strong>, not a
-maximum-capacity or stable open-loop two-messages/second claim.
-Measurements use one local machine and shared Chromium/hardware; they
-are not WAN, Cloudflare or mobile results.</p>
+<p>Latency runs submit one message at a time, then wait 500 ms after
+completed delivery. That quiet interval is outside the latency sample
+and is not a production protocol delay. Samples include grant exchange,
+persistence, MLS, host preview, queueing and recipient DOM application.
+The delayed-host profile adds 100 ms before each host preview. These
+local, shared-hardware runs characterize light-load latency, not
+throughput capacity, WAN behavior or mobile performance. Original raw
+paced-rate fields remain in the retained JSON for provenance; the paper
+does not report them as capacity evidence.</p>
 <p>Quantiles use nearest-rank selection: sort the 20 samples and select
 index <code>ceil(p*n)-1</code>. The raw report’s <code>medianMs</code>
-field is that p50 estimate (the lower central observation for an even
-sample count), not the average of the central pair. Retain all sample
-values when comparing estimators or reproducing the table.</p>
+is that p50 estimate, not the average of the central pair. Retain the
+full sample arrays when comparing estimators.</p>
 <h2 id="i.-related-designs">I. Related designs</h2>
 <table>
 <colgroup>

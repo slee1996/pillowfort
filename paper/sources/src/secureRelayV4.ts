@@ -4299,6 +4299,7 @@ export async function reduceSecureRelayV4(
     state.pendingApplication = null;
     state.pendingCommit = null;
     state.pendingHostTransfer = null;
+    delete state.hostSuccession;
     state.pendingZombieRemovals = [];
     state.orderQueue = [];
     recordReplay(state, frame.requestId, "close-room", actor.deviceId, now, {

@@ -2234,6 +2234,34 @@ describe("protocol-v4 terminal room control", () => {
     expect(serialized).not.toContain(admitted.guest.connectionId);
     expect(importSecureRelayStateV4(serialized)).not.toBeNull();
   });
+
+  it("persists explicit retirement after a signed succession policy was installed", async () => {
+    const setup = await successionRoom();
+    expect(setup.state.hostSuccession).toBeDefined();
+    const ordered = await requestGrant(setup.state, setup.host, setup.ids, setup.clock);
+    const authorization = applicationFrame(ordered.state, ordered.grant, setup.ids);
+    let state = accepted(await reduceSecureRelayV4(ordered.state, setup.host, authorization, {
+      now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+    })).state;
+    state = await ackAll(state, setup.ids, setup.clock);
+    const frame = {
+      kind: "close-room" as const, v: 4 as const, suite: 1 as const,
+      roomInstance: state.roomInstance, requestId: setup.ids(),
+      authorizationMessageId: authorization.envelope.messageId,
+    };
+    const closed = accepted(await reduceSecureRelayV4(state, setup.host, frame, {
+      now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+    }));
+    const restored = importSecureRelayStateV4(exportSecureRelayStateV4(closed.state));
+    expect(restored?.lifecycle).toBe("retired");
+    expect(restored?.hostDeviceId).toBeNull();
+    expect(restored?.hostSuccession).toBeUndefined();
+    expect(restored?.members.every(member => member.status === "retired")).toBe(true);
+    const retry = accepted(await reduceSecureRelayV4(restored!, setup.host, frame, {
+      now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+    }));
+    expect(effect(retry.effects, "room-retired")).toEqual({ type: "room-retired" });
+  });
 });
 
 describe("delayed host admission approval", () => {

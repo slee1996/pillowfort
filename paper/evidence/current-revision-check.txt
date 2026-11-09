@@ -1,3 +1,25 @@
+npm warn deprecated @opentelemetry/sdk-trace-base@2.11.0: Use @opentelemetry/sdk-trace package
+
+added 67 packages in 2s
+npm warn install-scripts 3 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn install-scripts   workerd@1.20261023.1 (postinstall: node install.js)
+npm warn install-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+
+added 71 packages in 802ms
+npm warn install-scripts 2 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   esbuild@0.25.12 (postinstall: node install.js)
+npm warn install-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+bun test v1.4.4 (38afee6c8)
+
+ 87 pass
+ 0 fail
+ 746 expect() calls
+Ran 87 tests across 5 files. [566.00ms]
 
 > pillowfort@0.0.1 check
 > npm run typecheck && npm test && npm run build && npm run agent:catalog:check
@@ -56,35 +78,35 @@ test/worker.test.ts:
  316 pass
  0 fail
  1557 expect() calls
-Ran 316 tests across 11 files. [26.11s]
+Ran 316 tests across 11 files. [26.49s]
 
 > pillowfort@0.0.1 test:security
 > node scripts/run-security-tests.mjs
 
-✔ unknown agent resources return the MCP 2026 InvalidParams error (0.935125ms)
-✔ the CLI refuses unpatched and unsupported Node releases before starting a participant (3914.750417ms)
-✔ direct SDK consumers enforce the same runtime boundaries before browser startup or app connection (3120.937125ms)
-✔ unsupported CLI runtimes keep structured failures and MCP stdout protocol-safe (1447.333542ms)
-✔ packaging changed documentation cannot replace a published versioned archive (748.048208ms)
-✔ release gate rejects missing-tool against the real participant runtime (127.894167ms)
-✔ release gate rejects wrong-schema against the real participant runtime (119.129209ms)
-✔ release gate rejects wrong-read-only against the real participant runtime (131.528542ms)
-(node:41900) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/spencerlee/pillowfort/test/replay-persistence.node.ts is not specified and it doesn't parse as CommonJS.
+✔ unknown agent resources return the MCP 2026 InvalidParams error (0.904875ms)
+✔ the CLI refuses unpatched and unsupported Node releases before starting a participant (3887.115584ms)
+✔ direct SDK consumers enforce the same runtime boundaries before browser startup or app connection (3103.024875ms)
+✔ unsupported CLI runtimes keep structured failures and MCP stdout protocol-safe (1432.83875ms)
+✔ packaging changed documentation cannot replace a published versioned archive (729.535833ms)
+✔ release gate rejects missing-tool against the real participant runtime (143.861875ms)
+✔ release gate rejects wrong-schema against the real participant runtime (121.787583ms)
+✔ release gate rejects wrong-read-only against the real participant runtime (124.742917ms)
+(node:94348) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-paper-r2-2ll7wouv/test/replay-persistence.node.ts is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
-To eliminate this warning, add "type": "module" to /Users/spencerlee/pillowfort/package.json.
+To eliminate this warning, add "type": "module" to /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-paper-r2-2ll7wouv/package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
 ▶ durable replay and cryptographic state
-  ✔ derives opaque v4 store keys and erases secrets without erasing replay tombstones (565.92375ms)
-  ✔ rejects the same replay position after a persistent browser profile restarts (348.283208ms)
-  ✔ serializes concurrent compare-and-advance operations across tabs (256.705167ms)
-  ✔ uses revision CAS for opaque state and migrates one room from the strict v1 ledger (208.588458ms)
-  ✔ bounds provisional identities without evicting established or ambiguous state (233.31575ms)
-  ✔ fails closed for unavailable, corrupt, saturated, and transaction-failing storage (217.095833ms)
-✔ durable replay and cryptographic state (1892.712458ms)
+  ✔ derives opaque v4 store keys and erases secrets without erasing replay tombstones (586.625542ms)
+  ✔ rejects the same replay position after a persistent browser profile restarts (341.336875ms)
+  ✔ serializes concurrent compare-and-advance operations across tabs (237.031625ms)
+  ✔ uses revision CAS for opaque state and migrates one room from the strict v1 ledger (190.872292ms)
+  ✔ bounds provisional identities without evicting established or ambiguous state (216.688209ms)
+  ✔ fails closed for unavailable, corrupt, saturated, and transaction-failing storage (194.834417ms)
+✔ durable replay and cryptographic state (1840.838666ms)
 ▶ single-writer room cryptographic lock
-  ✔ reports busy, cooperatively transfers ownership, and aborts the old lease (263.95075ms)
-  ✔ does not silently fall back when Web Locks or takeover signaling are unavailable (233.701458ms)
-✔ single-writer room cryptographic lock (497.909292ms)
+  ✔ reports busy, cooperatively transfers ownership, and aborts the old lease (230.012334ms)
+  ✔ does not silently fall back when Web Locks or takeover signaling are unavailable (199.228042ms)
+✔ single-writer room cryptographic lock (429.47875ms)
 ℹ tests 16
 ℹ suites 2
 ℹ pass 16
@@ -92,17 +114,17 @@ To eliminate this warning, add "type": "module" to /Users/spencerlee/pillowfort/
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 9715.832792
+ℹ duration_ms 9689.289125
 bun test v1.4.4 (38afee6c8)
 
  5 pass
  0 fail
  36 expect() calls
-Ran 5 tests across 2 files. [1055.00ms]
+Ran 5 tests across 2 files. [1043.00ms]
 bun test v1.4.4 (38afee6c8)
 
 test/secure-room-engine.test.ts:
-6:52:51 PM [vite] http proxy error: /analytics
+8:21:47 PM [vite] http proxy error: /analytics
 AggregateError
     at new NodeAggregateError (internal:shared:58:5)
     at internalConnectMultiple (node:net:1919:18)
@@ -112,56 +134,56 @@ AggregateError
  26 pass
  0 fail
  306 expect() calls
-Ran 26 tests across 1 file. [2.41s]
+Ran 26 tests across 1 file. [2.40s]
 bun test v1.4.4 (38afee6c8)
 
 test/security-boundaries.test.ts:
-pillowfort :57509
+pillowfort :65351
 [analytics] {"event":"stripe_webhook_failed","props":{"reason":"bad_signature","status":400}}
 [analytics] {"event":"room_setup_failed","props":{"reason":"paid_redemption","surface":"local"}}
 [analytics] {"event":"room_setup_failed","props":{"reason":"paid_redemption","surface":"local"}}
-pillowfort :57514
+pillowfort :65356
 [analytics] {"event":"stripe_webhook_failed","props":{"reason":"fulfillment_failed","status":409}}
-pillowfort :57516
+pillowfort :65358
 [analytics] {"event":"ws_rejected","props":{"reason":"invalid_room","surface":"local","status":400}}
 [analytics] {"event":"ws_rejected","props":{"reason":"invalid_room","surface":"local","status":400}}
 [analytics] {"event":"ws_rejected","props":{"reason":"unexpected_parameters","surface":"local","status":400}}
-pillowfort :57518
+pillowfort :65360
 [analytics] {"event":"probe_blocked","props":{"reason":"traversal","surface":"http","status":404}}
-pillowfort :57520
-pillowfort :57522
-pillowfort :57524
+pillowfort :65362
+pillowfort :65364
+pillowfort :65366
 [analytics] {"event":"room_join_failed","props":{"reason":"bad_auth","surface":"local"}}
 [analytics] {"event":"room_join_failed","props":{"reason":"bad_auth","surface":"local"}}
-pillowfort :57527
+pillowfort :65369
 [analytics] {"event":"fort_pass_status_checked","props":{"source":"test"}}
 [analytics] {"event":"ws_rejected","props":{"reason":"bad_origin","surface":"local","status":403}}
 
  15 pass
  0 fail
  137 expect() calls
-Ran 15 tests across 1 file. [168.00ms]
+Ran 15 tests across 1 file. [132.00ms]
 bun test v1.4.4 (38afee6c8)
 
 test/secure-server-runtime-v4.test.ts:
-pillowfort :57529
+pillowfort :65371
 [analytics] {"event":"ws_rejected","props":{"reason":"rate_limited","surface":"local","status":429}}
-pillowfort :57538
-pillowfort :57551
-pillowfort :57554
-pillowfort :57557
-pillowfort :57566
+pillowfort :65380
+pillowfort :65394
+pillowfort :65397
+pillowfort :65400
+pillowfort :65409
 
  9 pass
  0 fail
  444 expect() calls
-Ran 9 tests across 1 file. [1241.00ms]
+Ran 9 tests across 1 file. [1227.00ms]
 bun test v1.4.4 (38afee6c8)
 
- 175 pass
+ 176 pass
  0 fail
- 2301 expect() calls
-Ran 175 tests across 18 files. [2.71s]
+ 2307 expect() calls
+Ran 176 tests across 18 files. [2.66s]
 security gate passed across 25 isolated test files
 
 > pillowfort@0.0.1 build
@@ -195,7 +217,7 @@ dist/assets/index-xUK0ffpx.js                      736.46 kB │ gzip: 203.69 kB
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 838ms
+✓ built in 819ms
 
 > pillowfort@0.0.1 agent:catalog:check
 > bun scripts/check-agent-catalog.ts
