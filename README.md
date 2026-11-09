@@ -489,6 +489,10 @@ This runs the stable core test suite:
 - gameplay protocol tests
 - end-to-end invite flow checks
 
+The isolated security runner passes explicit `./test/...` paths to Bun. Bare
+paths are substring filters and can also discover archived evidence copies under
+`paper/sources/test/`; those copies are documentation, not additional test suites.
+
 ### Typecheck
 
 ```bash

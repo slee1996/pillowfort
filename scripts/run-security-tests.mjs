@@ -49,7 +49,7 @@ let passedFiles = 2;
 for (const files of groups) {
   const result = spawnSync(
     "bun",
-    ["test", "--timeout", "60000", "--max-concurrency", "1", ...files],
+    ["test", "--timeout", "60000", "--max-concurrency", "1", ...files.map(file => `./${file}`)],
     { cwd: repositoryRoot, stdio: "inherit" },
   );
   if (result.error) throw result.error;
