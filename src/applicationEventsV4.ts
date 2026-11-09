@@ -53,6 +53,8 @@ export type SecureApplicationContentV4 =
   | { type: "host-transfer"; action: "offer"; targetDeviceId: string }
   | { type: "host-transfer"; action: "accept"; authorizationId: string }
   | { type: "host-transfer"; action: "reject" }
+  | { type: "host-succession-policy"; deviceIds: string[] }
+  | { type: "host-succession"; action: "accept" | "reject"; policyEventId: string; authorizationId: string }
   | { type: "room-close"; reason: string }
   | { type: "queue"; action: "enqueue"; requestId: string; game: SecureGameKindV4; targetDeviceId?: string }
   | { type: "queue"; action: "cancel"; requestId: string }
@@ -199,6 +201,8 @@ export interface SecureRoomStateSnapshotV4 {
   revision: number;
   hostDeviceId: string | null;
   pendingHostDeviceId: string | null;
+  /** Signed internal delegation; never a user-facing succession queue. */
+  hostSuccession?: { eventId: string; hostDeviceId: string; deviceIds: string[] };
   /** Members whose authenticated leave/ejection is awaiting an MLS Remove. */
   pendingRemovalDeviceIds: string[];
   /** Exact current MLS-roster establishment bindings, sorted by device id. */
@@ -389,6 +393,14 @@ function isContent(value: unknown): value is SecureApplicationContentV4 {
         (value.strokeStart === undefined || value.strokeStart === true);
     case "theme":
       return hasExactKeys(value, ["type", "theme"]) && typeof value.theme === "string" && THEMES.has(value.theme);
+    case "host-succession-policy":
+      return hasExactKeys(value, ["type", "deviceIds"]) &&
+        isStrictArray(value.deviceIds, MAX_SECURE_MEMBERS) && value.deviceIds.every(isDeviceId) &&
+        new Set(value.deviceIds).size === value.deviceIds.length;
+    case "host-succession":
+      return hasExactKeys(value, ["type", "action", "policyEventId", "authorizationId"]) &&
+        (value.action === "accept" || value.action === "reject") &&
+        isEventId(value.policyEventId) && isEventId(value.authorizationId);
     case "pillow-toss":
       return hasExactKeys(value, ["type", "targetDeviceId"]) && isDeviceId(value.targetDeviceId);
     case "host-transfer":
@@ -565,7 +577,7 @@ function isSecureRoomStateSnapshotUncheckedV4(value: unknown): value is SecureRo
   if (!isPlainRecord(value) || !hasExactKeys(value, [
     "v", "roomInstance", "logicalOrder", "revision", "hostDeviceId", "pendingHostDeviceId", "pendingRemovalDeviceIds", "membershipAdmissionBindings", "theme", "closedReason",
     "members", "messages", "drawings", "queue", "vote", "rps", "ttt", "saboteur", "leaderboards", "seenEventIds",
-  ])) return false;
+  ], ["hostSuccession"])) return false;
   if (value.v !== SECURE_ROOM_PROTOCOL_VERSION || !isFixedBase64Url(value.roomInstance, SECURE_ROOM_ID_BYTES) ||
       !isSafeCounter(value.logicalOrder, true) || !isSafeCounter(value.revision, true) || (value.revision as number) < (value.logicalOrder as number) ||
       !(value.hostDeviceId === null || isDeviceId(value.hostDeviceId)) ||
@@ -591,6 +603,14 @@ function isSecureRoomStateSnapshotUncheckedV4(value: unknown): value is SecureRo
       !isStrictArray(value.seenEventIds, MAX_SECURE_SEEN_EVENT_IDS) || !value.seenEventIds.every(isEventId) ||
       new Set(value.seenEventIds).size !== value.seenEventIds.length) return false;
   const state = value as unknown as SecureRoomStateSnapshotV4;
+  if (state.hostSuccession !== undefined) {
+    const policy = state.hostSuccession;
+    if (!isPlainRecord(policy) || !hasExactKeys(policy, ["eventId", "hostDeviceId", "deviceIds"]) ||
+        !isEventId(policy.eventId) || !isDeviceId(policy.hostDeviceId) || policy.hostDeviceId !== state.hostDeviceId ||
+        !isStrictArray(policy.deviceIds, MAX_SECURE_MEMBERS) || !policy.deviceIds.every(isDeviceId) ||
+        policy.deviceIds.includes(policy.hostDeviceId) ||
+        new Set(policy.deviceIds).size !== policy.deviceIds.length) return false;
+  }
   const memberIds = new Set(state.members.map((member) => member.deviceId));
   const bindingIds = new Set(state.membershipAdmissionBindings.map((binding) => binding.deviceId));
   if (!state.membershipAdmissionBindings.every((binding, index) => index === 0 ||

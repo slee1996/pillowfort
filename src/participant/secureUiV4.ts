@@ -88,6 +88,7 @@ export interface SecureRoomUiV4 {
     state: SecureRoomStateSnapshotV4,
     effects: readonly SecureReducerEffectV4[],
     ownDeviceId: string,
+    replayed?: boolean,
   ): void;
   resetSecureRoomUiV4(): void;
 }
@@ -235,6 +236,7 @@ function applySecureRoomUiV4(
   state: SecureRoomStateSnapshotV4,
   effects: readonly SecureReducerEffectV4[],
   ownDeviceId: string,
+  replayed = false,
 ): void {
   if (currentRoomInstance !== state.roomInstance) return;
   const storeBefore = participantStore.getState();
@@ -261,7 +263,7 @@ function applySecureRoomUiV4(
       }
       case "chat":
         if (rememberDisplayedId(displayedMessageIds, effect.eventId) && !store.mutedNames.has(effect.displayName)) {
-          store.addChatMessage(effect.displayName, effect.text, effect.style ?? undefined);
+          store.addChatMessage(effect.displayName, effect.text, effect.style ?? undefined, replayed);
           if (store.minimized) store.incrementUnread();
           events.emit("pf-sound", { kind: "message" });
         }

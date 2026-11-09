@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AgentError, boundedJSON, validateBaseURL, MAX_OUTPUT_BYTES, MAX_WAIT_MS } from './agent-common.mjs';
 const SESSION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const delay = (ms, signal) => new Promise((resolve, reject) => {
@@ -70,6 +71,10 @@ export class PillowfortBrowserAgent {
     if (!this.#starting) {
       this.#starting = (async () => {
         this.#browser = await this.#launchBrowser({ timeout: this.#timeoutMs });
+        this.#browser.on('disconnected', () => {
+          for (const session of this.#sessions.values()) session.actionAbort?.abort();
+          this.#discovery?.actionAbort.abort();
+        });
         if (this.#closed) {
           await this.#browser.close();
           throw new AgentError('CLOSED', 'The SDK closed during browser startup.');
@@ -105,7 +110,7 @@ export class PillowfortBrowserAgent {
       try {
         await page.waitForFunction(() => {
           const bridge = window.pillowfortAgent;
-          return bridge?.version === 1 && ['capabilities', 'execute', 'observe', 'waitForChange'].every(name => typeof bridge[name] === 'function');
+          return bridge?.version === 1 && ['capabilities', 'execute', 'observe', 'waitForChange', 'cancelWait'].every(name => typeof bridge[name] === 'function');
         }, null, { timeout: this.#timeoutMs });
       } catch {
         throw new AgentError('BRIDGE_UNAVAILABLE', 'Agent bridge v1 is absent. Serve the updated Pillowfort client at the selected URL; the SDK adds ?agent=1.', true);
@@ -241,7 +246,7 @@ export class PillowfortBrowserAgent {
     const session = this.#session(sessionName);
     if (!this.#roomTrafficActions) await this.capabilities(sessionName);
     input = JSON.parse(boundedJSON(input));
-    const deadline = Date.now() + this.#timeoutMs;
+    const deadline = Date.now() + (name === 'room_next_event' ? MAX_WAIT_MS + 5000 : this.#timeoutMs);
     const paced = typeof input.roomId === 'string' && this.#roomTrafficActions.has(name);
     const run = async () => {
       if (paced) {
@@ -277,11 +282,32 @@ export class PillowfortBrowserAgent {
 
   observe(name) { return this.#call(this.#session(name), 'observe', []); }
 
-  wait(name, afterRevision, timeoutMs = MAX_WAIT_MS) {
+  sessionSignal(name) { return this.#session(name).actionAbort.signal; }
+
+  async wait(name, afterRevision, timeoutMs = MAX_WAIT_MS, { signal } = {}) {
     if (!Number.isSafeInteger(afterRevision) || afterRevision < 0 || !Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > MAX_WAIT_MS) {
       throw new AgentError('INVALID_INPUT', 'afterRevision must be a nonnegative safe integer; timeoutMs must be an integer from 0 to 30000.');
     }
-    return this.#call(this.#session(name), 'waitForChange', [afterRevision, timeoutMs], timeoutMs + 5_000);
+    const session = this.#session(name);
+    if (signal?.aborted) throw new AgentError('CANCELLED', 'This change wait was cancelled.');
+    if (!signal) return this.#call(session, 'waitForChange', [afterRevision, timeoutMs], timeoutMs + 5_000);
+    const waitId = randomUUID();
+    // Start registration before the cancellation evaluation; both use this exact page.
+    const waiting = this.#call(session, 'waitForChange', [afterRevision, timeoutMs, waitId], timeoutMs + 5_000);
+    let cancellation;
+    const abort = () => {
+      cancellation ??= session.page.evaluate(id => window.pillowfortAgent.cancelWait(id), waitId).catch(() => {});
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    try {
+      const snapshot = await waiting;
+      if (signal.aborted) throw new AgentError('CANCELLED', 'This change wait was cancelled.');
+      return snapshot;
+    } finally {
+      signal.removeEventListener('abort', abort);
+      await cancellation;
+    }
   }
 
   async #openCMS() {

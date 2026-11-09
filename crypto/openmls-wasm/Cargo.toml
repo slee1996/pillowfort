@@ -23,14 +23,21 @@ zeroize = "=1.9.0"
 [dev-dependencies]
 hpke-rs = { version = "=0.6.1", path = "vendor/hpke-rs" }
 hpke-rs-rust-crypto = "=0.6.1"
+hpke-rs-crypto = "=0.6.1"
 
 # hpke-rs 0.6.1 unconditionally pulls vulnerable libcrux-sha3 solely for
 # experimental PQ key derivation. Pillowfort only enables MLS ciphersuite 1,
 # so this provenance-pinned fork removes that unreachable surface while
 # preserving the upstream RFC 9180 classical implementation.
+# Suite-1 provider/signer/backend and maintained timer patches are documented
+# in vendor/hpke-rs/PROVENANCE.md; the storage fork retains its zeroizing patch.
 [patch.crates-io]
 hpke-rs = { path = "vendor/hpke-rs" }
 openmls_memory_storage = { path = "vendor/openmls-memory-storage" }
+openmls_rust_crypto = { path = "vendor/openmls-rust-crypto" }
+openmls_basic_credential = { path = "vendor/openmls-basic-credential" }
+hpke-rs-rust-crypto = { path = "vendor/hpke-rs-rust-crypto" }
+fluvio-wasm-timer = { path = "vendor/fluvio-wasm-timer" }
 
 [profile.release]
 codegen-units = 1

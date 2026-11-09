@@ -1,82 +1,272 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { AgentError, errorResult, MAX_INPUT_BYTES } from './agent-common.mjs';
-import { createAgentToolRegistry } from './agent-tools.mjs';
+import { Server, createMcpHandler, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { AgentError, boundedJSON, errorResult, MAX_INPUT_BYTES, MAX_WAIT_MS } from './agent-common.mjs';
+import { createAgentToolRegistry, getAgentParticipantScope } from './agent-tools.mjs';
 import { AGENT_INSTRUCTIONS, AGENT_RESOURCES, listAgentPrompts, readAgentResource, getAgentPrompt } from './agent-guidance.mjs';
+import { createEventTasks, TASK_EXTENSION, taskParams } from './agent-event-tasks.mjs';
 
-/** @typedef {import('@modelcontextprotocol/sdk/server/index.js').Server} PillowfortMcpServer */
+/** @typedef {import('@modelcontextprotocol/server').Server} PillowfortMcpServer */
 
-/** Dynamic JSON Schema catalogs require the SDK's lower-level Server API. */
-export function createAgentMcpServer({
-  agent, tools = [], instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
-  resourceLoader = readAgentResource, roomTools, includeCMS = true, maxActiveCalls = 64, jsonSchemaValidator, onToolError,
-}) {
-  const server = new Server({ name: 'pillowfort', version: '1.1.2' }, {
-    capabilities: { tools: {}, resources: {}, prompts: {} },
-    instructions,
-    jsonSchemaValidator,
-  });
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources }));
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
-  server.setRequestHandler(ReadResourceRequestSchema, async request => ({ contents: [await resourceLoader(request.params.uri)] }));
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listAgentPrompts() }));
-  server.setRequestHandler(GetPromptRequestSchema, async request => getAgentPrompt(request.params.name, request.params.arguments, { resourceLoader, resourceDefinitions: resources }));
+const PROTOCOL_VERSION = '2026-07-28';
+const MAX_WIRE_BYTES = MAX_INPUT_BYTES + 16 * 1024;
+const MENTION_URI = /^pillowfort:\/\/sessions\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/mentions$/;
+const MENTION_TEMPLATE = {
+  uriTemplate: 'pillowfort://sessions/{session}/mentions', name: 'session-mentions',
+  title: 'Live participant mentions', mimeType: 'application/json',
+  description: 'Bounded own-mention chat for an owner-bound opaque participant handle. Ephemeral and live-only, not an offline inbox. Opt in with subscriptions/listen resourceSubscriptions; updates contain only the URI. Participant closure or expiry ends live delivery.',
+};
+const PUBLIC_CACHE = { ttlMs: 60_000, cacheScope: 'public' };
+const PRIVATE_CACHE = { ttlMs: 0, cacheScope: 'private' };
+
+function unavailableParticipant() {
+  return new ProtocolError(ProtocolErrorCode.InvalidParams, 'This participant handle is unavailable. Use session_list or session_create.');
+}
+
+function mentionParticipant(scope, uri) {
+  const match = typeof uri === 'string' && MENTION_URI.exec(uri);
+  if (!match || match[0] !== uri) throw unavailableParticipant();
+  try { return scope.require(match[1]); }
+  catch { throw unavailableParticipant(); }
+}
+
+/** Participant watchers belong to the owner, never to an HTTP exchange or listen stream. */
+function createOwnerState(options, notify) {
+  const { agent } = options;
+  const participants = getAgentParticipantScope(agent);
+  const watchers = new Map();
+  let closed = false;
   let registryPromise;
-  let activeCalls = 0;
-  const registry = () => {
-    if (!registryPromise) registryPromise = createAgentToolRegistry(agent, tools, { roomTools, includeCMS, jsonSchemaValidator }).catch(error => { registryPromise = undefined; throw error; });
-    return registryPromise;
+  const state = {
+    participants, activeCalls: 0,
+    tasks: options.taskStore ? createEventTasks({ store: options.taskStore, agent, participants }) : undefined,
+    registry() {
+      registryPromise ??= createAgentToolRegistry(agent, options.tools ?? [], options).catch(error => {
+        registryPromise = undefined;
+        throw error;
+      });
+      return registryPromise;
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      unsubscribe();
+      await state.tasks?.close();
+      const pending = [...watchers.values()];
+      for (const watcher of pending) stop(watcher);
+      await Promise.allSettled(pending.map(watcher => watcher.done));
+    },
   };
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    try { return { tools: [...(await registry()).values()].map(tool => tool.definition) }; }
+  const active = watcher => !closed && watchers.get(watcher.session) === watcher && !watcher.abort.signal.aborted && !watcher.signal.aborted;
+  const stop = watcher => {
+    if (watchers.get(watcher.session) === watcher) watchers.delete(watcher.session);
+    watcher.signal.removeEventListener('abort', watcher.onClosed);
+    watcher.abort.abort();
+  };
+  const start = participant => {
+    if (closed || participant.signal.aborted) return Promise.resolve();
+    const existing = watchers.get(participant.session);
+    if (existing) return existing.ready;
+    const watcher = { session: participant.session, signal: participant.signal, abort: new AbortController() };
+    watcher.onClosed = () => stop(watcher);
+    watchers.set(watcher.session, watcher);
+    watcher.signal.addEventListener('abort', watcher.onClosed, { once: true });
+    watcher.ready = agent.observe(watcher.session).then(snapshot => {
+      if (!active(watcher)) throw unavailableParticipant();
+      watcher.done = (async () => {
+        let revision = snapshot.revision;
+        let cursor = snapshot.mentions.latestMessageId;
+        try {
+          while (active(watcher)) {
+            snapshot = await agent.wait(watcher.session, revision, MAX_WAIT_MS, { signal: watcher.abort.signal });
+            if (!active(watcher)) return;
+            revision = snapshot.revision;
+            if (snapshot.mentions.latestMessageId > cursor) {
+              cursor = snapshot.mentions.latestMessageId;
+              await notify(`pillowfort://sessions/${watcher.session}/mentions`);
+            }
+          }
+        } catch {
+          // Closure, expiry and stale waits end delivery; never adopt a replacement identity.
+        } finally { stop(watcher); }
+      })();
+    }).catch(error => { stop(watcher); throw error; });
+    return watcher.ready;
+  };
+  const unsubscribe = participants.subscribe(start);
+  return state;
+}
+
+/** Dynamic JSON Schema catalogs use the SDK's low-level modern Server API. */
+export function createAgentMcpServer(options, ownerState) {
+  const {
+    agent, instructions = AGENT_INSTRUCTIONS, resources = AGENT_RESOURCES,
+    resourceLoader = readAgentResource, maxActiveCalls = 64, jsonSchemaValidator,
+    onToolError, observeToolCall, onClose,
+  } = options;
+  const server = new Server({ name: 'pillowfort', version: '2.1.1' }, {
+    supportedProtocolVersions: [PROTOCOL_VERSION],
+    capabilities: { tools: {}, resources: { subscribe: true }, prompts: {}, ...(options.taskStore ? { extensions: { [TASK_EXTENSION]: {} } } : {}) },
+    instructions, jsonSchemaValidator,
+    cacheHints: {
+      'server/discover': PUBLIC_CACHE, 'tools/list': PUBLIC_CACHE, 'resources/list': PUBLIC_CACHE,
+      'resources/templates/list': PUBLIC_CACHE, 'prompts/list': PUBLIC_CACHE, 'resources/read': PRIVATE_CACHE,
+    },
+  });
+  const state = ownerState ?? createOwnerState(options, uri => server.sendResourceUpdated({ uri }));
+  let closed = false;
+  server.onclose = () => {
+    if (closed) return;
+    closed = true;
+    if (!ownerState) void state.close();
+    onClose?.();
+  };
+  if (state.tasks) {
+    server.setRequestHandler('tasks/get', { params: taskParams }, params => state.tasks.get(params.taskId));
+    server.setRequestHandler('tasks/cancel', { params: taskParams }, params => state.tasks.cancel(params.taskId));
+  }
+  server.setRequestHandler('resources/list', async () => ({ resources, ...PUBLIC_CACHE }));
+  server.setRequestHandler('resources/templates/list', async () => ({ resourceTemplates: [MENTION_TEMPLATE], ...PUBLIC_CACHE }));
+  server.setRequestHandler('resources/read', async request => {
+    const uri = request.params.uri;
+    if (!uri.startsWith('pillowfort://sessions/')) return { contents: [await resourceLoader(uri)], ...PUBLIC_CACHE };
+    const participant = mentionParticipant(state.participants, uri);
+    let snapshot;
+    try { snapshot = await agent.observe(participant.session); }
+    catch { throw unavailableParticipant(); }
+    // Recheck after the async read to reject closure/recreation during observation.
+    if (mentionParticipant(state.participants, uri) !== participant) throw unavailableParticipant();
+    return {
+      contents: [{ uri, mimeType: 'application/json', text: boundedJSON({ session: participant.session, revision: snapshot.revision, ...snapshot.mentions, ephemeral: true }, 32 * 1024) }],
+      ...PRIVATE_CACHE,
+    };
+  });
+  server.setRequestHandler('prompts/list', async () => ({ prompts: listAgentPrompts(), ...PUBLIC_CACHE }));
+  server.setRequestHandler('prompts/get', async request => getAgentPrompt(request.params.name, request.params.arguments, { resourceLoader, resourceDefinitions: resources }));
+  server.setRequestHandler('tools/list', async () => {
+    try { return { tools: [...(await state.registry()).values()].map(tool => tool.definition), ...PUBLIC_CACHE }; }
     catch (error) {
       const failure = errorResult(error).error;
-      throw new McpError(ErrorCode.InternalError, `${failure.code}: ${failure.message}`, { retryable: failure.retryable });
+      throw new ProtocolError(ProtocolErrorCode.InternalError, `${failure.code}: ${failure.message}`, { retryable: failure.retryable });
     }
   });
-  server.setRequestHandler(CallToolRequestSchema, async request => {
-    if (activeCalls >= maxActiveCalls) return toolResult(errorResult(new AgentError('BUSY', 'Too many pending tool calls. Wait for existing calls to finish.', true)));
-    activeCalls++;
-    try {
-      let tool;
-      try { tool = (await registry()).get(request.params.name); }
-      catch (error) { return toolResult(errorResult(error)); }
-      if (!tool) throw new McpError(ErrorCode.InvalidParams, 'Unknown tool. Call tools/list to discover available tools.');
-      const result = await tool.invoke(request.params.arguments ?? {});
-      if (result.ok === false) onToolError?.(result.error);
-      return toolResult(result);
-    } finally { activeCalls--; }
+  server.setRequestHandler('tools/call', async (request, context) => {
+    const invoke = async () => {
+      if (state.activeCalls >= maxActiveCalls) return errorResult(new AgentError('BUSY', 'Too many pending tool calls. Wait for existing calls to finish.', true));
+      state.activeCalls++;
+      try {
+        let tool;
+        try { tool = (await state.registry()).get(request.params.name); }
+        catch (error) { return errorResult(error); }
+        if (!tool) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown tool. Call tools/list to discover available tools.');
+        const taskCapability = context.mcpReq.envelope?.['io.modelcontextprotocol/clientCapabilities']?.extensions?.[TASK_EXTENSION];
+        if (state.tasks && request.params.name === 'room_next_event' && taskCapability && typeof taskCapability === 'object' && !Array.isArray(taskCapability)) {
+          const args = request.params.arguments ?? {};
+          if (!args.input || typeof args.input !== 'object' || Array.isArray(args.input) ||
+              (args.input.timeoutMs !== undefined && (!Number.isInteger(args.input.timeoutMs) || args.input.timeoutMs < 0 || args.input.timeoutMs > 30000))) {
+            return tool.invoke(args, { signal: context.mcpReq.signal });
+          }
+          // Validate the entire tool envelope and ownership before creating any task.
+          const probe = await tool.invoke({ ...args, input: { ...args.input, timeoutMs: 0 } }, { signal: context.mcpReq.signal });
+          if (!probe.ok || probe.data.events.length || probe.data.missed || probe.data.closed || args.input?.timeoutMs === 0) return probe;
+          return state.tasks.create(args.session, args.input ?? {});
+        }
+        const result = await tool.invoke(request.params.arguments ?? {}, { signal: context.mcpReq.signal });
+        if (result.ok === false) onToolError?.(result.error);
+        return result;
+      } finally { state.activeCalls--; }
+    };
+    const result = await (observeToolCall ? observeToolCall(request.params.name, invoke) : invoke());
+    if (result?.resultType === 'task') return result;
+    return server.projectCallToolResult({ content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: result.ok === false });
   });
   return server;
 }
 
-function toolResult(result) {
-  return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: result.ok === false };
+function authorizeListen(state, message, resources) {
+  if (message?.method !== 'subscriptions/listen') return;
+  const meta = message.params?._meta;
+  if (meta?.['io.modelcontextprotocol/protocolVersion'] !== PROTOCOL_VERSION
+      || !meta['io.modelcontextprotocol/clientCapabilities']
+      || typeof meta['io.modelcontextprotocol/clientCapabilities'] !== 'object'
+      || Array.isArray(meta['io.modelcontextprotocol/clientCapabilities'])) return;
+  const uris = message.params?.notifications?.resourceSubscriptions;
+  // Shape and envelope validation remain the SDK's responsibility.
+  if (!Array.isArray(uris) || !uris.every(uri => typeof uri === 'string')) return;
+  for (const uri of uris) {
+    if (uri.startsWith('pillowfort://sessions/')) mentionParticipant(state.participants, uri);
+    else if (!resources.some(resource => resource.uri === uri)) throw unavailableParticipant();
+  }
+}
+
+/** A stable owner-bound HTTP handler; per-request Server closure never owns participants. */
+export function createAgentMcpHandler(options) {
+  let handler;
+  const state = createOwnerState(options, uri => handler.notify.resourceUpdated(uri));
+  handler = createMcpHandler(() => createAgentMcpServer(options, state), {
+    legacy: 'reject', maxSubscriptions: 16, maxRequestBodySize: MAX_WIRE_BYTES,
+  });
+  return {
+    notify: handler.notify, bus: handler.bus,
+    async fetch(request, requestOptions = {}) {
+      let body = requestOptions.parsedBody;
+      if (request.method === 'POST' && body === undefined && request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'application/json') {
+        const reader = request.body?.getReader();
+        const decoder = new TextDecoder();
+        let text = '';
+        let bytes = 0;
+        try {
+          if (reader) while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            bytes += chunk.value.byteLength;
+            if (bytes > MAX_WIRE_BYTES) {
+              void reader.cancel().catch(() => {});
+              return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Request body is too large.' } }, { status: 413 });
+            }
+            text += decoder.decode(chunk.value, { stream: true });
+          }
+          body = JSON.parse(text + decoder.decode());
+        } catch {
+          return Response.json({ jsonrpc: '2.0', id: null, error: { code: ProtocolErrorCode.ParseError, message: 'Parse error: the request body is not valid JSON.' } }, { status: 400 });
+        } finally { reader?.releaseLock(); }
+      }
+      const response = await handler.fetch(request, { ...requestOptions, ...(body !== undefined && { parsedBody: body }) });
+      // Validate the protocol envelope/headers before applying participant policy.
+      // The SDK stream is not exposed until its requested resources are authorized.
+      if (body?.method === 'subscriptions/listen' && response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+        try { authorizeListen(state, body, options.resources ?? AGENT_RESOURCES); }
+        catch (error) {
+          await response.body?.cancel().catch(() => {});
+          return Response.json({ jsonrpc: '2.0', id: body.id ?? null, error: { code: ProtocolErrorCode.InvalidParams, message: error.message } });
+        }
+      }
+      return response;
+    },
+    async close() {
+      await handler.close();
+      await state.close();
+    },
+  };
 }
 
 /** Owns stdio and signal handlers until EOF/close. Never writes diagnostics to stdout. */
-export async function runAgentMcp({ agent, tools = [], input = process.stdin, output = process.stdout, diagnostics = process.stderr }) {
-  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
-  const server = createAgentMcpServer({ agent, tools });
-  const transport = new StdioServerTransport(input, output, { maxBufferSize: MAX_INPUT_BYTES + 16 * 1024 });
+export async function runAgentMcp({ agent, tools = [], input = process.stdin, output = process.stdout, diagnostics = process.stderr, ...options }) {
+  const { StdioServerTransport, serveStdio } = await import('@modelcontextprotocol/server/stdio');
+  const transport = new StdioServerTransport(input, output, { maxBufferSize: MAX_WIRE_BYTES });
   let closing;
-  let finish;
-  const finished = new Promise(resolve => { finish = resolve; });
+  const { promise: finished, resolve: finish } = Promise.withResolvers();
   const close = () => {
-    if (!closing) {
-      closing = Promise.resolve().then(async () => {
-        input.off('end', onEnd);
-        input.off('close', onEnd);
-        input.off('error', onIOError);
-        output.off('error', onIOError);
-        process.off('SIGINT', onInterrupt);
-        process.off('SIGTERM', onTerminate);
-        process.off('uncaughtException', onFatal);
-        process.off('unhandledRejection', onFatal);
-        await server.close().catch(() => {});
-        await agent.close();
-      }).finally(finish);
-    }
+    closing ??= Promise.resolve().then(async () => {
+      input.off('end', onEnd);
+      input.off('close', onEnd);
+      input.off('error', onIOError);
+      output.off('error', onIOError);
+      process.off('SIGINT', onInterrupt);
+      process.off('SIGTERM', onTerminate);
+      process.off('uncaughtException', onFatal);
+      process.off('unhandledRejection', onFatal);
+      await handle.close().catch(() => {});
+      await agent.close();
+    }).finally(finish);
     return closing;
   };
   const onEnd = () => { void close(); };
@@ -84,15 +274,28 @@ export async function runAgentMcp({ agent, tools = [], input = process.stdin, ou
   const onInterrupt = () => { process.exitCode = 130; void close(); };
   const onTerminate = () => { process.exitCode = 143; void close(); };
   const onFatal = () => {
-    diagnostics.write('Pillowfort MCP stopped after an internal error. Sessions are being closed.\n');
+    diagnostics.write('Pillowfort MCP stopped after an internal error. Participants are being closed.\n');
     process.exitCode = 1;
     void close();
   };
-  server.onclose = onEnd;
-  server.onerror = () => {
-    diagnostics.write('Pillowfort MCP transport error: check JSON-RPC framing and message size.\n');
-    process.exitCode = 1;
-    void close();
+  const handle = serveStdio(() => {
+    return createAgentMcpServer({ ...options, agent, tools, onClose: () => { options.onClose?.(); onEnd(); } });
+  }, { legacy: 'reject', transport, maxSubscriptions: 16, onerror: () => {
+    diagnostics.write('Pillowfort MCP rejected a protocol message: check revision, JSON-RPC framing and message size.\n');
+  } });
+  const transportError = transport.onerror;
+  transport.onerror = error => {
+    transportError?.(error);
+    onIOError();
+  };
+  const receive = transport.onmessage;
+  transport.onmessage = message => {
+    try { authorizeListen({ participants: getAgentParticipantScope(agent) }, message, options.resources ?? AGENT_RESOURCES); }
+    catch (error) {
+      void transport.send({ jsonrpc: '2.0', id: message.id, error: { code: ProtocolErrorCode.InvalidParams, message: error.message } }).catch(onIOError);
+      return;
+    }
+    receive?.(message);
   };
   input.once('end', onEnd);
   input.once('close', onEnd);
@@ -103,7 +306,6 @@ export async function runAgentMcp({ agent, tools = [], input = process.stdin, ou
   process.once('uncaughtException', onFatal);
   process.once('unhandledRejection', onFatal);
   try {
-    await server.connect(transport);
     if (input.readableEnded || input.destroyed) await close();
     await finished;
   } finally { await close(); }

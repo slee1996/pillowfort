@@ -1,5 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Screen, ChatMessage, ChatStyle, RpsPick, MemberPresence, PresenceStatus, RoomLeaderboards, RoomGameQueue, RoomTheme, FortPassRoomPerks } from "./protocol";
+import { findMentions } from "./mentions";
 
 const MAX_UI_MESSAGES = 512;
 
@@ -65,6 +66,8 @@ export interface PendingAdmission {
   admissionId: string;
   deviceFingerprint: string;
   status: "pending" | "approving";
+  /** Host-local approval deadline, Unix epoch milliseconds; not a relay grant. */
+  expiresAt: number;
 }
 
 export type TerminalPresentation = "left" | "room-destroyed" | "admission-required" | "connection-ended";
@@ -145,7 +148,7 @@ export interface GameStore {
   toggleMute: (name: string) => boolean;
   addMessage: (msg: Omit<ChatMessage, "id">) => void;
   addSystemMessage: (text: string) => void;
-  addChatMessage: (from: string, text: string, style?: ChatStyle) => void;
+  addChatMessage: (from: string, text: string, style?: ChatStyle, replayed?: boolean) => void;
   clearMessages: () => void;
   setActiveVote: (vote: VoteState | null) => void;
   setRpsState: (rps: RpsState | null) => void;
@@ -258,7 +261,7 @@ export function createParticipantStore({ readName, writeName }: ParticipantStore
     writeName?.(name);
     set({ name });
   },
-  setRoomId: (roomId) => set({ roomId }),
+  setRoomId: (roomId) => set((s) => ({ roomId, ...(roomId !== s.roomId ? { messages: [] } : {}) })),
   setPassword: (password) => set({ password }),
   setRoomSafetyCode: (roomSafetyCode) => set({ roomSafetyCode }),
   setIsHost: (isHost) => set({ isHost }),
@@ -321,11 +324,13 @@ export function createParticipantStore({ readName, writeName }: ParticipantStore
       ].slice(-MAX_UI_MESSAGES),
     })),
 
-  addChatMessage: (from, text, style) =>
-    set((s) => ({
+  addChatMessage: (from, text, style, replayed) =>
+    set((s) => s.mutedNames.has(from) ? s : ({
       messages: [
         ...s.messages,
-        { id: ++msgId, kind: "chat" as const, from, text, style, timestamp: timeStr() },
+        { id: ++msgId, kind: "chat" as const, from, text, style, timestamp: timeStr(),
+          mentions: [...new Set(findMentions(text, s.members).map(mention => mention.name))],
+          ...(replayed ? { replayed: true as const } : {}) },
       ].slice(-MAX_UI_MESSAGES),
     })),
 

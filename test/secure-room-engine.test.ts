@@ -238,6 +238,11 @@ describe("protocol-v4 durable secure room engine", () => {
         engine.state.seenEventIds.includes(crashy.event.eventId) &&
         restartedOutbox?.kind === "application" && base64Url(restartedOutbox.outbound) === crashyWire &&
         restartedOutbox.event.eventId === crashy.event.eventId;
+      const revisionBeforeLifecycleReplay = engine.durableRevision;
+      const unrelatedLifecycleCompleted = await engine.completeAdmissionLifecycle(engine.deviceId, "active");
+      const lifecycleReplayPreservedPendingApplication = engine.durableRevision === revisionBeforeLifecycleReplay &&
+        engine.pendingOutbox.some((entry) => entry.kind === "application" &&
+          entry.messageId === crashy.messageId && base64Url(entry.outbound) === crashyWire);
       const wrongRollbackId = await code(() => engine.rejectOutbound(randomId()));
       const stillPendingAfterWrongId = engine.pendingOutboundMessageIds.includes(crashy.messageId);
       await engine.rejectOutbound(crashy.messageId);
@@ -315,6 +320,8 @@ describe("protocol-v4 durable secure room engine", () => {
         outboxPersistedBeforeReturn,
         outboxGetterReturnsClones,
         restartHasRollback,
+        unrelatedLifecycleCompleted,
+        lifecycleReplayPreservedPendingApplication,
         crashUiRecoveredExactly,
         wrongRollbackId,
         stillPendingAfterWrongId,
@@ -348,6 +355,8 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.outboxPersistedBeforeReturn).toBe(true);
     expect(result.outboxGetterReturnsClones).toBe(true);
     expect(result.restartHasRollback).toBe(true);
+    expect(result.unrelatedLifecycleCompleted).toBe(false);
+    expect(result.lifecycleReplayPreservedPendingApplication).toBe(true);
     expect(result.crashUiRecoveredExactly).toBe(true);
     expect(result.wrongRollbackId).toBe("invalid-input");
     expect(result.stillPendingAfterWrongId).toBe(true);
@@ -1839,7 +1848,14 @@ describe("protocol-v4 durable secure room engine", () => {
       await harness.handleKeyPackage(await makeFrame(unrelatedAdmissionId, new Uint8Array([15, 16, 17])));
       await harness.mapUiAction("admission-approve", { admissionId: stateModule.randomSecureRoomIdV4(16) });
       const wrongAdmissionCannotApprove = grantIntents.length === 0 && addCalls.length === 0;
-      await harness.mapUiAction("admission-approve", { admissionId: approvedAdmissionId });
+      const approvalClock = Date.now;
+      const delayedApprovalAt = approvalClock() + 90_000;
+      Date.now = () => delayedApprovalAt;
+      try {
+        await harness.mapUiAction("admission-approve", { admissionId: approvedAdmissionId });
+      } finally {
+        Date.now = approvalClock;
+      }
       const approvalStillDoesNotAdvanceBeforeGrant = addCalls.length === 0 && grantIntents.length === 1;
       establishAdmissionBarrier = true;
       await grantIntents[0].run({
@@ -2348,10 +2364,14 @@ describe("protocol-v4 durable secure room engine", () => {
       const causalRemovalApplicationAllowed = harness.isPendingEntryAllowedDuringMembershipBarrier({
         kind: "application",
         messageId: causalRemovalMessageId,
+        event: { content: { type: "member-leave" } },
+        relayContext: { kind: "application" },
       });
       const unrelatedRemovalApplicationBlocked = !harness.isPendingEntryAllowedDuringMembershipBarrier({
         kind: "application",
         messageId: stateModule.randomSecureRoomIdV4(16),
+        event: { content: { type: "chat", text: "unrelated" } },
+        relayContext: { kind: "application" },
       });
       const cancelledRequestId = stateModule.randomSecureRoomIdV4(16);
       const cancelledMessageId = stateModule.randomSecureRoomIdV4(16);
@@ -2359,6 +2379,8 @@ describe("protocol-v4 durable secure room engine", () => {
         kind: "application",
         messageId: cancelledMessageId,
         grant: { requestId: cancelledRequestId },
+        event: { content: { type: "chat", text: "cancelled" } },
+        relayContext: { kind: "application" },
       }];
       harness.intentKeys.add("chat:already-encrypted");
       harness.messageIntentKeys.set(cancelledMessageId, "chat:already-encrypted");

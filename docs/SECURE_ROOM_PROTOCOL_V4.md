@@ -7,6 +7,13 @@ must be recreated. This document describes the current browser, relay, Durable
 Object, and OpenMLS WASM implementation. It is a security design record, not a
 claim that the system is invulnerable.
 
+The consent-based succession compatibility profile is `pf-v4-cs1`. This is a
+specification revision label, not an in-band negotiation field. Matching
+transport version `4` alone does not imply support for its new strict event and
+sidecar schemas. See [the technical appendix](PROTOCOL_V4_TECHNICAL_APPENDIX.md)
+for the compatibility boundary, exact fields, transition tables, successor-crash
+outcomes, and relay liveness trust assumption.
+
 ## Security goals
 
 Protocol v4 uses MLS 1.0 (RFC 9420) with ciphersuite 1,
@@ -16,7 +23,7 @@ MLS signing and HPKE identity. The implementation is designed to provide:
 - authenticated, per-device group membership with explicit Add, Remove, and
   Update commits;
 - forward secrecy after obsolete generations and epochs have been erased;
-- post-compromise recovery after a fresh update from an uncompromised member;
+- post-compromise recovery under RFC 9420's affected-member update/removal and continuing-access assumptions;
 - end-to-end protection for member profiles, presence detail, chat, typing,
   drawings, themes, pillow tosses, host transfer, room close, queues, votes,
   RPS, tic-tac-toe, Saboteur, King of the Hill, and application snapshots;
@@ -148,7 +155,9 @@ duplicate or unknown fragment fields, malformed encoding, and invalid room IDs.
 No invitation password is added to localStorage or sessionStorage.
 
 The guest explicitly submits Join; link navigation alone does not authenticate
-or approve a device. Host approval and matching fingerprints remain mandatory.
+or approve a device. Host approval and the exact cryptographic device binding
+remain mandatory. Comparing displayed fingerprints over another trusted channel
+is an optional extra identity check, not a prerequisite for approval.
 Existing secure recovery takes precedence over a link for a different room.
 Fragments are not sent in HTTP requests or referrers, but the full original link
 is visible to recipients, sharing providers, clipboard managers and privileged
@@ -204,6 +213,15 @@ Pending admissions cannot send normal group traffic or use the active-member
 resume protocol. Expired, rejected, or inconsistent admissions are cancelled
 and require a fresh admission.
 
+The host allows 180 seconds for explicit approval after receiving a valid
+KeyPackage. The relay admission deadline is 185 seconds from accepting the join,
+retaining a five-second completion margin under timely delivery; network delays
+can reduce that margin. Order and commit approval grants retain their separate
+short deadlines. Participant observations and admission attention expose the
+host-local `expiresAt` deadline, not a relay authorization. Existing persisted
+admissions retain their original deadline rather than being extended on reload.
+
+
 ### Resume
 
 Resume proves possession of the already-active device credential; it does not
@@ -238,7 +256,10 @@ An MLS wire message is carried in a bounded `SecureRelayEnvelopeV4`:
 a coarse `relayKind`, such as commit, Welcome, bootstrap, join proof,
 application, or host-transfer acceptance. The relay also sees routing IDs,
 destination class, connection lifecycle, timing, count, and padded ciphertext
-length. It does not see the ordinary application-event subtype or plaintext.
+length. It does not see ordinary application-event subtypes or plaintext.
+The only `authorityEvent` sidecars are device-signed host-succession policies
+and succession acceptances. They reveal authorization metadata and candidate
+device IDs, not display names, messages, drawings, or game state.
 
 OpenMLS application plaintext is padded in 1 KiB blocks. Padding reduces
 fine-grained length leakage but does not conceal timing, count, routing, or
@@ -272,6 +293,13 @@ The relay issues at most one current logical-order grant. A grant is bound in
 durable relay state to its request, random token, device, connection, order,
 and expiration. The corresponding device-signed event also commits to the
 logical order. A stale, expired, rebound, parallel, or out-of-order use fails.
+
+An ordinary non-host grant also waits until the current host is connected and
+has acknowledged its prior delivery backlog. The queued request retains its
+exact ID while waiting; a host delivery ACK or resume completion releases it.
+Otherwise a faster guest can consume a new grant before the host ACK arrives
+and hit `recipient-unavailable` despite a healthy room. The exact preauthorized
+succession response is exempt because its old host is intentionally offline.
 
 For a non-host application event or commit, the relay holds the opaque MLS
 frame and sends it to the current host for preview. The host decrypts and
@@ -340,9 +368,10 @@ discarded as stale merely because the transport closed.
 Admission, removal, and host transfer are causal barriers. While an admission
 is incomplete, only its exact Welcome, bootstrap, and join-proof sequence may
 advance. While a removal is pending, only the host's exact Remove commit for
-the bound `(deviceId, admissionCommitMessageId)` may advance. Normal grants,
-queued operations, conflicting commits, pending admissions, and transfers are
-cancelled or blocked as required by the barrier.
+the bound `(deviceId, admissionCommitMessageId)` may advance, except for an
+exact, preauthorized automatic host succession needed to restore that host.
+Normal grants, queued operations, conflicting commits, pending admissions, and
+manual transfers are cancelled or blocked as required by the barrier.
 
 If an admitted device disappears before finishing or an expired/disconnected
 member still exists in the MLS roster, the relay persists a FIFO historical
@@ -363,6 +392,62 @@ clears every stored connection ID. It then sends the content-free
 protocol v4, and bound to a device in the retired membership snapshot. This
 preserves persist-before-notify ordering without broadening the terminal
 broadcast to an unknown or unauthenticated socket.
+
+## Host transfer and consent-based succession
+
+A manual pillow toss uses the existing signed offer, relay-bound authorization,
+target acceptance, and automatic validation by the current host. The previous
+host remains an admitted member unless it subsequently leaves or is removed.
+
+The controller also maintains a signed `host-succession-policy` application
+event. Its device IDs must equal the current admitted member order, excluding
+the current host and members awaiting removal. The host publishes it
+automatically after membership or host changes. Reconnection does not change
+that order; a fresh admission is a new position. This is internal protocol
+state: no succession queue, rank, or setting is added to the UI.
+
+After the host's 120-second disconnect grace expires, its old identity is
+fenced from resume. The relay offers a 30-second, room- and policy-bound
+authorization to the earliest connected, active, preauthorized member. It
+skips unavailable or removal-bound members and records attempted candidates
+durably. A refusal or an expired, unanswered offer advances to the next eligible
+member. A pending admission is not a succession authorization.
+
+The target persists the exact authorization before acknowledging delivery.
+Acknowledging delivery does not accept the host role. The participant is shown
+the existing catch-or-duck choice; an agent must explicitly invoke its host
+acceptance or refusal tool under the caller's policy. Only that action signs
+and encrypts a `host-succession` response with `action: "accept"` or
+`action: "reject"`. There is no automatic acceptance.
+
+The relay verifies the signing credential, policy, candidate, authorization,
+current connection, grant, and logical order. This response does not require
+the disconnected host's preview. Recipients independently authenticate the MLS
+sender and signed response against their current signed policy. A refusal
+consumes only that candidate's authorization; it does not change the host or
+remove the refusing member. The next eligible member receives a fresh offer.
+
+On acceptance, the relay commits the new authority and consumes the authorization before
+dependent delivery effects. Delivery overflow cannot revoke an already
+accepted transfer. The former host is retired, and the successor completes
+the exact MLS Remove through the normal historical-removal barrier. Retirement
+completion emits the lifecycle notification even if the old host was already
+retired, so replayed markers cannot strand either participant's action queue.
+The successor then publishes a new policy for its own host tenure.
+
+Both the policy and outstanding offer survive relay persistence; exact client
+controls and outbox entries survive browser recovery. A resumed snapshot cannot
+rebind an acceptance to a different candidate, capability, or policy. Earlier
+policies cease to authorize succession after authority changes. If no current
+signed policy has an eligible candidate, or every member refuses or leaves an
+offer unanswered, the fort collapses: the room retires and all live connections
+close. No member is promoted without explicit acceptance.
+
+This is preauthorized succession under a single relay, not quorum-based
+consensus. The relay determines connectivity, eligibility, and deadlines; an
+endpoint cannot independently prove that another device is offline. A malicious
+relay may misrepresent liveness or deny progress, but cannot forge the host's
+delegation or an admitted successor's signature.
 
 ## Durable client state
 
@@ -493,8 +578,10 @@ properties:
    selectively delivered, internally consistent subsets of a transcript. There
    is no public transparency log, witness, or out-of-band gossip channel.
 6. **Host authority.** The current host approves admissions and previews
-   non-host operations. A malicious or unavailable host can reject or stall
-   legitimate work, though it cannot forge another device's signature.
+   ordinary non-host operations. A malicious host can reject or stall legitimate
+   work, though it cannot forge another device's signature. Loss of an honest
+   host can be recovered through its signed succession policy; absence of an
+   eligible authorized successor still prevents progress.
 7. **OS, memory, disk, and rollback.** JavaScript and WASM cannot guarantee
    erasure of immutable strings, engine-private `CryptoKey` material, physical
    disk blocks, or copies made by WebCrypto, the OS, runtime, debugger,

@@ -34,9 +34,9 @@ export function HostOfferDialog() {
               <PeriodIcon kind="pillow" size={36} />
             </div>
             <div className="notice-text">
-              <strong>{hostOffer.oldHost} threw a pillow at you!</strong>
+              <strong>Take over from {hostOffer.oldHost}?</strong>
               <p className="notice-subtext">
-                You'll be in charge of the fort. You can knock it down or keep it going.
+                Catch the pillow to host the fort, or duck to decline.
               </p>
             </div>
           </div>

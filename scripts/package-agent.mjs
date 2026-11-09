@@ -12,10 +12,12 @@ const run = promisify(execFile);
 const runtimeFiles = [
   'scripts/agent.mjs',
   'scripts/agent-sdk.mjs',
+  'scripts/agent-runtime.mjs',
   'scripts/agent-browser.mjs',
   'scripts/agent-common.mjs',
   'scripts/agent-tools.mjs',
   'scripts/agent-mcp.mjs',
+  'scripts/agent-event-tasks.mjs',
   'scripts/agent-guidance.mjs',
   'scripts/agent-autonomous.mjs',
   'docs/agents/index.md',
@@ -39,9 +41,9 @@ async function packageAgent() {
   if (manifest.scripts || manifest.devDependencies || manifest.optionalDependencies || manifest.bundledDependencies || manifest.bundleDependencies) {
     throw new Error('The agent package must not contain lifecycle scripts or additional dependency groups.');
   }
-  const dependencies = ['@modelcontextprotocol/sdk', 'playwright'];
+  const dependencies = ['@modelcontextprotocol/server', 'playwright'];
   if (Object.keys(manifest.dependencies ?? {}).sort().join('\n') !== dependencies.sort().join('\n')) {
-    throw new Error('The agent package must contain only the MCP SDK and Playwright runtime dependencies.');
+    throw new Error('The agent package must contain only the MCP server SDK and Playwright runtime dependencies.');
   }
   for (const name of dependencies) {
     const version = manifest.dependencies[name];

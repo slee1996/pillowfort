@@ -945,3 +945,67 @@ describe("secure room deterministic reducer", () => {
     expect(state.saboteur?.canStrike).toBe(true);
   });
 });
+
+describe("authenticated join-order host succession", () => {
+  it("requires the current host to authorize the admitted join order", async () => {
+    const host = await member(221, "host");
+    const first = await member(222, "first");
+    const second = await member(223, "second");
+    const members = [host, first, second];
+    const initial = createSecureRoomStateV4(ROOM, members.map((entry) => entry.credential), host.credential.deviceId);
+    const order = [first.credential.deviceId, second.credential.deviceId];
+    const unauthorized = await signedEvent(initial, first, { type: "host-succession-policy", deviceIds: order });
+    expect(await reduceSecureRoomEventV4(initial, unauthorized, members.map((entry) => entry.credential)))
+      .toEqual({ ok: false, code: "invalid-transition" });
+    const reordered = await signedEvent(initial, host, { type: "host-succession-policy", deviceIds: [...order].reverse() });
+    expect(await reduceSecureRoomEventV4(initial, reordered, members.map((entry) => entry.credential)))
+      .toEqual({ ok: false, code: "invalid-transition" });
+    const event = await signedEvent(initial, host, { type: "host-succession-policy", deviceIds: order });
+    const authorized = await reduceSecureRoomEventV4(initial, event, members.map((entry) => entry.credential));
+    expect(authorized.ok).toBe(true);
+    if (!authorized.ok) throw new Error(authorized.code);
+    expect(authorized.state.hostSuccession).toEqual({ eventId: event.eventId, hostDeviceId: host.credential.deviceId, deviceIds: order });
+    expect(authorized.state.hostDeviceId).toBe(host.credential.deviceId);
+    expect(authorized.effects).toEqual([]);
+  });
+
+  it("keeps authority and the signed policy unchanged when a candidate declines", async () => {
+    const host = await member(224, "host");
+    const first = await member(225, "first");
+    const second = await member(226, "second");
+    const members = [host, first, second];
+    let state = createSecureRoomStateV4(ROOM, members.map((entry) => entry.credential), host.credential.deviceId);
+    state = (await apply(state, host, {
+      type: "host-succession-policy", deviceIds: [first.credential.deviceId, second.credential.deviceId],
+    }, members)).state;
+    const policy = state.hostSuccession!;
+    const declined = await apply(state, first, {
+      type: "host-succession", action: "reject", policyEventId: policy.eventId, authorizationId: encoded(16, 231),
+    }, members);
+    expect(declined.state.hostDeviceId).toBe(host.credential.deviceId);
+    expect(declined.state.hostSuccession).toEqual(policy);
+    expect(declined.state.pendingRemovalDeviceIds).toEqual([]);
+    expect(declined.effects).toEqual([{ type: "host-rejected", deviceId: first.credential.deviceId }]);
+  });
+
+  it("binds succession to a live host policy and invalidates it after a transfer", async () => {
+    const host = await member(224, "host");
+    const first = await member(225, "first");
+    const second = await member(226, "second");
+    const members = [host, first, second];
+    let state = createSecureRoomStateV4(ROOM, members.map((entry) => entry.credential), host.credential.deviceId);
+    const claim = { type: "host-succession" as const, action: "accept" as const, policyEventId: encoded(16, 230), authorizationId: encoded(16, 231) };
+    const premature = await signedEvent(state, first, claim);
+    expect(await reduceSecureRoomEventV4(state, premature, members.map((entry) => entry.credential)))
+      .toEqual({ ok: false, code: "invalid-transition" });
+    state = (await apply(state, host, { type: "host-succession-policy", deviceIds: [first.credential.deviceId, second.credential.deviceId] }, members)).state;
+    const policyEventId = state.hostSuccession!.eventId;
+    const succeeded = await apply(state, first, { ...claim, policyEventId }, members);
+    expect(succeeded.state.hostDeviceId).toBe(first.credential.deviceId);
+    expect(succeeded.state.hostSuccession).toBeUndefined();
+    expect(succeeded.effects).toContainEqual({ type: "host-changed", deviceId: first.credential.deviceId });
+    const replayedPolicy = await signedEvent(succeeded.state, second, { ...claim, policyEventId });
+    expect(await reduceSecureRoomEventV4(succeeded.state, replayedPolicy, members.map((entry) => entry.credential)))
+      .toEqual({ ok: false, code: "invalid-transition" });
+  });
+});

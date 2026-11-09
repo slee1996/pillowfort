@@ -950,6 +950,36 @@ export async function reduceSecureRoomEventV4(
         effects.push({ type: "theme-changed", theme: content.theme });
       }
       break;
+    case "host-succession-policy": {
+      const order = state.members.filter((member) => member.deviceId !== state.hostDeviceId &&
+        !state.pendingRemovalDeviceIds.includes(member.deviceId)).map((member) => member.deviceId);
+      if (event.deviceId !== state.hostDeviceId || content.deviceIds.length !== order.length ||
+          !content.deviceIds.every((deviceId, index) => deviceId === order[index])) accepted = false;
+      else state.hostSuccession = { eventId: event.eventId, hostDeviceId: event.deviceId, deviceIds: [...order] };
+      break;
+    }
+    case "host-succession": {
+      const policy = state.hostSuccession;
+      if (!policy || policy.hostDeviceId !== state.hostDeviceId || policy.eventId !== content.policyEventId ||
+          !policy.deviceIds.includes(event.deviceId) || !currentMember(state, event.deviceId)) {
+        accepted = false;
+        break;
+      }
+      if (content.action === "reject") {
+        effects.push({ type: "host-rejected", deviceId: event.deviceId });
+        break;
+      }
+      for (const game of ["vote", "rps", "ttt", "saboteur"] as const) {
+        const active = state[game];
+        if (active) effects.push({ type: "game-cancelled", game, gameId: active.gameId, byDeviceId: event.deviceId, forfeited: false });
+        state[game] = null;
+      }
+      state.hostDeviceId = event.deviceId;
+      state.pendingHostDeviceId = null;
+      delete state.hostSuccession;
+      effects.push({ type: "host-changed", deviceId: event.deviceId });
+      break;
+    }
     case "pillow-toss":
       if (event.deviceId !== state.hostDeviceId || activeGame(state) || state.pendingHostDeviceId !== null ||
           state.pendingRemovalDeviceIds.length !== 0 ||
@@ -974,6 +1004,7 @@ export async function reduceSecureRoomEventV4(
       } else if (content.action === "accept") {
         state.hostDeviceId = event.deviceId;
         state.pendingHostDeviceId = null;
+        delete state.hostSuccession;
         effects.push({ type: "host-changed", deviceId: event.deviceId });
         drainNextQueuedGame(state, effects);
       } else {

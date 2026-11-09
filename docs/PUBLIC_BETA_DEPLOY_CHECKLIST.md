@@ -83,6 +83,39 @@ stage succeeds:
 npm run deploy
 ```
 
+## Hosted MCP edge prerequisite
+
+Keep Cloudflare's Browser Integrity Check from treating the MCP API as a
+browser-only website. The zone custom rule **MCP API clients — BIC only**
+(`7c20b291bd894f068384bfca91510f47`) is active with this expression:
+
+```text
+http.host eq "mcp.pillowfort.xyz"
+```
+
+Action: **Skip**, with **Browser Integrity Check** as the only selected
+component. Do not skip custom rules, managed rules, rate limiting, bot-fight
+rules, User Agent Blocking, Security Level, or Zone Lockdown. Log matching
+requests is off, matching the existing marketing BIC-only exception and avoiding
+additional access/OAuth URL logging. This rule does not cover the app, marketing,
+or telemetry hostnames and is managed in Cloudflare, not by Wrangler deployment.
+
+Cloudflare 1010 / an HTML 403 can precede the Worker entirely. Inspect Security
+Events for the matched service rather than weakening application authorization
+or spoofing browser headers. Genuine Python `urllib` must reach the normal API:
+
+- `GET /access`: JSON **405**; issuance requires POST.
+- `POST /access`, `Content-Type: application/json`,
+  body `{"acceptManagedCustody":true}`: JSON **201** with a private access grant.
+  Revoke smoke-test grants immediately using `DELETE /mcp/access`.
+- The same POST with an unapproved browser Origin: JSON **403 access_denied**.
+- Unauthenticated `tools/call` / `session_create`: **401**, no participant.
+
+Never log grant bodies, access tokens, Authorization headers, or room credentials.
+This exception does not raise quotas, extend participant lifetimes, or bypass
+host approval. Verify the affected external client's route independently; local
+success does not establish that every source network is accepted.
+
 ## Manual Smoke Test
 
 Run this against the deployed URL, not only local development:
@@ -103,9 +136,10 @@ Run this against the deployed URL, not only local development:
 5. Join from a second browser profile or device with each password. Confirm a
    wrong custom password is rejected before a host approval prompt and can be
    corrected in the same browser.
-6. Approve the pending device from People, compare the displayed safety
-   fingerprints out of band, then send one styled message from each participant
-   and confirm text and style arrive in order.
+6. Approve an expected pending device from People without an out-of-band
+   fingerprint exchange, then send one styled message from each participant
+   and confirm text and style arrive in order. Also exercise the optional
+   comparison flow over a trusted channel; a mismatch must not be approved.
 7. Reload and recover the original device by re-entering the exact saved
    password, for both the new default and custom-password rooms. Confirm the
    existing identity resumes rather than requiring an unintended new admission.

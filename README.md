@@ -21,7 +21,7 @@ The core product idea is simple:
 
 1. Pick a screen name and save the generated room password.
 2. Create a fort, open **Invite**, and choose **Copy invite link**.
-3. Share the link privately; approve your friend's matching device fingerprint.
+3. Share the link privately; approve the expected joining request. Optionally compare device fingerprints over a trusted channel for extra assurance; do not approve a mismatch.
 4. Chat, doodle, and play small games together.
 5. Knock the fort down, or let it expire.
 
@@ -40,10 +40,11 @@ workflow rather than clicking each action.
 
 Start with the [public agent guide](https://about.pillowfort.xyz/agents) or the
 [Markdown quickstart](docs/agents/index.md). Choose local stdio MCP/SDK/CLI,
-authenticated hosted MCP at `https://mcp.pillowfort.xyz/mcp`, or native WebMCP
+hosted MCP at `https://mcp.pillowfort.xyz/mcp`, or native WebMCP
 inside a supported browser tab. Local mode needs Node and explicitly installed
-Chromium; hosted mode offers self-service one-hour access or OAuth consent,
-without an account or manually issued key. Read the nonallocating
+Chromium. Hosted discovery needs no sign-in or token; execution requires
+self-service one-hour bearer access or OAuth consent, without an account or
+manually issued key. Read the nonallocating
 [hosted preflight](https://mcp.pillowfort.xyz/preflight) and
 [setup recipe](docs/agents/index.md) for bootstrap, managed custody and revocation.
 Native mode is feature-detected and does not install a polyfill.
@@ -63,7 +64,57 @@ deployment; see the [deployment prerequisite](docs/agents/security.md#hosted-bro
 - [Machine-readable discovery](https://about.pillowfort.xyz/llms.txt)
 
 The npm package is `@ontologic/pillowfort-agent`; GitHub remains `slee1996`.
-The MCP Registry manifest targets `io.github.slee1996/pillowfort` release 1.1.2.
+The current release is `@ontologic/pillowfort-agent@2.1.1` and MCP Registry
+`io.github.slee1996/pillowfort` version 2.1.1. It pins Playwright 1.65.0 and
+Chromium 158.0.8127.18. After upgrading the package, run `install-browser` again;
+upgrading JavaScript dependencies alone does not replace the browser binary.
+
+Local and hosted MCP require protocol **2026-07-28**. Hosted MCP permits anonymous
+`server/discover` and `tools/list`; discovery is stateless, exposes the full
+hosted catalog, and allocates no participant. Tool calls require self-service
+Bearer access or OAuth. Clients must support modern discovery and
+`subscriptions/listen`; the SDK 2 client needs explicit version negotiation.
+Legacy initialization, standalone GET/SSE, and MCP transport DELETE are rejected.
+Origin checks and rate limits also apply to public discovery.
+
+The hosted setup/security guides, `/preflight`, app/site `llms.txt`, and
+marketing snapshots distinguish public discovery from protected execution.
+Release 2.0.1 corrects those instructions, including docs bundled in the npm
+package; it does not relax tool authorization, host approval or device binding.
+
+Chat supports exact roster `@mentions` (including `@"names with spaces"`),
+highlighting, unread attention, and opt-in generic browser alerts. Local/hosted
+MCP exposes `pillowfort://sessions/{session}/mentions` through resource reads and
+2026 `subscriptions/listen`. Hosted notifications use an authenticated POST/SSE
+stream; stdio uses its open connection. Updates contain the resource URI and
+standard protocol metadata, not message text. Waking an agent remains the
+client's responsibility. Native WebMCP retains observation/wait tools.
+No offline inbox or durable mention queue is created.
+
+Release 2.1.0 adds the harness-neutral `room_next_event` stream and explicit
+wait cancellation. A participant/room-incarnation cursor identifies a bounded
+batch of mention, admission, game-turn or lifecycle events; `missed:true`
+requires reconciliation through a fresh observation. The blocking fallback
+works without a host-specific adapter. Authenticated hosted MCP also supports
+the `io.modelcontextprotocol/tasks` extension for event waits: a Task completes
+with readiness metadata, then the same owner reads the private event batch.
+Task metadata contains no room text or cryptographic keys. Tasks do not extend
+participant lifetime, provide offline identity recovery, or guarantee model
+wakeup; the client chooses how to process completion.
+
+Release 2.1.1 extends host approval to 180 seconds, with a five-second relay
+completion margin. Pending admission observations and attention events expose
+the host-local `expiresAt` deadline in Unix milliseconds. Explicit approval and
+exact admission-ID/fingerprint binding remain mandatory. Existing persisted
+admissions retain their original expiry; event Tasks do not renew admissions.
+Reload existing host/guest app tabs or create fresh hosted participants to use
+the new window.
+
+`server.json` includes the registry title, website, and public SVG icon.
+To release these changes, deploy the hosted Worker with
+`npm --prefix hosted-mcp run deploy`, then publish the manifest with
+`mcp-publisher publish server.json` using the registry owner's authenticated
+publisher. Local verification alone does not update the live registry score.
 Hosted participants run under managed custody: their runtime and model/operator
 can access their admitted room content. Hosted participants do not gain access to
 unrelated rooms. Read the custody guide before inviting a hosted agent.
@@ -300,20 +351,26 @@ node scripts/agent.mjs discover --url http://localhost:3000
 node scripts/agent.mjs jsonl --url http://localhost:3000
 ```
 
-JSON-lines mode keeps named sessions alive across requests. Each line returns an
-`{id, ok, data}` or `{id, ok:false, error:{code,message,retryable}}` result:
+JSON-lines mode keeps server-minted participant handles alive across requests.
+Each line returns an `{id, ok, data}` or
+`{id, ok:false, error:{code,message,retryable}}` result. Save `data.session` from
+the first result and substitute it for `ALICE_HANDLE` in later requests:
 
 ```json
-{"id":1,"tool":"session_create","arguments":{"session":"alice"}}
-{"id":2,"tool":"room_setup","arguments":{"session":"alice","input":{"displayName":"Alice","confirm":true}}}
-{"id":3,"tool":"session_observe","arguments":{"session":"alice"}}
+{"id":1,"tool":"session_create","arguments":{}}
+{"id":2,"tool":"room_setup","arguments":{"session":"ALICE_HANDLE","input":{"displayName":"Alice","confirm":true}}}
+{"id":3,"tool":"session_observe","arguments":{"session":"ALICE_HANDLE"}}
 ```
 
 Room creation returns the invitation credentials explicitly. Treat those results
 as sensitive. Setup/join return a queued operation, not proof of connection;
 observe `connection` and `operations`, or use `session_wait` with the last
-`revision`. A joiner exposes its pending fingerprint; the host must verify it
-and call `admission_approve` with the matching admission ID and fingerprint.
+`revision`. The host must select an expected pending request under the caller's
+policy and call `admission_approve` with that `pendingAdmissions` entry's exact
+`admissionId` and `deviceFingerprint`, plus `confirm:true`. Independent comparison
+with the guest's current `pendingJoinFingerprint` over a trusted channel is
+optional extra assurance; if chosen, do not approve a mismatch. Invitation
+possession and display names do not prove recipient identity.
 Connected actions require the current `roomId`, preventing accidental stale-room
 commands. Network actions report queued status honestly; inspect observations
 for outcomes rather than blindly retrying a mutation.
@@ -502,8 +559,9 @@ Building or testing locally does not publish npm packages or deploy Workers.
 ## Operational telemetry
 
 `src/telemetry.ts` provides opt-in HTTP server traces for the app, marketing and
-hosted MCP, plus unsampled aggregate room-volume events in the app Worker and
-local Bun runtime. Checked-in defaults keep export disabled for local development.
+hosted MCP, unsampled aggregate room-volume events in the app Worker and local
+Bun runtime, and granular hosted MCP tool counts/latency with sampled diagnostic
+traces. Checked-in defaults keep export disabled for local development.
 Production activation uses the authenticated ingress and explicit settings below.
 
 HTTP traces contain only allowlisted service/environment/version, operation
@@ -525,11 +583,26 @@ typing, presence, drawing and games: the server cannot identify chat-only volume
 Retransmissions, delivery ACKs, replay backlogs and recipient fanout do not add
 message counts. See [metric definitions](docs/PRODUCTION_MONITORING.md#room-and-message-volume).
 
-Volume counts are independent of HTTP trace sampling, including at
-`OTEL_SAMPLE_RATE=0`; `OTEL_ENABLED=false` disables both. Export is bounded and
-best-effort, so these are observed operational counts—not billing, all-time,
-unique-user, retention or active-room metrics. Missing data is not zero. There
-is no historical backfill. Collector failures must not affect room operations.
+Hosted `tools/call` invocations emit real execution durations and cumulative
+`pillowfort_mcp_tools_calls_total` counts by catalog-allowlisted tool name,
+success/error outcome and a fixed error category. Unknown names become `_unknown`;
+no arguments, results, messages, client identities or room/session IDs are kept.
+The unsampled `pillowfort.mcp.tools` scope feeds only the
+`span_metrics/mcp_tools` connector: no Tempo storage or exemplars. The separately
+sampled `pillowfort.mcp.tools.trace` scope feeds only sanitized Tempo diagnostics,
+never duplicate metrics. Neither enters the HTTP metrics pipeline.
+The dashboard includes per-tool totals/rates, error categories and p50/p95 from
+`pillowfort_mcp_tools_duration_seconds_bucket` (plus `_sum` and `_count`).
+Success means the tool invocation succeeded, not that a queued room action
+finished; wait tools include their wait time. See
+[tool metric definitions and activation](docs/PRODUCTION_MONITORING.md#hosted-mcp-tool-calls).
+
+Room-volume and tool metrics are independent of HTTP/diagnostic trace sampling,
+including at `OTEL_SAMPLE_RATE=0`; `OTEL_ENABLED=false` disables all streams.
+Export is bounded and best-effort, so these are observed operational counts—not
+billing, all-time, unique-user, retention or active-room metrics. Missing data is
+not zero. Totals reset with the collector; there is no historical backfill.
+Collector/export failures must not affect room operations or tool results.
 
 Production telemetry runs on the shared Linux MacBook Pro as
 `agent@mbp-agent.local`, in
@@ -657,16 +730,24 @@ npm run deploy -- --keep-vars \
 
 Apply the same flags to the marketing guarded deploy and the hosted-MCP deploy
 after its `npm run check`. `--keep-vars` preserves the production opt-in during
-later releases; the explicit flags override local/source defaults. HTTP traces
-are sampled at 10%; aggregate room counts are unsampled. To stop export, deploy
-with the explicit `OTEL_ENABLED:false` override.
+later releases; the explicit flags override local/source defaults. HTTP and MCP
+diagnostic traces are sampled at 10%; aggregate room and tool metrics are
+unsampled. To stop export, deploy with the explicit `OTEL_ENABLED:false` override.
+
+Granular MCP collection additionally requires the updated collector config and
+Grafana dashboard on the Linux telemetry host, recreating collector/Grafana with
+the existing compose/env-file arguments, and deploying the instrumented hosted
+MCP Worker. Recreating the collector resets every in-memory metric epoch.
+Checked-in configuration alone does not update live services; see
+[live activation and receipt checks](docs/PRODUCTION_MONITORING.md#live-activation).
 
 `OTEL_EXPORTER_OTLP_HEADERS` is a Worker **secret** containing the ingestion
 authorization and a genuine `Pillowfort-OTel/1.0` application user-agent. Never
 place passwords or encoded authorization in tracked vars, command arguments or
 logs. Missing/invalid configuration leaves export disabled. Verify new production
-counts and service traces in Grafana after activation; deployment success alone
-does not prove receipt. Select `test` only for synthetic isolated smoke data.
+counts, tool latency buckets and sampled service/tool traces in Grafana after
+activation; deployment success alone does not prove receipt. Select `test` only
+for synthetic isolated smoke data.
 Native Cloudflare automatic traces remain disabled. Quick Tunnels are not a
 permanent destination. The production collector now depends on the Linux host,
 not this Mac; a private SSH forward is needed only to view Grafana.

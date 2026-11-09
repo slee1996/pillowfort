@@ -1,6 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { Server } from "bun";
-import { recordRoomActivity, withOperationalTelemetry, type TelemetryEnv } from "../src/telemetry";
+import { ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
+import { SDK_INFO } from "@opentelemetry/core";
+import { recordRoomActivity, withMcpToolTelemetry, withOperationalTelemetry, type TelemetryEnv } from "../src/telemetry";
 
 type Attribute = { key: string; value: { stringValue?: string; intValue?: number | string } };
 type WireSpan = {
@@ -326,4 +328,271 @@ describe("operational OTLP privacy boundary", () => {
       gate.resolve();
     }
   }, 6000);
+});
+
+describe("hosted MCP tool OTLP privacy boundary", () => {
+  it("exports isolated, timed count and diagnostic spans while preserving a successful result", async () => {
+    const result = { ok: true, data: { arguments: PRIVATE, messages: [PRIVATE], credentials: PRIVATE } };
+    let calls = 0;
+    const started = Date.now();
+    const clock = spyOn(Date, "now").mockReturnValue(started);
+    const gate = Promise.withResolvers<void>();
+    try {
+      const invocation = withMcpToolTelemetry(env, ctx, "session_create", async () => {
+        calls += 1;
+        await gate.promise;
+        return result;
+      });
+      expect(pending).toEqual([]);
+      clock.mockReturnValue(started + 250);
+      gate.resolve();
+      expect(await invocation).toBe(result);
+    } finally {
+      gate.resolve();
+      clock.mockRestore();
+    }
+    expect(calls).toBe(1);
+    await Promise.all(pending);
+    expect(received).toHaveLength(2);
+    const spans: WireSpan[] = [];
+    const scopes: string[] = [];
+    for (const wire of received) {
+      expect(wire.path).toBe("/v1/traces");
+      expect(wire.authorization).toBe(AUTH);
+      expect(wire.contentType).toBe("application/json");
+      expect(wire.text).not.toContain(PRIVATE);
+      expect(wire.text).not.toContain(AUTH);
+      const resource = wire.envelope.resourceSpans[0];
+      expect(attributes(resource.resource.attributes)).toEqual({
+        "service.name": "pillowfort.hosted-mcp",
+        "service.version": "1.1.0",
+        "deployment.environment.name": "test",
+        "telemetry.sdk.name": SDK_INFO["telemetry.sdk.name"],
+        "telemetry.sdk.language": SDK_INFO["telemetry.sdk.language"],
+        "telemetry.sdk.version": SDK_INFO["telemetry.sdk.version"],
+      });
+      const scope = resource.scopeSpans[0];
+      scopes.push(scope.scope.name);
+      expect(scope.spans).toHaveLength(1);
+      const span = scope.spans[0];
+      spans.push(span);
+      expect(span.name).toBe("mcp.tool.call");
+      expect(span.kind).toBe(1);
+      expect(span.parentSpanId ?? "").toBe("");
+      expect(span.traceState ?? "").toBe("");
+      expect(span.events ?? []).toEqual([]);
+      expect(span.links ?? []).toEqual([]);
+      expect(span.status?.message ?? "").toBe("");
+      expect(span.status?.code ?? 0).toBe(0);
+      expect(attributes(span.attributes)).toEqual({
+        "pillowfort.tool": "session_create", "pillowfort.outcome": "success", "pillowfort.error": "none",
+      });
+      expect(BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano)).toBe(250_000_000n);
+    }
+    expect(scopes.sort()).toEqual(["pillowfort.mcp.tools", "pillowfort.mcp.tools.trace"]);
+    expect(spans[0].traceId).not.toBe(spans[1].traceId);
+    expect(spans[0].startTimeUnixNano).toBe(spans[1].startTimeUnixNano);
+    expect(spans[0].endTimeUnixNano).toBe(spans[1].endTimeUnixNano);
+  });
+
+  it("treats returned tool failures as errors without replacing or exporting their contents", async () => {
+    const result = { ok: false, error: { code: "INVALID_INPUT", message: PRIVATE, retryable: false }, data: PRIVATE };
+    let calls = 0;
+    expect(await withMcpToolTelemetry(env, ctx, "chat_send", async () => {
+      calls += 1;
+      return result;
+    })).toBe(result);
+    expect(calls).toBe(1);
+    await Promise.all(pending);
+    expect(received).toHaveLength(2);
+    for (const wire of received) {
+      const span = wire.envelope.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(attributes(span.attributes)).toEqual({
+        "pillowfort.tool": "chat_send", "pillowfort.outcome": "error", "pillowfort.error": "invalid_input",
+      });
+      expect(span.status?.code).toBe(2);
+      expect(span.status?.message ?? "").toBe("");
+      expect(wire.text).not.toContain(PRIVATE);
+    }
+  });
+
+  it("rethrows the original exception and records its execution duration without exception data", async () => {
+    const error = new Error(PRIVATE);
+    error.stack = PRIVATE;
+    let calls = 0;
+    let caught: unknown;
+    const started = Date.now();
+    const clock = spyOn(Date, "now").mockReturnValue(started);
+    try {
+      await withMcpToolTelemetry(env, ctx, "session_wait", async () => {
+        calls += 1;
+        clock.mockReturnValue(started + 500);
+        throw error;
+      });
+    } catch (cause) { caught = cause; } finally { clock.mockRestore(); }
+    expect(caught).toBe(error);
+    expect(calls).toBe(1);
+    await Promise.all(pending);
+    expect(received).toHaveLength(2);
+    for (const wire of received) {
+      const span = wire.envelope.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(attributes(span.attributes)).toEqual({
+        "pillowfort.tool": "session_wait", "pillowfort.outcome": "error", "pillowfort.error": "internal",
+      });
+      expect(BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano)).toBe(500_000_000n);
+      expect(span.status?.code).toBe(2);
+      expect(span.status?.message ?? "").toBe("");
+      expect(span.events ?? []).toEqual([]);
+      expect(wire.text).not.toContain(PRIVATE);
+    }
+  });
+
+  it("classifies MCP InvalidParams using only the catalog name, never the exception message", async () => {
+    env.OTEL_SAMPLE_RATE = "0";
+    for (const [tool, category] of [["session_create", "invalid_input"], [PRIVATE, "unknown_tool"]]) {
+      const error = new ProtocolError(ProtocolErrorCode.InvalidParams, PRIVATE, { credentials: PRIVATE });
+      let caught: unknown;
+      try {
+        await withMcpToolTelemetry(env, ctx, tool, async () => { throw error; });
+      } catch (cause) { caught = cause; }
+      expect(caught).toBe(error);
+      await Promise.all(pending);
+      const wire = received[received.length - 1];
+      const scope = wire.envelope.resourceSpans[0].scopeSpans[0];
+      expect(scope.scope.name).toBe("pillowfort.mcp.tools");
+      expect(attributes(scope.spans[0].attributes)).toEqual({
+        "pillowfort.tool": tool === PRIVATE ? "_unknown" : tool,
+        "pillowfort.outcome": "error", "pillowfort.error": category,
+      });
+      expect(wire.text).not.toContain(PRIVATE);
+    }
+    expect(received).toHaveLength(2);
+  });
+
+  it("reduces unrecognized tool names and error codes to bounded redacted labels", async () => {
+    env.OTEL_SAMPLE_RATE = "0";
+    for (const name of [PRIVATE, "__proto__", "toString"]) {
+      const result = { ok: false, error: { code: PRIVATE, message: PRIVATE } };
+      expect(await withMcpToolTelemetry(env, ctx, name, async () => result)).toBe(result);
+      await Promise.all(pending);
+      const wire = received[received.length - 1];
+      const span = wire.envelope.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(attributes(span.attributes)).toEqual({
+        "pillowfort.tool": "_unknown", "pillowfort.outcome": "error", "pillowfort.error": "internal",
+      });
+      expect(wire.text).not.toContain(PRIVATE);
+      expect(wire.text).not.toContain(name);
+    }
+    expect(received).toHaveLength(3);
+  });
+
+  it("maps known hosted and participant error codes to a closed category vocabulary", async () => {
+    env.OTEL_SAMPLE_RATE = "0";
+    const cases = [
+      ["INVALID_INPUT", "invalid_input"], ["invalid-input", "invalid_input"], ["SIZE_LIMIT", "invalid_input"],
+      ["UNKNOWN_TOOL", "unknown_tool"], ["BUSY", "busy"], ["busy", "busy"],
+      ["SESSION_LIMIT", "quota"], ["PRINCIPAL_SESSION_LIMIT", "quota"], ["SESSION_CAPACITY", "quota"],
+      ["SESSION_START_RATE", "quota"], ["DAILY_SESSION_BUDGET", "quota"],
+      ["TIMEOUT", "timeout"], ["reconnecting", "connection"], ["delivery-unavailable", "connection"],
+      ["SESSION_CLOSED", "session"], ["SESSION_NOT_FOUND", "session"], ["CLOSED", "session"],
+      ["INTERNAL_ERROR", "internal"], ["INVALID_CAPABILITIES", "internal"], ["INVALID_LEASE", "internal"],
+    ];
+    for (const [code, category] of cases) {
+      const result = { ok: false, error: { code, message: PRIVATE } };
+      expect(await withMcpToolTelemetry(env, ctx, "session_observe", async () => result)).toBe(result);
+      await Promise.all(pending);
+      const wire = received[received.length - 1];
+      const span = wire.envelope.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(attributes(span.attributes)["pillowfort.error"]).toBe(category);
+      expect(attributes(span.attributes)["pillowfort.outcome"]).toBe("error");
+      expect(wire.text).not.toContain(PRIVATE);
+    }
+    expect(received).toHaveLength(cases.length);
+  });
+
+  it("retains unsampled tool counts at zero HTTP sampling and honors reused-environment changes", async () => {
+    await withMcpToolTelemetry(env, ctx, "session_list", async () => ({ ok: true }));
+    await Promise.all(pending);
+    env.OTEL_SAMPLE_RATE = "0";
+    env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Basic%20cm90YXRlZA%3D%3D";
+    await withOperationalTelemetry("pillowfort.hosted-mcp", new Request("https://mcp.test/mcp"), env, ctx, () => new Response("ok"));
+    await withMcpToolTelemetry(env, ctx, "session_list", async () => ({ ok: true }));
+    recordRoomActivity(env, ctx, "room.created");
+    await Promise.all(pending);
+    expect(received).toHaveLength(4);
+    expect(received.map(wire => wire.envelope.resourceSpans[0].scopeSpans[0].scope.name).sort()).toEqual([
+      "pillowfort.mcp.tools", "pillowfort.mcp.tools", "pillowfort.mcp.tools.trace", "pillowfort.volume",
+    ]);
+    expect(received.filter(wire => wire.authorization === "Basic cm90YXRlZA==")).toHaveLength(2);
+    env.OTEL_SAMPLE_RATE = "1";
+    await withMcpToolTelemetry(env, ctx, "session_list", async () => ({ ok: true }));
+    await Promise.all(pending);
+    expect(received).toHaveLength(6);
+  });
+
+  it("executes once without exporting when telemetry is disabled or its configuration is invalid", async () => {
+    const configurations: Partial<TelemetryEnv>[] = [
+      { OTEL_ENABLED: undefined }, { OTEL_ENABLED: "false" },
+      { OTEL_SAMPLE_RATE: "NaN" }, { OTEL_EXPORTER_OTLP_ENDPOINT: "not a URL" },
+      { OTEL_EXPORTER_OTLP_HEADERS: undefined }, { OTEL_EXPORTER_OTLP_HEADERS: "Authorization=%GG" },
+    ];
+    for (const configuration of configurations) {
+      const result = { ok: true, data: PRIVATE };
+      const error = new Error(PRIVATE);
+      let calls = 0;
+      const disabledEnv = { ...env, ...configuration };
+      expect(await withMcpToolTelemetry(disabledEnv, ctx, "session_list", async () => {
+        calls += 1;
+        return result;
+      })).toBe(result);
+      let caught: unknown;
+      try {
+        await withMcpToolTelemetry(disabledEnv, ctx, "session_list", async () => {
+          calls += 1;
+          throw error;
+        });
+      } catch (cause) { caught = cause; }
+      expect(caught).toBe(error);
+      expect(calls).toBe(2);
+    }
+    expect(pending).toEqual([]);
+    expect(received).toEqual([]);
+  });
+
+  it("does not replace tool results or errors when the exporter fails or redirects", async () => {
+    for (const status of [503, 307]) {
+      reply = () => new Response(PRIVATE, { status, headers: { location: `http://127.0.0.1:${receiver.port}/escaped` } });
+      const result = { ok: false, error: { code: "TIMEOUT", message: PRIVATE } };
+      expect(await withMcpToolTelemetry(env, ctx, "session_wait", async () => result)).toBe(result);
+      const error = new Error(PRIVATE);
+      let caught: unknown;
+      try {
+        await withMcpToolTelemetry(env, ctx, "session_wait", async () => { throw error; });
+      } catch (cause) { caught = cause; }
+      expect(caught).toBe(error);
+      await Promise.all(pending);
+    }
+    expect(received).toHaveLength(8);
+    expect(received.every(wire => wire.path === "/v1/traces")).toBe(true);
+    expect(received.every(wire => !wire.text.includes(PRIVATE))).toBe(true);
+  });
+
+  it("never lets hostile error or result accessors change tool behavior", async () => {
+    env.OTEL_SAMPLE_RATE = "0";
+    const error = { get code(): string { throw new Error(PRIVATE); } };
+    let caught: unknown;
+    try {
+      await withMcpToolTelemetry(env, ctx, "session_list", async () => { throw error; });
+    } catch (cause) { caught = cause; }
+    expect(caught).toBe(error);
+    await Promise.all(pending);
+    const result = { get ok(): boolean { throw new Error(PRIVATE); } };
+    expect(await withMcpToolTelemetry(env, ctx, "session_list", async () => result)).toBe(result);
+    await Promise.all(pending);
+    expect(received).toHaveLength(2);
+    for (const wire of received) {
+      expect(attributes(wire.envelope.resourceSpans[0].scopeSpans[0].spans[0].attributes)["pillowfort.error"]).toBe("internal");
+      expect(wire.text).not.toContain(PRIVATE);
+    }
+  });
 });
