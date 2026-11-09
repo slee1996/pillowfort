@@ -1,9 +1,19 @@
-Tested implementation: 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
-Public source: https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a
-Profile: pf-v4-cs1; wire version: 4
-Source archive: sources/pillowfort-source-10fe8f8b490c.tar.gz
-Runtime versions: Node v24.22.2; Bun 1.4.4; Python 3.12.2; OpenJDK 21.0.12.1; Playwright 1.65.0; Chromium 158.0.8127.18.
+Evidence edition 2; protocol v4; profile pf-v4-cs1.
 
-Extract the source archive or clone the repository and check out the exact commit above. Follow the appendix reproduction commands. Raw model and browser results are in evidence/models, evidence/browser-faults-final and evidence/benchmarks-final.
+Current implementation and rerun project/protocol/model checks:
+c726c5eccafacb6fe6c881be3fcc174287c2f86f
+https://github.com/slee1996/pillowfort/tree/c726c5eccafacb6fe6c881be3fcc174287c2f86f
+Source archive: sources/pillowfort-source-c726c5eccafa.tar.gz
+The archive excludes the older paper/ publication subtree, not runtime or test inputs.
 
-This evidence snapshot is not a production deployment. GitHub reported default-branch dependency alerts during publication; those alerts are not independently triaged by this protocol evaluation.
+Retained light-load latency and four browser-fault executions:
+10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+These measurements were not rerun or relabeled as current-revision results.
+
+Production shutdown verification: c726c5eccafacb6fe6c881be3fcc174287c2f86f; see PRODUCTION_DEPLOYMENT.json and evidence/production-release-fixed-shutdown.json.
+
+Previous edition remains unchanged:
+https://github.com/slee1996/pillowfort/tree/fcaa523c2f4747f8a84eda38a602fc8d096e8bc3/paper
+New edition tag: protocol-v4-cs1-evidence-2026-11-09-r2
+No wire-version change or new production deployment accompanies this paper update.

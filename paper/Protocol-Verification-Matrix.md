@@ -1,6 +1,6 @@
-# Protocol v4-CS1 verification matrix
+# Protocol v4-CS1 verification matrix — evidence edition 2
 
-This matrix maps the existing M1–M4 analysis plan to evidence, not to claims of complete verification. Run `npm run check` for implementation suites; run the model and browser commands in `PROTOCOL_V4_TECHNICAL_APPENDIX.md` for the additional evidence. Exact source revision, commands, raw logs and outcomes are recorded in the pinned artifact.
+Current implementation checks target revision `c726c5eccafacb6fe6c881be3fcc174287c2f86f`. This matrix maps the M1–M4 plan to evidence, not complete verification. Run `npm run check`; see the technical appendix for model and browser commands. Retained browser fault and light-load latency records are from `10fe8f8b490c9e890d5a642bc25568e985c2fe8a`; production shutdown evidence is from `c726c5e`. Exact commands, hashes and outcomes are in the edition's manifest.
 
 | Plan obligation | Model coverage | Concrete implementation evidence | Explicit exclusion |
 |---|---|---|---|
@@ -29,10 +29,11 @@ This matrix maps the existing M1–M4 analysis plan to evidence, not to claims o
 | M4.8 Barrier completion | Abstract remove-store/ACK/completion ordering only | Relay already-retired lifecycle regression; engine durable retirement control/replayed marker tests | Concrete duplicate lifecycle signals are not exhaustively modeled |
 | Composition | Staged M1→M1+M2→M1+M2+M3→M1–M4 send guards; Interlock mutant must fail | Existing admission/removal/host-transfer barriers and full project gate | 12/16-step bounded prefixes; no refinement, deadlock-freedom or liveness proof |
 | Peer membership/storage disagreement | Not represented as malicious MLS divergence in TLC | Browser storage-failure experiment and real MLS engine validation/rollback tests | Failure isolation, not automatic epoch merging |
+| Explicit room retirement | Concrete snapshot serialization and notification are not modeled by TLC | `persists explicit retirement after a signed succession policy was installed`: state export/import, cleared delegation, retired members, exact close-control replay; successful production terminal-screen execution | Not a TLC-discovered defect, physical-storage proof, or exhaustive terminal failure schedule |
 
 ## Named successor crash regressions
 
-`bun test test/secure-relay-v4.test.ts --test-name-pattern 'M4 successor crash boundaries'` exercises these six cases against the actual relay reducer and its strict exported/imported state:
+`bun test ./test/secure-relay-v4.test.ts --test-name-pattern 'M4 successor crash boundaries'` exercises these six cases against the actual relay reducer and its strict exported/imported state:
 
 - Result unacknowledged: same device returns and completes exact cleanup/policy refresh.
 - Result unacknowledged: device never returns; room retires without reusing old policy.
@@ -60,3 +61,5 @@ During construction, one relay recovery test incorrectly sent a normal delivery 
 Browser exploration reproduced the preview race as consecutive guest frames: the first was accepted, then the second received `recipient-unavailable` while the host still had unacknowledged delivery. This was a real relay scheduling issue, not a cryptographic break. The M1 model now separates host storage and ACK, checks readiness before the next grant, and requires a counterexample when that safeguard is disabled.
 
 The unsent-successor-policy browser crash also exposed a lifecycle reconciliation defect: `completeAdmissionLifecycle` rejected a pending application even when there was no admission barrier to complete. Its mutation guard now applies only after finding the matching barrier; an unrelated valid lifecycle signal leaves the restored ciphertext, rollback context and storage revision unchanged. The real-MLS restart regression failed before this change and passes after it. This is separate from the preview model mutation and is not claimed as a TLC-discovered implementation defect.
+
+Explicit host shutdown exposed a third concrete defect in production: `hostDeviceId` was cleared while `hostSuccession` remained, so strict export rejected the retired state with `persistence-failed` and the terminal notice was not emitted. The fix clears the obsolete delegation before persistence, without relaxing validation. The new six-assertion regression failed before correction and passes afterward; the production browser execution confirms accepted policy → explicit close → terminal screen with no composer. See `PRODUCTION_DEPLOYMENT.json` and `evidence/production-release-fixed-shutdown.json`.

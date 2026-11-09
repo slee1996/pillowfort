@@ -1,0 +1,344 @@
+{
+  "diagnosis": "Host close-room received persistence-failed while peer remained on signed shutdown notice.",
+  "host": "pillowfort\nA little room for your people\n\nInvite your friends to talk, doodle, and play. A private, temporary fort, with no accounts.\n\nWhat should your friends call you?\n\nJust a name for this fort. No account or email needed.\n\nStart a new fort\nJoin a friend's fort\nPrivate by invitation. Temporary by design.",
+  "guest": "pillowfort\nf-zu4vrhjrfm\nPeople\n2\nInvite\nRoom\nThe host knocked down the fort. Secure shutdown is finishing…\nB\nI\nU\nMention someone with @name or @\"display name\". ↑↓ to choose · Enter or Tab to insert · Esc to dismiss.\nPlay\nEnter to send · Shift+Enter for a new line\nSend\nBuddies (2)\nAvailable (2)\nClosure Diagnostic Host\nClosure Diagnostic Guest\nAway (0)",
+  "hostFrames": [
+    {
+      "direction": "receive",
+      "kind": "secure-auth-challenge"
+    },
+    {
+      "direction": "send",
+      "kind": "secure-authenticate"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "authenticated"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "deliver-key-package"
+    },
+    {
+      "direction": "send",
+      "kind": "order-request",
+      "requestId": "k7I1u5btcKPmEvQTHtBy6w"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "order-granted"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "o-jh5FtuNKlVHRbgqe5erw",
+      "relayKind": "commit"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "o-jh5FtuNKlVHRbgqe5erw"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "enX5LBKfHDQEjPrK0VMr2Q"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "0FQgdkxcisnOsTXWX62Edg",
+      "relayKind": "welcome"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "enX5LBKfHDQEjPrK0VMr2Q"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "0FQgdkxcisnOsTXWX62Edg"
+    },
+    {
+      "direction": "send",
+      "kind": "order-request",
+      "requestId": "Hi_V8EurX-xu_YHrYWpfPA"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "order-granted"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "F57XpzBi60DvDCo-C6AkKQ",
+      "relayKind": "bootstrap"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "F57XpzBi60DvDCo-C6AkKQ"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "admission-proof-preview",
+      "relayKind": "join-proof"
+    },
+    {
+      "direction": "send",
+      "kind": "activate",
+      "requestId": "FRBrMJNo2Knk4G1q3Xd7Pw"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "relay",
+      "relayKind": "join-proof"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "FRBrMJNo2Knk4G1q3Xd7Pw"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "lRsdLV5NoxIsN36yBBqJ3g"
+    },
+    {
+      "direction": "send",
+      "kind": "order-request",
+      "requestId": "YdscHiul3tYqwSUHcbc-8g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "lRsdLV5NoxIsN36yBBqJ3g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "order-granted"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "ctmiN8gi1OLrmpgS0mmZGA",
+      "relayKind": "application"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "application-result",
+      "messageId": "ctmiN8gi1OLrmpgS0mmZGA"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "A1mYf-O4hyjhDAU2XhJiRg"
+    },
+    {
+      "direction": "send",
+      "kind": "order-request",
+      "requestId": "79Ad33qBhtt1PXjwnwm65g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "A1mYf-O4hyjhDAU2XhJiRg"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "order-granted"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "9WwlAG1uBaFVhov_rkgSUw",
+      "relayKind": "application"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "application-result",
+      "messageId": "9WwlAG1uBaFVhov_rkgSUw"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "zHzw2IxMrhx_DuULMBuGmA"
+    },
+    {
+      "direction": "send",
+      "kind": "close-room",
+      "requestId": "045ZWE1p0h71V275mwk6cw"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "zHzw2IxMrhx_DuULMBuGmA"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "error",
+      "code": "persistence-failed"
+    }
+  ],
+  "guestFrames": [
+    {
+      "direction": "receive",
+      "kind": "secure-auth-challenge"
+    },
+    {
+      "direction": "send",
+      "kind": "secure-authenticate"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "authenticated"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "relay",
+      "relayKind": "welcome"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "ktoCCfy87F4f-2cQ8Zau2g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "ktoCCfy87F4f-2cQ8Zau2g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "relay",
+      "relayKind": "bootstrap"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "order-granted"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "A215NIrqtm5K61k0Rc5AHw"
+    },
+    {
+      "direction": "send",
+      "kind": "relay",
+      "messageId": "0GTW3SbNOzFHwf4DJosVIQ",
+      "relayKind": "join-proof"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "A215NIrqtm5K61k0Rc5AHw"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "application-result",
+      "messageId": "0GTW3SbNOzFHwf4DJosVIQ"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "HoWji8F-zwWEe01RigBy-g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "HoWji8F-zwWEe01RigBy-g"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "relay",
+      "relayKind": "application"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "S2AD3s8lDNeeKQ4OBZy9fQ"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "S2AD3s8lDNeeKQ4OBZy9fQ"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "relay",
+      "relayKind": "application"
+    },
+    {
+      "direction": "send",
+      "kind": "delivery-ack",
+      "requestId": "TCnfOYH3JR7Ze_gL7b950w"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "frame-accepted",
+      "messageId": "TCnfOYH3JR7Ze_gL7b950w"
+    },
+    {
+      "direction": "receive",
+      "kind": "secure-server",
+      "type": "member-lifecycle"
+    }
+  ]
+}

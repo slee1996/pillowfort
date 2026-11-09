@@ -1,6 +1,6 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 119 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 19188] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
-Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M4Succession.tla
+Running breadth-first search Model-Checking with fp 8 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 95326] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-v4-CS1-2026-11-09-r2/evidence/models/M4Succession.tla
 Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
 Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
 Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module M4Succession
-Starting... (2026-11-09 11:37:12)
+Starting... (2026-11-09 13:22:23)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-11-09 11:37:13.
+Finished computing initial states: 1 distinct state generated at 2026-11-09 13:22:23.
 Error: Invariant Safety is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -156,4 +156,4 @@ s = [ host |-> 3,
 97 states generated, 45 distinct states found, 21 states left on queue.
 The depth of the complete state graph search is 7.
 The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 6 and the 95th percentile is 5).
-Finished in 00s at (2026-11-09 11:37:13)
+Finished in 00s at (2026-11-09 13:22:23)

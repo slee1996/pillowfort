@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pillowfort Protocol Paper</title>
+  <title>Pillowfort Protocol Paper — Evidence edition 2</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -28,7 +28,7 @@
 id="pillowfort-an-mls-based-protocol-for-ephemeral-rooms">Pillowfort: An
 MLS-Based Protocol for Ephemeral Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · 9 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 2 · 9 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
 <p>Pillowfort is an encrypted room protocol for human-operated and
@@ -291,6 +291,11 @@ prefix-based: acknowledging a later identifier cannot discard an
 unapplied earlier entry. Hosted-runtime loss differs from browser
 recovery: a memory-only hosted identity is unavailable after loss and
 must not be silently reconstructed as a replacement participant.</p>
+<p>Room retirement clears host authority and its succession policy
+before the relay persists the terminal state. Only after that write does
+it notify authenticated attached devices. Receiving the signed close
+application event alone does not establish that durable shutdown has
+completed.</p>
 <h2 class="page-start"
 id="host-transfer-and-preauthorized-succession">7. Host transfer and
 preauthorized succession</h2>
@@ -432,35 +437,44 @@ host-available design; the transport integer <code>4</code> is not a
 compatibility negotiation. Implementation references identify the tested
 source revision. The companion artifact supplies commands, lockfiles,
 raw results, and a claim-to-test matrix.</p>
-<p>Five protocol suites passed <strong>86 tests and 740
-assertions</strong>. The real-MLS engine suite passed <strong>26 tests
-and 306 assertions</strong>, including storage failure, restart,
-rejection, and revision-conflict paths. The complete
-<code>npm run check</code> gate also passed. Signed fixtures in
-<code>examples.json</code> cover chat, a transfer offer, and acceptance;
-changing the signed order or expected room invalidates verification.
-Their deterministic test seeds are not production keys.</p>
+<p>At implementation revision <code>c726c5eccafa</code>, five protocol
+suites passed <strong>87 tests and 746 assertions</strong>. The real-MLS
+engine suite passed <strong>26 tests and 306 assertions</strong>,
+including storage failure, restart, rejection, and revision-conflict
+paths. The complete <code>npm run check</code> gate also passed. Signed
+fixtures in <code>examples.json</code> cover chat, a transfer offer, and
+acceptance; changing the signed order or expected room invalidates
+verification. Their deterministic test seeds are not production
+keys.</p>
 <h3 id="crash-boundary-executions">10.2 Crash-boundary executions</h3>
 <p>Six relay regressions cover successor return and permanent absence at
 three boundaries: authority committed but result unacknowledged, removal
 unstarted, and removal completed before the new policy. They check
 persisted state export/import, exact cleanup, and rejection of
 predecessor-policy reuse.</p>
-<p>Four browser fault scenarios use the production client, real MLS,
-WebSockets, and IndexedDB. A successor recovers its original device
-after the acceptance result is withheld and after its new-policy frame
-is withheld following removal; encrypted delivery succeeds in both
-directions afterward. Permanent loss before policy acceptance retires
-the room at grace expiry. An injected write failure during another
-peer’s incoming Add stops that peer while remaining members continue.
-These executions use the actual 120-second grace; they do not establish
-automatic repair of arbitrary epoch disagreement.</p>
+<p>Four browser fault scenarios at revision <code>10fe8f8b490c</code>
+used the production client, real MLS, WebSockets, and IndexedDB. A
+successor recovered its original device after the acceptance result was
+withheld and after its new-policy frame was withheld following removal;
+encrypted delivery succeeded in both directions afterward. Permanent
+loss before policy acceptance retired the room at grace expiry. An
+injected write failure during another peer’s incoming Add stopped that
+peer while remaining members continued. These retained executions use
+the actual 120-second grace; they do not establish automatic repair of
+arbitrary epoch disagreement.</p>
 <p>The runs exposed two implementation defects: issuing a guest grant
 before the host’s prior delivery ACK, and attempting admission-lifecycle
 mutation on a resumed device with a pending application but no admission
 barrier. Both were reproduced before correction and retain regressions.
 The latter run exercises the successor’s previously unspecified
 unsent-policy boundary.</p>
+<p>A separate production shutdown execution found retained succession
+authority after the host was cleared, so the retired snapshot could not
+be persisted. The corrected path removes that policy before storage. A
+regression verifies state export/import and exact close-request replay;
+a production browser run confirms terminal delivery and removal of the
+composer. This concrete serialization boundary is not represented by the
+reduced TLC models.</p>
 <h3 id="bounded-state-analysis">10.3 Bounded state analysis</h3>
 <p>The M1–M4 analysis separates endpoint state, committed storage, relay
 decisions, and network effects. Nine finite TLC configurations completed
@@ -475,27 +489,20 @@ their coverage to implementation checks. Cryptography is abstracted;
 these are safety results for bounded abstractions, not implementation
 refinement, deadlock freedom, or unbounded liveness. No independent
 security audit is claimed.</p>
-<h3 id="coordination-cost">10.4 Coordination cost</h3>
-<p>Each profile submits 20 ordinary non-host chat messages and measures
-UI submission to application in the host’s DOM. Runs share one Apple M3
-Max machine and a local relay. One message is outstanding at a time,
-followed by a 500 ms pause after delivery; the throughput column is the
-achieved paced rate, not maximum capacity.</p>
+<h3 id="light-load-latency">10.4 Light-load latency</h3>
+<p>These measurements are from revision <code>10fe8f8b490c</code>. Each
+profile submits 20 ordinary non-host chat messages and measures UI
+submission to application in the host’s DOM. Runs share one Apple M3 Max
+machine and a local relay. One message is outstanding at a time,
+followed by a 500 ms quiet interval outside each latency sample. This is
+benchmark workload pacing, not a production protocol delay.</p>
 <table>
-<colgroup>
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
-<col style="width: 20%" />
-</colgroup>
 <thead>
 <tr>
 <th style="text-align: right;">Members</th>
 <th style="text-align: right;">Added preview delay</th>
 <th style="text-align: right;">p50 latency</th>
 <th style="text-align: right;">p95 latency</th>
-<th style="text-align: right;">Delivered messages/s</th>
 </tr>
 </thead>
 <tbody>
@@ -504,28 +511,24 @@ achieved paced rate, not maximum capacity.</p>
 <td style="text-align: right;">0 ms</td>
 <td style="text-align: right;">29.71 ms</td>
 <td style="text-align: right;">30.74 ms</td>
-<td style="text-align: right;">1.872</td>
 </tr>
 <tr>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">0 ms</td>
 <td style="text-align: right;">29.60 ms</td>
 <td style="text-align: right;">30.77 ms</td>
-<td style="text-align: right;">1.872</td>
 </tr>
 <tr>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">100 ms</td>
 <td style="text-align: right;">130.27 ms</td>
 <td style="text-align: right;">246.14 ms</td>
-<td style="text-align: right;">1.513</td>
 </tr>
 <tr>
 <td style="text-align: right;">6</td>
 <td style="text-align: right;">0 ms</td>
 <td style="text-align: right;">29.87 ms</td>
 <td style="text-align: right;">44.95 ms</td>
-<td style="text-align: right;">1.860</td>
 </tr>
 </tbody>
 </table>
@@ -534,9 +537,10 @@ automatic host preview, queueing, and rendering; quantiles use
 nearest-rank selection. The delayed-host profile measures coordinator
 sensitivity in the normal UI workload; it does not isolate each
 contributor to tail latency. Twenty samples per profile do not establish
-a stable tail-latency estimate, WAN performance, or scalability beyond
-these rooms. Raw samples and environment versions accompany the
-results.</p>
+a stable tail-latency estimate, WAN performance, scalability beyond
+these rooms, or maximum throughput. Raw samples and environment versions
+accompany the results; no new latency measurements are attributed to the
+current production revision.</p>
 <h2 id="related-designs">11. Related designs</h2>
 <p>MLS architecture already assigns access control, delivery
 consistency, invalid-commit handling, and state-loss recovery to the
@@ -567,24 +571,24 @@ href="https://www.rfc-editor.org/rfc/rfc9420.html">rfc-editor.org/rfc/rfc9420</a
 9750. <a
 href="https://www.rfc-editor.org/rfc/rfc9750.html">rfc-editor.org/rfc/rfc9750</a>.</li>
 <li>Pillowfort. <em>Secure Room Protocol v4</em>. Implementation
-contract, revision <code>10fe8f8b490c</code>. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
+contract, revision <code>c726c5eccafa</code>. <a
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
 <li>Pillowfort. <em>Application Event Encoding and Signatures</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/applicationEventsV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/applicationEventsV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Relay State and Transitions</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/secureRelayV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureRelayV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Secure Room Engine</em>. Persistence, rejection, and
 recovery. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomEngine.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomEngine.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Participant Controller</em>. Admission and host
 succession. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomController.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomController.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Agent Security and Custody</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/agents/security.md">Pinned
+href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/agents/security.md">Pinned
 source</a>.</li>
 <li>Model Context Protocol. <em>Subscriptions</em>, protocol revision
 2026-07-28. <a
@@ -593,7 +597,7 @@ href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/su
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
 <li>Pillowfort. <em>Protocol v4-CS1: Wire Contract and Failure
 Semantics</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Protocol-Technical-Appendix.pdf">Technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Technical-Appendix.pdf">Technical
 appendix</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
@@ -601,11 +605,11 @@ href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
 href="https://signal.org/blog/signal-private-group-system/">Design</a>.</li>
 </ol>
 <p><strong>Companion artifacts:</strong> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>; <a
-href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>; <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
 evidence bundle</a>.</p>
 </body>
 </html>

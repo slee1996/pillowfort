@@ -1,8 +1,8 @@
 # Pillowfort: Bounded State-Machine Analysis
 
-*Bounded coordination analysis and remaining verification obligations · Protocol v4-CS1 · 9 November 2026*
+*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 2 · 9 November 2026*
 
-**Status:** the M1–M4 plan has produced executable TLA+ models and a staged composition, checked with TLC 2.19 (tla2tools v1.7.4). Nine finite safety configurations completed without an invariant violation; seven deliberately weakened configurations produced counterexamples. The host-preview readiness check also maps to a separately reproduced and fixed relay scheduling race. This is bounded analysis of abstractions, not a cryptographic proof, implementation refinement, deadlock-freedom result, independent audit, or unbounded liveness proof. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-Paper.pdf).
+**Status:** the M1–M4 models and staged composition were checked from revision `c726c5eccafa` with TLC 2.19 (tla2tools v1.7.4). Nine finite safety configurations completed without an invariant violation; seven deliberately weakened configurations produced counterexamples. The host-preview readiness check maps to a separately reproduced and fixed relay scheduling race. This is bounded analysis of abstractions, not a cryptographic proof, implementation refinement, deadlock-freedom result, independent audit, or unbounded liveness proof. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-Paper.pdf).
 
 ## Executed analysis
 
@@ -22,9 +22,9 @@ Standalone models use at most two operation/KeyPackage tokens, backlog capacity 
 
 The seven sensitivity checks weaken persistence ordering, connection-bound grants, host preview readiness, KeyPackage reuse prevention, snapshot reconciliation, transfer-target binding, and admission send interlocks. All produced invariant counterexamples. Only the host-preview check maps to the implementation bug reproduced during this evaluation; deliberate mutations alone are not evidence of implementation vulnerabilities.
 
-Exact models, configurations, tool identity, commands and traces are in `evidence/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact models, configurations, tool identity, commands and traces are in `evidence/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
-The real-browser unsent-policy boundary also exposed an implementation-only lifecycle defect: a repeated active signal tried to complete admission while an application was pending, despite no admission barrier. The restored outbox now survives that no-op signal. A real-MLS regression failed before the correction and passes afterward. This helper ordering is not represented in the reduced TLA+ model, so its discovery is attributed to fault execution rather than model checking.
+Two concrete boundaries lie outside these reduced models: repeated active-lifecycle signals during restored applications, and serialization of explicit retirement after a succession policy. Real-MLS/relay regressions and browser executions cover those defects; neither is claimed as a TLC-discovered issue.
 
 The remainder records the broader analysis plan and properties. A listed obligation is not automatically a proved property: consult the coverage matrix for the executed subset. Deadlock checking was explicitly disabled for these bounded-prefix safety runs; no unrestricted idle action is used to manufacture a liveness result.
 
@@ -186,8 +186,8 @@ Keep the existing functional tests. Concrete regression and browser evidence sup
 
 ## Source map
 
-- [Secure-room contract](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/SECURE_ROOM_PROTOCOL_V4.md)
-- [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/secureRelayV4.ts)
-- [Participant controller](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomController.ts)
-- [Participant engine](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomEngine.ts)
-- [Application reducer](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/secureGameReducer.ts)
+- [Secure-room contract](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/SECURE_ROOM_PROTOCOL_V4.md)
+- [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureRelayV4.ts)
+- [Participant controller](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomController.ts)
+- [Participant engine](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomEngine.ts)
+- [Application reducer](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureGameReducer.ts)

@@ -386,8 +386,10 @@ can never be reused. The ledger is capped at 276 entries (20 live/member slots
 plus 256 retired tombstones) and fails closed at the cap. Reaching it requires
 recreating the ephemeral room; see the availability boundary below.
 
-For terminal room teardown, the relay first persists the retired state and
-clears every stored connection ID. It then sends the content-free
+For terminal room teardown, the relay clears every stored connection ID and
+the prior host's succession policy before persisting the retired state. A
+delegation cannot survive removal of its authorizing host; retaining it would
+make the terminal snapshot invalid and prevent durable shutdown. It then sends the content-free
 `room-retired` notice only to sockets that are still attached, authenticated as
 protocol v4, and bound to a device in the retired membership snapshot. This
 preserves persist-before-notify ordering without broadening the terminal

@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · 9 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 2 · 9 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Tested implementation:** [`10fe8f8b490c9e890d5a642bc25568e985c2fe8a`](https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope.
+**Tested implementation:** [`c726c5eccafacb6fe6c881be3fcc174287c2f86f`](https://github.com/slee1996/pillowfort/tree/c726c5eccafacb6fe6c881be3fcc174287c2f86f). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
 
 ## A. Profile and interoperability
 
@@ -204,6 +204,19 @@ The candidate has no authority merely because its position was selected. Host so
 
 **A dishonest relay can induce an authorized but unnecessary succession by falsely representing that a connected host is unavailable.** It cannot forge candidate acceptance, but acceptance is not cryptographic evidence that replacement was necessary. This consequence follows directly from making the relay the connectivity/deadline oracle.
 
+### F.4 Terminal room retirement
+
+A retired room has no host authority and no succession policy. Both explicit shutdown and exhaustion after host loss must clear the previous delegation before state validation and persistence. Keeping a signed policy after clearing its authorizing host produces an invalid snapshot; relaxing validation is not a repair.
+
+| Starting state / input | Guard | Durable mutation | Emitted effect or retry |
+|---|---|---|---|
+| Current host sends `close-room` | Authenticated current host; own delivery backlog empty; `authorizationMessageId` references a retained accepted application | Retire members; clear host, succession policy, grant, pending transfer/operations and queued orders; retain exact control replay record | Validate and persist before terminal notification |
+| Retired snapshot stored | Complete valid terminal state | Storage commit succeeds | Send `room-retired` to authenticated attached devices in the retired membership snapshot |
+| Endpoint receives terminal notice | Exact room and authenticated transport | Retire local cryptographic state | Present terminal screen; ordinary sending remains unavailable |
+| Exact close request repeated | Retained request and fingerprint match | Preserve retirement; do not revive delegation | Replay terminal outcome |
+
+Applying the signed close application event precedes the relay's durable terminal notice; it is not evidence that retirement was stored. The production failure returned `persistence-failed` before that notice. The regression `persists explicit retirement after a signed succession policy was installed` failed before correction and now checks export/import, absent delegation, retired members and exact retry. A production browser execution at `c726c5e` confirms the terminal screen after an acknowledged signed policy. This concrete serialization path is not represented in the reduced TLC models.
+
 ## G. Executed model scope and implementation mapping
 
 The models implement the existing plan's stages: M1 delivery; M2 admission/identity; M3 resume; M4 succession. `Coordination.tla` composes them in that order with admission, resume and host-availability send barriers. Separate state mutations represent persistence and network effects. Cryptography is an abstract authenticated capability; OpenMLS, IndexedDB and the transport are not formally verified by these models.
@@ -220,29 +233,45 @@ The runner also weakens seven safeguards individually: persist-before-send, gran
 | M3.1–M3.5 | M3 model; stale sentinel, historical marker, final-close and snapshot tests | Model does not establish global transcript agreement |
 | M4.1–M4.8 | M4/composed models; six successor crash-boundary regressions; actual browser boundary interception | Availability requires a willing recoverable coordinator or current new policy |
 | Invalid peer membership transition | Engine commit-validation/rollback tests and controller fail-close path | No epoch merge or Byzantine agreement claim |
+| Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution | Concrete serialization/notification path is not modeled by TLC |
 
 ## H. Reproduction and measurement interpretation
+
+### H.1 Current implementation and models
 
 ```
 git clone https://github.com/slee1996/pillowfort.git
 cd pillowfort
-git checkout --detach 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+git checkout --detach c726c5eccafacb6fe6c881be3fcc174287c2f86f
 npm ci
 npm --prefix client ci
 npx playwright install chromium
 npm run check
-bun test test/secure-relay-v4.test.ts --test-name-pattern 'M4 successor crash boundaries'
+bun test ./test/secure-game-reducer.test.ts ./test/secure-relay-v4.test.ts ./test/secure-relay-persistence-v4.test.ts ./test/secure-transport-v4.test.ts ./test/application-events-v4.test.ts
+bun test ./test/secure-relay-v4.test.ts --test-name-pattern 'persists explicit retirement after a signed succession policy'
 curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar --output /tmp/tla2tools-1.7.4.jar
 python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models
-bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-benchmarks
+```
+
+Use Node/Bun versions required by the lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and Chromium for pinned Playwright 1.65.0. The source archive omits the earlier `paper/` publication subtree, not runtime or test inputs. Cloning the pinned commit includes that subtree; explicit `./test/...` selection keeps archived source copies out of test discovery.
+
+### H.2 Retained light-load latency and browser-fault records
+
+The latency samples and four browser-fault executions are retained from `10fe8f8b490c9e890d5a642bc25568e985c2fe8a`; neither is presented as a new measurement of `c726c5e`. From the clone above, reproduce that earlier environment separately:
+
+```
+git worktree add ../pillowfort-latency-10fe8f8b490c 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+cd ../pillowfort-latency-10fe8f8b490c
+npm ci
+npm --prefix client ci
+npm run build
+bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-light-load
 bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-browser-faults
 ```
 
-Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it neither disables production rate limits nor shortens the 120-second grace.
+Latency runs submit one message at a time, then wait 500 ms after completed delivery. That quiet interval is outside the latency sample and is not a production protocol delay. Samples include grant exchange, persistence, MLS, host preview, queueing and recipient DOM application. The delayed-host profile adds 100 ms before each host preview. These local, shared-hardware runs characterize light-load latency, not throughput capacity, WAN behavior or mobile performance. Original raw paced-rate fields remain in the retained JSON for provenance; the paper does not report them as capacity evidence.
 
-Latency is measured from UI submission to observed application in a recipient DOM. It includes grant exchange, persistence, MLS, host preview, queueing and rendering. The slow-host profile adds 100 ms before delivering each host preview without changing cryptography. Each run sends one message at a time, then waits 500 ms after completion; there is no catch-up burst after a scheduler stall. Reported throughput is the **achieved closed-loop paced rate**, not a maximum-capacity or stable open-loop two-messages/second claim. Measurements use one local machine and shared Chromium/hardware; they are not WAN, Cloudflare or mobile results.
-
-Quantiles use nearest-rank selection: sort the 20 samples and select index `ceil(p*n)-1`. The raw report's `medianMs` field is that p50 estimate (the lower central observation for an even sample count), not the average of the central pair. Retain all sample values when comparing estimators or reproducing the table.
+Quantiles use nearest-rank selection: sort the 20 samples and select index `ceil(p*n)-1`. The raw report's `medianMs` is that p50 estimate, not the average of the central pair. Retain the full sample arrays when comparing estimators.
 
 ## I. Related designs
 

@@ -1,0 +1,66 @@
+{
+  "initialHttp": [
+    {
+      "surface": "application",
+      "status": 200,
+      "script": "/assets/index-xUK0ffpx.js",
+      "sha256": "6f77474722af1d4a14c15875e7fc58b8a7069a27a67a2aca1b1010e304de08b7",
+      "matchesCheckedBuild": true
+    },
+    {
+      "surface": "/health",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "surface": "/preflight",
+      "status": 200,
+      "protocol": "2026-07-28"
+    },
+    {
+      "surface": "server/discover",
+      "status": 200,
+      "authenticated": false,
+      "resultType": "complete"
+    },
+    {
+      "surface": "tools/list",
+      "status": 200,
+      "authenticated": false,
+      "tools": 61,
+      "resultType": "complete"
+    }
+  ],
+  "roomMessagingAndResume": {
+    "passed": true,
+    "created": true,
+    "explicitlyApproved": true,
+    "consecutiveGuestMessagesDelivered": 5,
+    "sameDeviceResumed": true,
+    "hostApprovalNotRepeated": true,
+    "bidirectionalEncryptedDeliveryAfterResume": true
+  },
+  "finalShutdown": {
+    "origin": "https://pillowfort.xyz",
+    "passed": true,
+    "signedSuccessionPolicyAccepted": true,
+    "explicitHostClosure": true,
+    "peerTerminalScreenObserved": true,
+    "composerUnavailable": true
+  },
+  "finalMcp": [
+    {
+      "method": "server/discover",
+      "status": 200,
+      "anonymous": true,
+      "resultType": "complete"
+    },
+    {
+      "method": "tools/list",
+      "status": 200,
+      "anonymous": true,
+      "tools": 61,
+      "resultType": "complete"
+    }
+  ]
+}
