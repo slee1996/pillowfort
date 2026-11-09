@@ -15,6 +15,12 @@ const groups = [
   ["test/security-boundaries.test.ts"],
   ["test/secure-server-runtime-v4.test.ts"],
   [
+    "test/participant-mentions.test.ts",
+    "test/participant-event-queue.test.ts",
+    "test/mcp-event-tasks.test.ts",
+    "test/browser-mentions.test.ts",
+    "test/mcp-mentions.test.ts",
+    "test/mcp-2026.test.ts",
     "test/protocol-v4.test.ts",
     "test/application-events-v4.test.ts",
     "test/secure-game-reducer.test.ts",
@@ -43,7 +49,7 @@ let passedFiles = 2;
 for (const files of groups) {
   const result = spawnSync(
     "bun",
-    ["test", "--timeout", "60000", "--max-concurrency", "1", ...files],
+    ["test", "--timeout", "60000", "--max-concurrency", "1", ...files.map(file => `./${file}`)],
     { cwd: repositoryRoot, stdio: "inherit" },
   );
   if (result.error) throw result.error;

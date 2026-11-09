@@ -1,0 +1,159 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 119 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 19188] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M4Succession.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M4Succession
+Starting... (2026-11-09 11:37:12)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-09 11:37:13.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+s = [ host |-> 1,
+  connected |-> {1, 2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 2: <Disconnect line 14, col 18 to line 15, col 57 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 3: <Grace line 19, col 10 to line 20, col 39 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 1,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 4: <Fence line 21, col 10 to line 23, col 54 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 1,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 5: <Offer line 25, col 10 to line 29, col 89 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 1,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 6: <Choose line 30, col 17 to line 34, col 86 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "accept",
+  signedBy |-> 3,
+  storedChoice |-> TRUE,
+  grace |-> 1,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 7: <CommitAcceptance line 35, col 21 to line 44, col 71 of module M4Succession>
+s = [ host |-> 3,
+  connected |-> {2, 3},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 3,
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {3},
+  badTarget |-> TRUE ]
+
+97 states generated, 45 distinct states found, 21 states left on queue.
+The depth of the complete state graph search is 7.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 6 and the 95th percentile is 5).
+Finished in 00s at (2026-11-09 11:37:13)

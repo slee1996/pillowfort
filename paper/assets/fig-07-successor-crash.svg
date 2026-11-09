@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 550" role="img" aria-label="Successor crash recovery before its new policy is accepted">
+<style>text{font-family:'Times New Roman',Times,serif;fill:currentColor}rect,polygon,polyline{fill:none;stroke:currentColor;stroke-width:1.1}</style>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" stroke-width="1.1"/></marker></defs>
+<rect x="20" y="25" width="220" height="65"/><text x="130" y="51" font-size="16" text-anchor="middle"><tspan x="130">Authority committed;</tspan><tspan x="130" dy="21">result unacknowledged</tspan></text>
+<rect x="280" y="25" width="220" height="65"/><text x="390" y="51" font-size="16" text-anchor="middle"><tspan x="390">Acceptance reconciled;</tspan><tspan x="390" dy="21">removal still pending</tspan></text>
+<rect x="540" y="25" width="220" height="65"/><text x="650" y="51" font-size="16" text-anchor="middle"><tspan x="650">Removal completed;</tspan><tspan x="650" dy="21">new policy not accepted</tspan></text>
+<polyline points="130,90 130,125 390,125 390,155" marker-end="url(#arrow)"/><polyline points="390,90 390,125"/><polyline points="650,90 650,125 390,125"/>
+<rect x="260" y="155" width="260" height="55"/><text x="390" y="180" font-size="16" text-anchor="middle"><tspan x="390">Successor crashes</tspan><tspan x="390" dy="20">Predecessor policy stays invalid</tspan></text>
+<polyline points="390,210 390,240" marker-end="url(#arrow)"/>
+<polygon points="390,240 510,290 390,340 270,290"/><text x="390" y="285" font-size="16" text-anchor="middle"><tspan x="390">Returns within</tspan><tspan x="390" dy="20">120 s grace?</tspan></text>
+<polyline points="270,290 145,290 145,380" marker-end="url(#arrow)"/><text x="215" y="280" font-size="15" text-anchor="middle">Yes</text>
+<polyline points="510,290 635,290 635,380" marker-end="url(#arrow)"/><text x="565" y="280" font-size="15" text-anchor="middle">No</text>
+<rect x="20" y="380" width="250" height="60"/><text x="145" y="405" font-size="16" text-anchor="middle"><tspan x="145">Resume the exact device;</tspan><tspan x="145" dy="21">reconcile result and cleanup</tspan></text>
+<polyline points="145,440 145,475" marker-end="url(#arrow)"/>
+<rect x="20" y="475" width="250" height="50"/><text x="145" y="505" font-size="16" text-anchor="middle">Publish own signed policy</text>
+<rect x="510" y="380" width="250" height="90"/><text x="635" y="405" font-size="16" text-anchor="middle"><tspan x="635">No accepted new policy:</tspan><tspan x="635" dy="21">retire room at grace expiry</tspan><tspan x="635" dy="21">Fort collapses</tspan></text>
+<text x="635" y="510" font-size="15" text-anchor="middle" font-style="italic">Safe termination, not continuous availability</text>
+</svg>

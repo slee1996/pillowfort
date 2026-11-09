@@ -1,0 +1,9 @@
+Tested implementation: 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+Public source: https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+Profile: pf-v4-cs1; wire version: 4
+Source archive: sources/pillowfort-source-10fe8f8b490c.tar.gz
+Runtime versions: Node v24.22.2; Bun 1.4.4; Python 3.12.2; OpenJDK 21.0.12.1; Playwright 1.65.0; Chromium 158.0.8127.18.
+
+Extract the source archive or clone the repository and check out the exact commit above. Follow the appendix reproduction commands. Raw model and browser results are in evidence/models, evidence/browser-faults-final and evidence/benchmarks-final.
+
+This evidence snapshot is not a production deployment. GitHub reported default-branch dependency alerts during publication; those alerts are not independently triaged by this protocol evaluation.

@@ -91,7 +91,7 @@ export type SecureRoomApplicationRelayContextV1 =
   | { kind: "application" }
   | { kind: "bootstrap"; admissionId: string; welcomeMessageId: string }
   | { kind: "join-proof"; admissionId: string; welcomeMessageId: string }
-  | { kind: "host-transfer-accept"; authorizationId: string };
+  | { kind: "host-transfer-accept"; authorizationId: string; policyEventId?: string };
 
 export type SecureRoomPendingOutboxEntryV1 =
   | {
@@ -158,6 +158,7 @@ export type SecureRoomPendingRelayControlV1 =
       targetDeviceId: string;
       offerMessageId: string;
       acceptMessageId: string | null;
+      policyEventId?: string;
     };
 
 export type SecureRoomPendingCommitSecretV4 =
@@ -296,10 +297,11 @@ function encodeU32(value: number): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+function exactKeys(value: Record<string, unknown>, keys: readonly string[], optional?: readonly string[]): boolean {
   const actual = Reflect.ownKeys(value);
-  return actual.length === keys.length && actual.every((key) =>
-    typeof key === "string" && keys.includes(key) &&
+  return (optional === undefined ? actual.length === keys.length :
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))) && actual.every((key) =>
+    typeof key === "string" && (keys.includes(key) || optional?.includes(key) === true) &&
     Object.getOwnPropertyDescriptor(value, key)?.enumerable === true
   );
 }
@@ -575,13 +577,15 @@ function validApplicationRelayContext(
 ): value is SecureRoomApplicationRelayContextV1 {
   if (!plainRecord(value) || typeof value.kind !== "string") return false;
   if (value.kind === "application") {
-    return exactKeys(value, ["kind"]) && !(event.content.type === "host-transfer" &&
-      event.content.action === "accept");
+    return exactKeys(value, ["kind"]) && event.content.type !== "host-succession" &&
+      !(event.content.type === "host-transfer" && event.content.action === "accept");
   }
   if (value.kind === "host-transfer-accept") {
-    return exactKeys(value, ["kind", "authorizationId"]) &&
+    return exactKeys(value, ["kind", "authorizationId"], ["policyEventId"]) &&
       canonicalBase64UrlByteLength(value.authorizationId) === SECURE_MESSAGE_ID_BYTES &&
-      event.content.type === "host-transfer" && event.content.action === "accept" &&
+      ((event.content.type === "host-transfer" && event.content.action === "accept" &&
+        value.policyEventId === undefined) ||
+       (event.content.type === "host-succession" && value.policyEventId === event.content.policyEventId)) &&
       event.content.authorizationId === value.authorizationId;
   }
   if (value.kind === "bootstrap" || value.kind === "join-proof") {
@@ -857,6 +861,10 @@ function relayControlMatchesState(
 ): boolean {
   if (control.kind === "close-room") return state.closedReason !== null;
   if (control.kind === "transfer-host") {
+    if (control.policyEventId !== undefined && control.acceptMessageId === null) {
+      return state.hostSuccession?.eventId === control.policyEventId &&
+        state.hostSuccession.deviceIds.includes(control.targetDeviceId);
+    }
     return control.acceptMessageId === null
       ? state.pendingHostDeviceId === control.targetDeviceId || state.hostDeviceId === control.targetDeviceId
       : state.hostDeviceId === control.targetDeviceId;
@@ -914,7 +922,9 @@ function validatePendingRelayControls(
       transferCount += 1;
       if (transferCount > 1 || !exactKeys(candidate, [
         "kind", "authorizationId", "targetDeviceId", "offerMessageId", "acceptMessageId",
-      ]) || canonicalBase64UrlByteLength(candidate.targetDeviceId) !== SECURE_DEVICE_ID_BYTES ||
+      ], ["policyEventId"]) || (candidate.policyEventId !== undefined &&
+        canonicalBase64UrlByteLength(candidate.policyEventId) !== SECURE_MESSAGE_ID_BYTES) ||
+        canonicalBase64UrlByteLength(candidate.targetDeviceId) !== SECURE_DEVICE_ID_BYTES ||
         canonicalBase64UrlByteLength(candidate.offerMessageId) !== SECURE_MESSAGE_ID_BYTES ||
         !(candidate.authorizationId === null ||
           canonicalBase64UrlByteLength(candidate.authorizationId) === SECURE_MESSAGE_ID_BYTES) ||

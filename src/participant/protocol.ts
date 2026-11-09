@@ -188,5 +188,8 @@ export interface ChatMessage {
   from?: string;
   text: string;
   style?: ChatStyle;
+  mentions?: string[];
+  /** Local receipt metadata only; resumed backlog must not create fresh attention. */
+  replayed?: true;
   timestamp: string;
 }

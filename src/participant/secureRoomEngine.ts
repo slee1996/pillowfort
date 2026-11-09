@@ -180,7 +180,7 @@ export type SecureRoomInboundRelayContext =
   | { kind: "application" }
   | { kind: "bootstrap"; admissionId: string; welcomeMessageId: string }
   | { kind: "join-proof"; admissionId: string; welcomeMessageId: string }
-  | { kind: "host-transfer-accept"; authorizationId: string };
+  | { kind: "host-transfer-accept"; authorizationId: string; policyEventId?: string };
 
 export interface SecureRoomRelayDeliveryContext {
   messageId: string;
@@ -381,7 +381,9 @@ function isSecureInboundRelayContext(value: unknown): value is SecureRoomInbound
       canonicalBase64UrlByteLength(value.welcomeMessageId) === SECURE_MESSAGE_ID_BYTES &&
       value.admissionId !== value.welcomeMessageId;
   }
-  return value.kind === "host-transfer-accept" && keys.length === 2 &&
+  return value.kind === "host-transfer-accept" &&
+    (keys.length === 2 || (keys.length === 3 &&
+      canonicalBase64UrlByteLength(value.policyEventId) === SECURE_MESSAGE_ID_BYTES)) &&
     Object.prototype.hasOwnProperty.call(value, "authorizationId") &&
     canonicalBase64UrlByteLength(value.authorizationId) === SECURE_MESSAGE_ID_BYTES;
 }
@@ -1458,9 +1460,11 @@ export class SecureRoomEngine {
     relayContext?: SecureRoomApplicationRelayContextV1,
   ): Promise<SecureRoomOutboundApplicationResult> {
     const intendedRelayContext: SecureRoomApplicationRelayContextV1 = relayContext ??
-      (content.type === "host-transfer" && content.action === "accept"
-        ? { kind: "host-transfer-accept", authorizationId: content.authorizationId }
-        : { kind: "application" });
+      (content.type === "host-succession"
+        ? { kind: "host-transfer-accept", authorizationId: content.authorizationId, policyEventId: content.policyEventId }
+        : content.type === "host-transfer" && content.action === "accept"
+          ? { kind: "host-transfer-accept", authorizationId: content.authorizationId }
+          : { kind: "application" });
     this.assertOutboundApplicationAllowedDuringBarriers(intendedRelayContext);
     if (!this.requireSession().isActive()) throw new SecureRoomEngineError("transition-invalid", "inactive MLS session cannot encrypt events");
     const retainedJoinAdmissionId = relayContext?.kind === "join-proof"
@@ -1837,15 +1841,15 @@ export class SecureRoomEngine {
   ): Promise<boolean> {
     this.assertUsable();
     this.assertLease();
-    this.assertNoPendingApplication();
     if (canonicalBase64UrlByteLength(deviceId) !== SECURE_DEVICE_ID_BYTES ||
         (status !== "active" && status !== "retired")) {
       throw new SecureRoomEngineError("invalid-input", "invalid admission lifecycle completion");
     }
-    const pendingRelayControls = cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
-    const controlIndex = pendingRelayControls.findIndex((control) =>
+    const controlIndex = this.durable.pendingRelayControls.findIndex((control) =>
       control.kind === "admission-barrier" && control.deviceId === deviceId);
     if (controlIndex < 0) return false;
+    this.assertNoPendingApplication();
+    const pendingRelayControls = cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
     const rosterContainsDevice = SecureRoomEngine.normalizeRoster(this.requireSession().roster())
       .some((entry) => entry.deviceId === deviceId);
     if (status === "active") {
@@ -1885,6 +1889,37 @@ export class SecureRoomEngine {
     }
     pendingOutbox.splice(index, 1);
     await this.persistDurable(this.nextDurable(undefined, { pendingOutbox }));
+  }
+
+  async recordHostSuccessionAuthorization(
+    policyEventId: string,
+    offerMessageId: string,
+    authorizationId: string,
+  ): Promise<void> {
+    this.assertUsable();
+    this.assertLease();
+    this.assertNoPendingApplication();
+    const policy = this.durable.applicationState.hostSuccession;
+    if (!policy || policy.eventId !== policyEventId ||
+        policy.hostDeviceId !== this.durable.applicationState.hostDeviceId ||
+        !policy.deviceIds.includes(this.deviceId) ||
+        canonicalBase64UrlByteLength(offerMessageId) !== SECURE_MESSAGE_ID_BYTES ||
+        canonicalBase64UrlByteLength(authorizationId) !== SECURE_MESSAGE_ID_BYTES ||
+        offerMessageId === authorizationId) {
+      throw new SecureRoomEngineError("unauthorized", "automatic host offer lacks the current signed succession policy");
+    }
+    const controls = cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
+    const existing = controls.find((control) => control.kind === "transfer-host");
+    if (existing?.kind === "transfer-host" && existing.authorizationId === authorizationId &&
+        existing.policyEventId === policyEventId && existing.offerMessageId === offerMessageId) return;
+    if (existing?.kind === "transfer-host" && existing.acceptMessageId !== null) {
+      throw new SecureRoomEngineError("transition-invalid", "unsettled host acceptance must be reconciled before succession");
+    }
+    const pendingRelayControls = this.appendPendingRelayControl({
+      kind: "transfer-host", targetDeviceId: this.deviceId, policyEventId,
+      offerMessageId, authorizationId, acceptMessageId: null,
+    }, controls.filter((control) => control.kind !== "transfer-host"));
+    await this.persistDurable(this.nextDurable(undefined, { pendingRelayControls }));
   }
 
   async recordHostTransferAuthorization(offerMessageId: string, authorizationId: string): Promise<void> {
@@ -1988,8 +2023,8 @@ export class SecureRoomEngine {
     if (commitRollback?.messageId === messageId) {
       // A membership/update commit advances the MLS epoch. Restoring its prior
       // snapshot would resurrect consumed epoch secrets, so relay rejection is
-      // terminal for this local identity. Recovery requires a fresh admission
-      // (or recreating the room when this was the host).
+      // terminal for this local identity. Recovery requires fresh admission;
+      // a surviving member may restore host authority through signed succession.
       await this.retire();
       return "retired";
     }
@@ -2128,8 +2163,9 @@ export class SecureRoomEngine {
       if (!signer || signer.signaturePublicKey !== sender.signaturePublicKey) {
         throw new SecureRoomEngineError("transition-invalid", "signed event key does not match the MLS credential");
       }
-      const signedAuthorizationId = event.content.type === "host-transfer" &&
-        event.content.action === "accept" ? event.content.authorizationId : undefined;
+      const signedAuthorizationId = event.content.type === "host-succession" ||
+        (event.content.type === "host-transfer" && event.content.action === "accept")
+        ? event.content.authorizationId : undefined;
       if (signedAuthorizationId !== expectedHostTransferAuthorizationId) {
         throw new SecureRoomEngineError(
           "unauthorized",
@@ -2159,9 +2195,10 @@ export class SecureRoomEngine {
       : relayContext.kind === "join-proof"
         ? content.type === "member-profile" && !currentMember
         : relayContext.kind === "host-transfer-accept"
-          ? content.type === "host-transfer" && content.action === "accept" &&
+          ? ((content.type === "host-transfer" && content.action === "accept" && relayContext.policyEventId === undefined) ||
+             (content.type === "host-succession" && content.policyEventId === relayContext.policyEventId)) &&
             content.authorizationId === relayContext.authorizationId
-          : content.type !== "state-snapshot" &&
+          : content.type !== "state-snapshot" && content.type !== "host-succession" &&
             !(content.type === "member-profile" && !currentMember) &&
             !(content.type === "host-transfer" && content.action === "accept");
     if (!contextMatches) {
@@ -2565,9 +2602,24 @@ export class SecureRoomEngine {
     }
   }
 
+  private isDelegatedHostSuccession(
+    context: SecureRoomInboundRelayContext,
+    deviceId: string,
+  ): boolean {
+    if (context.kind !== "host-transfer-accept" || context.policyEventId === undefined) return false;
+    const policy = this.durable.applicationState.hostSuccession;
+    return policy !== undefined && policy.eventId === context.policyEventId &&
+      policy.hostDeviceId === this.durable.applicationState.hostDeviceId &&
+      policy.deviceIds.includes(deviceId);
+  }
+
   private assertOutboundApplicationAllowedDuringBarriers(
     relayContext: SecureRoomApplicationRelayContextV1,
   ): void {
+    if (relayContext.kind === "host-transfer-accept" && this.isDelegatedHostSuccession(relayContext, this.deviceId) &&
+        this.durable.pendingRelayControls.some((control) => control.kind === "transfer-host" &&
+          control.policyEventId === relayContext.policyEventId && control.targetDeviceId === this.deviceId &&
+          control.authorizationId === relayContext.authorizationId)) return;
     if (this.retirementBarriers.size !== 0 ||
         this.durable.applicationState.pendingRemovalDeviceIds.length !== 0) {
       throw new SecureRoomEngineError("unauthorized", "application encryption is blocked until MLS removal completes");
@@ -2599,6 +2651,7 @@ export class SecureRoomEngine {
     relayContext: SecureRoomInboundRelayContext,
     fromDeviceId: string,
   ): void {
+    if (this.isDelegatedHostSuccession(relayContext, fromDeviceId)) return;
     const current = this.retirementBarriers.entries().next().value as [string, string] | undefined;
     if (current) {
       if (relayContext.kind !== "commit" || relayContext.admissionId !== undefined ||
@@ -2636,6 +2689,7 @@ export class SecureRoomEngine {
     relayContext: SecureRoomInboundRelayContext,
     fromDeviceId: string,
   ): void {
+    if (this.isDelegatedHostSuccession(relayContext, fromDeviceId)) return;
     if (relayContext.kind === "commit") return;
     if (this.retirementBarriers.size !== 0 ||
         this.durable.applicationState.pendingRemovalDeviceIds.length !== 0) {
@@ -2870,7 +2924,7 @@ export class SecureRoomEngine {
         acceptMessageId: null,
       }, controls);
     }
-    if (content.type === "host-transfer" && content.action === "accept") {
+    if (content.type === "host-succession" || (content.type === "host-transfer" && content.action === "accept")) {
       const index = controls.findIndex((control) => control.kind === "transfer-host" &&
         control.targetDeviceId === this.deviceId && control.acceptMessageId === null &&
         control.authorizationId === content.authorizationId);
@@ -2880,7 +2934,8 @@ export class SecureRoomEngine {
           "host-transfer acceptance does not match its durable relay authorization",
         );
       }
-      controls[index] = { ...controls[index], acceptMessageId: messageId } as SecureRoomPendingRelayControlV1;
+      if (content.type === "host-succession" && content.action === "reject") controls.splice(index, 1);
+      else controls[index] = { ...controls[index], acceptMessageId: messageId } as SecureRoomPendingRelayControlV1;
     } else if (content.type === "host-transfer" && content.action === "reject") {
       const index = controls.findIndex((control) => control.kind === "transfer-host" &&
         control.targetDeviceId === this.deviceId && control.acceptMessageId === null);
@@ -2898,6 +2953,10 @@ export class SecureRoomEngine {
   ): SecureRoomPendingRelayControlV1[] {
     const content = event.content;
     let controls = cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
+    if (content.type === "host-succession") {
+      controls = controls.filter((control) => control.kind !== "transfer-host" ||
+        (content.action === "reject" && control.authorizationId !== content.authorizationId));
+    }
     if (effects.some((effect) => effect.type === "room-closed") &&
         this.durable.applicationState.hostDeviceId === this.deviceId) {
       if (relayMessageId === undefined) {

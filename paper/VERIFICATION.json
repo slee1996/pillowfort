@@ -1,0 +1,869 @@
+{
+  "schemaVersion": 2,
+  "edition": {
+    "title": "Pillowfort: An MLS-Based Protocol for Ephemeral Rooms",
+    "date": "2026-11-09",
+    "wireVersion": 4,
+    "profile": "pf-v4-cs1",
+    "documents": [
+      "Pillowfort-Protocol-Paper",
+      "Formal-State-Machine-Analysis",
+      "Protocol-Technical-Appendix"
+    ],
+    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-09"
+  },
+  "source": {
+    "commit": "10fe8f8b490c9e890d5a642bc25568e985c2fe8a",
+    "tree": "9cb13d5e5abdbe27b2c7bfad4687c5a3923ed6d0",
+    "baseCommit": "7b48187541d98cd146a69d03462689d57b5f7e72",
+    "publicUrl": "https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a",
+    "archive": "sources/pillowfort-source-10fe8f8b490c.tar.gz",
+    "archiveSha256": "22006b84418e9b67f3ca7850e9c289ea1588bf0348e54436a05c4f0abb0ee072",
+    "publicationBranch": "protocol-v4-cs1-evidence-20261109",
+    "userHeadAndIndexPreserved": true,
+    "buildOutputs": [
+      {
+        "file": "client/dist/assets/index-xUK0ffpx.js",
+        "sha256": "6f77474722af1d4a14c15875e7fc58b8a7069a27a67a2aca1b1010e304de08b7",
+        "cleanArchiveReproductionMatches": true
+      },
+      {
+        "file": "client/dist/assets/pillowfort_openmls_bg-BxD-mDtq.wasm",
+        "sha256": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94",
+        "cleanArchiveReproductionMatches": true
+      }
+    ]
+  },
+  "implementationStatus": "This is a tested source/evidence publication, not a production deployment. The profile retains explicit acceptance/refusal, internal admission-order selection, and collapse on universal refusal. Two additional scheduling/recovery corrections are in the pinned source.",
+  "behavior": {
+    "hostDisconnectGraceSeconds": 120,
+    "successionOfferSeconds": 30,
+    "hostApprovalWindowSeconds": 180,
+    "relayAdmissionWindowSeconds": 185,
+    "successorLostBeforeNewPolicy": "Retire at successor grace expiry; never reuse predecessor delegation.",
+    "relayTrust": "A dishonest connectivity/deadline oracle can induce an authorized but unnecessary succession; signatures do not prove host unavailability."
+  },
+  "verification": {
+    "fullProjectGate": {
+      "command": "npm run check",
+      "passed": true,
+      "log": "evidence/full-project-check.txt",
+      "ordinaryTests": {
+        "passed": 316,
+        "failed": 0,
+        "files": 11,
+        "assertions": 1557
+      },
+      "securityScopes": [
+        {
+          "runtime": "Node",
+          "passed": 16,
+          "failed": 0
+        },
+        {
+          "runtime": "Bun",
+          "passed": 5,
+          "failed": 0,
+          "files": 2,
+          "assertions": 36
+        },
+        {
+          "runtime": "Bun browser/MLS engine",
+          "passed": 26,
+          "failed": 0,
+          "files": 1,
+          "assertions": 306
+        },
+        {
+          "runtime": "Bun security boundaries",
+          "passed": 15,
+          "failed": 0,
+          "files": 1,
+          "assertions": 137
+        },
+        {
+          "runtime": "Bun local secure server",
+          "passed": 9,
+          "failed": 0,
+          "files": 1,
+          "assertions": 444
+        },
+        {
+          "runtime": "Bun protocol/security batch",
+          "passed": 175,
+          "failed": 0,
+          "files": 18,
+          "assertions": 2301
+        }
+      ],
+      "securityGateFiles": 25,
+      "openMlsArtifacts": 4,
+      "openMlsSourceInputs": 51
+    },
+    "cleanArchiveReproduction": {
+      "commands": [
+        "npm ci",
+        "npm --prefix client ci",
+        "npm run check"
+      ],
+      "passed": true,
+      "source": "sources/pillowfort-source-10fe8f8b490c.tar.gz",
+      "log": "evidence/pinned-source-reproduction.txt",
+      "node": "v24.22.2",
+      "python": "Python 3.12.2",
+      "java": "openjdk 21.0.12.1 2026-08-18\nOpenJDK Runtime Environment Homebrew (build 21.0.12.1)\nOpenJDK 64-Bit Server VM Homebrew (build 21.0.12.1, mixed mode, sharing)",
+      "scope": "Fresh isolated archive extraction with fresh root/client dependency installs. Browser JS and MLS WASM hashes match the original run."
+    },
+    "affectedProtocolSuites": {
+      "command": "bun test test/secure-game-reducer.test.ts test/secure-relay-v4.test.ts test/secure-relay-persistence-v4.test.ts test/secure-transport-v4.test.ts test/application-events-v4.test.ts",
+      "passed": 86,
+      "failed": 0,
+      "assertions": 740,
+      "files": 5
+    },
+    "newRegressions": {
+      "successorCrashCases": 6,
+      "hostPreviewReadinessCases": 2,
+      "realMlsLifecycleReplay": "Restored application ciphertext, rollback ability and revision survive an unrelated valid active signal.",
+      "failingBefore": [
+        "evidence/preview-regressions-before.txt",
+        "evidence/lifecycle-regression-before.txt"
+      ],
+      "passingAfter": "Both normal project gates, focused suites, and the actual browser runs passed."
+    },
+    "models": {
+      "command": "python3 scripts/check-protocol-models.py --jar /tmp/pillowfort-tla2tools-1.7.4.jar --output EVIDENCE/models",
+      "passed": true,
+      "safeConfigurations": 9,
+      "expectedCounterexampleConfigurations": 7,
+      "result": "evidence/models/model-results.json",
+      "checker": "TLC 2.19 / tla2tools v1.7.4",
+      "jarSha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+      "largestDistinctAbstractStates": 1202973,
+      "scope": "Finite coordination safety abstraction; no cryptographic proof, deadlock freedom, fairness or unbounded liveness claim.",
+      "interpretation": "Bounded safety of abstractions; no cryptographic proof, implementation refinement, fairness, deadlock-freedom or unbounded liveness theorem."
+    },
+    "browserFaults": {
+      "command": "bun scripts/protocol-browser-evidence.ts --mode faults --output EVIDENCE/browser-faults-pinned",
+      "passed": true,
+      "workingDirectory": "Fresh extraction of the pinned source archive, after clean npm run check.",
+      "result": "evidence/browser-faults-pinned/browser-results.json",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "cases": [
+        {
+          "fault": "acceptance-result-unreceived",
+          "boundaryReached": true,
+          "outcome": "same-identity-recovery-and-encrypted-delivery",
+          "restoredSameDevice": true
+        },
+        {
+          "fault": "removal-before-policy",
+          "boundaryReached": true,
+          "outcome": "same-identity-recovery-and-encrypted-delivery",
+          "restoredSameDevice": true
+        },
+        {
+          "fault": "permanent-no-policy",
+          "boundaryReached": true,
+          "outcome": "room-retired-after-successor-grace",
+          "noOldPolicyReused": true
+        },
+        {
+          "fault": "peer-membership-storage-failure",
+          "outcome": "affected-peer-failed-closed-other-members-continued",
+          "scope": "A real IndexedDB write failure during delivery of an Add commit; not proof of automatic repair of arbitrary epoch disagreement."
+        }
+      ],
+      "runtime": "Real production bundle, local Bun relay, actual MLS/WebSockets/IndexedDB; actual 120-second grace; explicit host approval and Catch action."
+    },
+    "benchmarks": {
+      "command": "bun scripts/protocol-browser-evidence.ts --mode benchmark --output EVIDENCE/benchmarks-final",
+      "passed": true,
+      "result": "evidence/benchmarks-final/browser-results.json",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "profiles": [
+        {
+          "members": 2,
+          "addedPreviewDelayMs": 0,
+          "samples": 20,
+          "nearestRankP50Ms": 29.71020800000042,
+          "nearestRankP95Ms": 30.736292000000503,
+          "achievedMessagesPerSecond": 1.872092581600875,
+          "observedHostPreviews": 26
+        },
+        {
+          "members": 3,
+          "addedPreviewDelayMs": 0,
+          "samples": 20,
+          "nearestRankP50Ms": 29.595666999999594,
+          "nearestRankP95Ms": 30.77308400000038,
+          "achievedMessagesPerSecond": 1.8719665804710202,
+          "observedHostPreviews": 26
+        },
+        {
+          "members": 3,
+          "addedPreviewDelayMs": 100,
+          "samples": 20,
+          "nearestRankP50Ms": 130.2732909999977,
+          "nearestRankP95Ms": 246.1388330000009,
+          "achievedMessagesPerSecond": 1.5131654663331169,
+          "observedHostPreviews": 27
+        },
+        {
+          "members": 6,
+          "addedPreviewDelayMs": 0,
+          "samples": 20,
+          "nearestRankP50Ms": 29.86908399999811,
+          "nearestRankP95Ms": 44.947667000000365,
+          "achievedMessagesPerSecond": 1.8597818915791184,
+          "observedHostPreviews": 26
+        }
+      ],
+      "interpretation": "One outstanding UI message, 500 ms quiet period after each completed delivery, twenty samples/profile. Achieved paced rate, not maximum capacity, open-loop stability, WAN performance or a stable tail estimate."
+    },
+    "signedExamples": {
+      "passed": true,
+      "result": "evidence/signed-example-verification.json",
+      "checks": [
+        {
+          "name": "chat",
+          "verified": true,
+          "changedOrderRejected": true,
+          "wrongRoomRejected": true
+        },
+        {
+          "name": "pillow-toss",
+          "verified": true,
+          "changedOrderRejected": true,
+          "wrongRoomRejected": true
+        },
+        {
+          "name": "host-transfer-accept",
+          "verified": true,
+          "changedOrderRejected": true,
+          "wrongRoomRejected": true
+        }
+      ],
+      "scope": "Pinned-source event verification, modified-order rejection and expected-room rejection; not a whole MLS execution."
+    },
+    "courtJester": {
+      "scopeFiles": 6,
+      "currentResults": "evidence/court-jester-current-scope.json",
+      "exactCommands": "Every results[].command array records the installed executable and exact arguments.",
+      "blanketPass": false,
+      "verdict": "All six current-scope calls were inconclusive.",
+      "remaining": "Relay authoritative coverage reached 10/11 required exports; test/CLI harness selection or bootstrap is incomplete; browser engine verification is blocked by sandbox network/process permissions. TLA+ is unsupported by this verifier and was checked with TLC instead. No finding was suppressed."
+    },
+    "publicationArtifacts": {
+      "pdfs": [
+        {
+          "file": "Pillowfort-Protocol-Paper.pdf",
+          "pages": 10,
+          "a4Portrait": true,
+          "outOfPageText": [],
+          "blankPages": [],
+          "localOrRelativeLinks": [],
+          "replacementCharacters": 0
+        },
+        {
+          "file": "Formal-State-Machine-Analysis.pdf",
+          "pages": 6,
+          "a4Portrait": true,
+          "outOfPageText": [],
+          "blankPages": [],
+          "localOrRelativeLinks": [],
+          "replacementCharacters": 0
+        },
+        {
+          "file": "Protocol-Technical-Appendix.pdf",
+          "pages": 10,
+          "a4Portrait": true,
+          "outOfPageText": [],
+          "blankPages": [],
+          "localOrRelativeLinks": [],
+          "replacementCharacters": 0
+        }
+      ],
+      "figures": 7,
+      "formats": [
+        "SVG",
+        "2x PNG"
+      ],
+      "figureComposition": "Chromium SVG rasterization followed by FFmpeg white-canvas composition.",
+      "lastFfmpegCommand": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=white:s=1560x1100",
+        "-i",
+        "/tmp/pillowfort-successor-crash-transparent.png",
+        "-filter_complex",
+        "[0:v][1:v]overlay=shortest=1,format=rgb24",
+        "-frames:v",
+        "1",
+        "/Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/assets/fig-07-successor-crash.png"
+      ],
+      "visualProof": "All final PDFs inspected; actual browser HTML opened; all six main figures loaded; successor crash figure visually checked. No local/relative PDF hyperlinks, out-of-page text, blank pages or replacement characters.",
+      "publicReferences": "Implementation links pin the exact source commit. Companion links use the versioned evidence tag; the publication receipt records the final artifact commit and public-download hashes."
+    }
+  },
+  "evidenceBoundary": {
+    "notEstablished": [
+      "Independent security audit",
+      "Cryptographic security proof",
+      "Unbounded safety or liveness",
+      "Byzantine agreement or automatic epoch merging",
+      "WAN, mobile or maximum-capacity performance",
+      "Production deployment equivalence"
+    ],
+    "dependencyAlertNotice": "GitHub reported 84 default-branch dependency alerts (4 critical, 47 high, 24 moderate, 9 low) during source publication. These are not independently triaged by this protocol evaluation and are not asserted to describe the evidence branch.",
+    "nonGatingWarnings": [
+      "Existing Node MODULE_TYPELESS_PACKAGE_JSON warning",
+      "Analytics proxy connection errors in isolated tests",
+      "Existing Vite chunk-size advisory",
+      "Fresh npm install deprecation/install-script approval warnings"
+    ]
+  },
+  "artifacts": [
+    {
+      "file": "Formal-State-Machine-Analysis.html",
+      "bytes": 27724,
+      "sha256": "051da6317f6b9528d44dc466b939a2de66e66e90c0b753962c954d36b95adfde"
+    },
+    {
+      "file": "Formal-State-Machine-Analysis.md",
+      "bytes": 23160,
+      "sha256": "023387b4d6412e2bd4cf765ff708072b2cfdfce32e988d7b2b6043a70d049232"
+    },
+    {
+      "file": "Formal-State-Machine-Analysis.pdf",
+      "bytes": 339389,
+      "sha256": "c73434af69fde79e2919ec02c40ab94ab756c109cd216d1d20f2bfea07094707"
+    },
+    {
+      "file": "Pillowfort-Protocol-Paper.html",
+      "bytes": 35998,
+      "sha256": "67f3a87adf52d739c1d3f46ab0de94b82033a49866fbcee808554799984d6acf"
+    },
+    {
+      "file": "Pillowfort-Protocol-Paper.md",
+      "bytes": 28989,
+      "sha256": "94732e939259e64c233b4f21189b0f9cf5a755d2310d0e64f23b463f8c73c21b"
+    },
+    {
+      "file": "Pillowfort-Protocol-Paper.pdf",
+      "bytes": 665034,
+      "sha256": "c7ad824d4de7df6b8fca2c462b361229af9dd9b58bf1b039a250edc123d32336"
+    },
+    {
+      "file": "Protocol-Technical-Appendix.html",
+      "bytes": 33026,
+      "sha256": "85628af6a718aad3a122a6485745446853f1c3343ac7ad32415d0132c62c7d45"
+    },
+    {
+      "file": "Protocol-Technical-Appendix.md",
+      "bytes": 26171,
+      "sha256": "d18eccfaf5f2daf7af9fe6cf593c64670d13c926b9f3ebaedae7c81d7555200f"
+    },
+    {
+      "file": "Protocol-Technical-Appendix.pdf",
+      "bytes": 526707,
+      "sha256": "c1f0169c6b2a9f8127637b3914238cf5bbc1fa122978ab651d1e0b6d11b9bad7"
+    },
+    {
+      "file": "Protocol-Verification-Matrix.md",
+      "bytes": 9609,
+      "sha256": "079a2b2bc03473b84343808e90b3684545fb4d0f9e61024db9c809e2413d4a44"
+    },
+    {
+      "file": "SOURCE_REVISION.txt",
+      "bytes": 828,
+      "sha256": "72022b3b9baf2239fb3120a19f3db954ccc6fdb196d500cbd2d5db07a4c60eda"
+    },
+    {
+      "file": "assets/fig-01-system-model.png",
+      "bytes": 116634,
+      "sha256": "fb528450cb06792e0e66b69630d7454b4024f86cd280eef661bf48912020a9d2"
+    },
+    {
+      "file": "assets/fig-01-system-model.svg",
+      "bytes": 3418,
+      "sha256": "45ae5ebe7431a05bca4252d914a867970fd668419c089d1061b8b4f48e96ba86"
+    },
+    {
+      "file": "assets/fig-02-admission.png",
+      "bytes": 136633,
+      "sha256": "af1f54cd2a09142b1e279e17f18d0fdbd2dbbe573a83b69aa1b66321b9722eb3"
+    },
+    {
+      "file": "assets/fig-02-admission.svg",
+      "bytes": 4903,
+      "sha256": "6f4b263a0b724a7dcdab9682da9ef678043c44f594ab59d421031d0f250fcd61"
+    },
+    {
+      "file": "assets/fig-03-ordered-operation.png",
+      "bytes": 125348,
+      "sha256": "78359392ee5de798cf75023245af9442fa2d1e2779c4287a17bd7dc5baf08ca2"
+    },
+    {
+      "file": "assets/fig-03-ordered-operation.svg",
+      "bytes": 4315,
+      "sha256": "6d3c08077cf45e4b3afa962f4e4a114b6ab439127d4081993ad5941dd23badde"
+    },
+    {
+      "file": "assets/fig-04-recovery.png",
+      "bytes": 81826,
+      "sha256": "34509d6f3d111be6fb5a2935a42c170b064212c5d214265a5c90c5b2ee890272"
+    },
+    {
+      "file": "assets/fig-04-recovery.svg",
+      "bytes": 3946,
+      "sha256": "8b54e1f561a62d692fa9f0edb691650d24ff1ec801b341bc98821f13a3c6afac"
+    },
+    {
+      "file": "assets/fig-05-host-transfer.png",
+      "bytes": 114720,
+      "sha256": "0f954de78df963b4f426a80db137bacd3dba8ca5e8877f4e5f73035666cf72f6"
+    },
+    {
+      "file": "assets/fig-05-host-transfer.svg",
+      "bytes": 4085,
+      "sha256": "9b7cacd5775f069d29b70c8067afed79105134b8bcbee6bf28219db37309dc72"
+    },
+    {
+      "file": "assets/fig-06-automatic-succession.png",
+      "bytes": 185139,
+      "sha256": "76a5b6c4ce8e4368c8205907b37b051f5a5762c9ab81653bbba1fd6938f40a5d"
+    },
+    {
+      "file": "assets/fig-06-automatic-succession.svg",
+      "bytes": 5800,
+      "sha256": "4436de96734d61150e85e9af6bb96f138c8df1e574c38c51647a79f379d669db"
+    },
+    {
+      "file": "assets/fig-07-successor-crash.png",
+      "bytes": 119486,
+      "sha256": "79b2d0395594b2525f28a21866e8c3fda42632bd96e7310eb53289ef6334c444"
+    },
+    {
+      "file": "assets/fig-07-successor-crash.svg",
+      "bytes": 2823,
+      "sha256": "5816102698c0c4b9738fdcc0a77adf8ca06d478316e067a2f7b378410b3c5178"
+    },
+    {
+      "file": "assets/paper.css",
+      "bytes": 2923,
+      "sha256": "eb9d197160cdd584e5a8a00bfb0809452431ed31104e1a8f66c748921a3963be"
+    },
+    {
+      "file": "evidence/benchmarks-final/browser-results.json",
+      "bytes": 5022,
+      "sha256": "bb82cb9a53d96200b9980a55c89bde4c7f6c0c84d1226db14fec81241d0f600f"
+    },
+    {
+      "file": "evidence/browser-faults-pinned/acceptance-result-unreceived.png",
+      "bytes": 226683,
+      "sha256": "289241ebf37e37902bbf74392a8b5f6ce4711a24cff8e145b198eaa7bc792b5a"
+    },
+    {
+      "file": "evidence/browser-faults-pinned/browser-results.json",
+      "bytes": 1240,
+      "sha256": "034d8346399ed1e42f82b8ef52eec584444422518ee9178b91d9c65413e20e34"
+    },
+    {
+      "file": "evidence/browser-faults-pinned/peer-membership-storage-failure.png",
+      "bytes": 333103,
+      "sha256": "4db37dde8e695b335a35fe5865fcb2916cf629b44af1712e9ac29f378e3ba092"
+    },
+    {
+      "file": "evidence/browser-faults-pinned/permanent-no-policy.png",
+      "bytes": 323498,
+      "sha256": "a50e60db8551ae18b6ec142f544c25fb400c7bcb6c9305d518284f550d52ee70"
+    },
+    {
+      "file": "evidence/browser-faults-pinned/removal-before-policy.png",
+      "bytes": 217626,
+      "sha256": "2b555c898dbed6128734ae98169a7dccb9ca914c9d7c7e64b34f1253ff8efae8"
+    },
+    {
+      "file": "evidence/court-jester-current-scope.json",
+      "bytes": 127657,
+      "sha256": "eefc4ac491d6dd3606703077ff40882ecbbee8ea032ec2237e1518c610d10a91"
+    },
+    {
+      "file": "evidence/full-project-check.txt",
+      "bytes": 9789,
+      "sha256": "18828f3fb2eea00527f78eaf159d283a5bc57b8e5a402968750ce756ce4f29f7"
+    },
+    {
+      "file": "evidence/lifecycle-regression-before.txt",
+      "bytes": 1192,
+      "sha256": "aeb2c6d128751e9fd08fde694ecd3fe39ac5a943ddaf93be35392608ebc43719"
+    },
+    {
+      "file": "evidence/models/Coordination.tla",
+      "bytes": 1669,
+      "sha256": "35ed59b33945e3ee689bb98413c40b4eb0131fb5b1cdcc21cb9eed644a8a9a35"
+    },
+    {
+      "file": "evidence/models/M1Delivery.cfg",
+      "bytes": 90,
+      "sha256": "df0de0ae334fb31e6efb4980698e3f110c8a4dcfc564d16b59ec7ec4ed1b8a2b"
+    },
+    {
+      "file": "evidence/models/M1Delivery.log",
+      "bytes": 1462,
+      "sha256": "16ddc8c23aff10b92ad8e4e8266334233a7be46fb9b02989f57254ba0bf17443"
+    },
+    {
+      "file": "evidence/models/M1Delivery.tla",
+      "bytes": 3936,
+      "sha256": "751725a371c62849ac7a8caa2f5e8d6af429bb3f100a0ad57e5ee57dc54f1e28"
+    },
+    {
+      "file": "evidence/models/M2Admission.cfg",
+      "bytes": 90,
+      "sha256": "df0de0ae334fb31e6efb4980698e3f110c8a4dcfc564d16b59ec7ec4ed1b8a2b"
+    },
+    {
+      "file": "evidence/models/M2Admission.log",
+      "bytes": 1464,
+      "sha256": "9a40bf4bee18bdcb5bdd764f06d5899910436a6f6da5215259440eabe9018247"
+    },
+    {
+      "file": "evidence/models/M2Admission.tla",
+      "bytes": 2857,
+      "sha256": "1e235eba1fd14fc4a455af4020ed42a72634b9b38c53f59a4d7de27d7966fd23"
+    },
+    {
+      "file": "evidence/models/M3Resume.cfg",
+      "bytes": 90,
+      "sha256": "df0de0ae334fb31e6efb4980698e3f110c8a4dcfc564d16b59ec7ec4ed1b8a2b"
+    },
+    {
+      "file": "evidence/models/M3Resume.log",
+      "bytes": 1205,
+      "sha256": "f1f7dbcc01f925125fbfba20579e471b61a43b039768bec20ca89e4fbeb9f408"
+    },
+    {
+      "file": "evidence/models/M3Resume.tla",
+      "bytes": 2269,
+      "sha256": "608ed5ab8a324118ad2e3f2526f39d34b04bd2baca6dfdd6c6b85f54526bbf01"
+    },
+    {
+      "file": "evidence/models/M4Succession.cfg",
+      "bytes": 90,
+      "sha256": "df0de0ae334fb31e6efb4980698e3f110c8a4dcfc564d16b59ec7ec4ed1b8a2b"
+    },
+    {
+      "file": "evidence/models/M4Succession.log",
+      "bytes": 1467,
+      "sha256": "12550f8f607bef798bc017b740f5ab410e8ff7c525af8e212610f920b80c72cf"
+    },
+    {
+      "file": "evidence/models/M4Succession.tla",
+      "bytes": 4474,
+      "sha256": "6d2c9b5e22c291748e32e285397783f3d61740940757fe881f68587f38786462"
+    },
+    {
+      "file": "evidence/models/composed-M1-M1.cfg",
+      "bytes": 116,
+      "sha256": "15483b7cd413b34d46b2a5087184fb83b457e9fef035b426618cebf1fff22e64"
+    },
+    {
+      "file": "evidence/models/composed-M1-M1.log",
+      "bytes": 2107,
+      "sha256": "b07d1f705d5fca4488b894a76279cf81219d9bb81d8c5b3e0477770ba5f16808"
+    },
+    {
+      "file": "evidence/models/composed-M1-M2.cfg",
+      "bytes": 116,
+      "sha256": "6c8fa8cea41c5b55225c392f06d329a731c51f00406e925408bfefee64446c7e"
+    },
+    {
+      "file": "evidence/models/composed-M1-M2.log",
+      "bytes": 2107,
+      "sha256": "d535f4e91da0745a6b78e7a6c01e049e951b23112fea4f5981b7b2da4097bef8"
+    },
+    {
+      "file": "evidence/models/composed-M1-M3.cfg",
+      "bytes": 116,
+      "sha256": "db30f301609617c632f9b4ae3ce5fac133238e6177220709fbad153aa3edf8dc"
+    },
+    {
+      "file": "evidence/models/composed-M1-M3.log",
+      "bytes": 2109,
+      "sha256": "34672eaa13fbac156975b4e58767510eba719e6e41fb1e445cc4b52327e8c726"
+    },
+    {
+      "file": "evidence/models/composed-M1-M4.cfg",
+      "bytes": 116,
+      "sha256": "212b22fcc76f0a820e9dd5ff6726c07d85192f62d3712cb9e297f1c1b9ac972b"
+    },
+    {
+      "file": "evidence/models/composed-M1-M4.log",
+      "bytes": 2316,
+      "sha256": "bae44e577195aef451bcae4d69e5a6955531bb8f26a62bdae6996b3e12c2f408"
+    },
+    {
+      "file": "evidence/models/composed-larger-backlog.cfg",
+      "bytes": 116,
+      "sha256": "8752ef7f062572e54158cf9d82bb82619e6f7c64fbc02301e2904e026ba1c43b"
+    },
+    {
+      "file": "evidence/models/composed-larger-backlog.log",
+      "bytes": 2318,
+      "sha256": "0f87a37b9af31a1bb351c3ec8fd39aa96c8a4ffb5e03140d75e20e13d90988e2"
+    },
+    {
+      "file": "evidence/models/model-results.json",
+      "bytes": 15004,
+      "sha256": "a85ebb64f0ac63535571cccf7dac03dded829b35844797d54280ae5d554fd2db"
+    },
+    {
+      "file": "evidence/models/mutation-Grant.cfg",
+      "bytes": 91,
+      "sha256": "35d2b25c0e142a7b165b7241daa71e8d56303feb1355da7b727601e0b10cc33b"
+    },
+    {
+      "file": "evidence/models/mutation-Grant.log",
+      "bytes": 3056,
+      "sha256": "1ac7dd9815b2fb778e69ebfa8d1e8089dbc5427d8ad68a25623831196b068801"
+    },
+    {
+      "file": "evidence/models/mutation-Interlock.cfg",
+      "bytes": 120,
+      "sha256": "7ac2c1669b1cfaa2983e492a0842f1ed80148f58f3557ec0cab2632ade8298a9"
+    },
+    {
+      "file": "evidence/models/mutation-Interlock.log",
+      "bytes": 7550,
+      "sha256": "e1ff58e9c1767751fa4e78d6bc2b3394d0a99f04e9e341bace76e5f5abe02c93"
+    },
+    {
+      "file": "evidence/models/mutation-KeyReuse.cfg",
+      "bytes": 94,
+      "sha256": "f5a7672ecd0cea2f2d55c4e7b0e733607aeb58e83a9b76d93d0418afe50a73c1"
+    },
+    {
+      "file": "evidence/models/mutation-KeyReuse.log",
+      "bytes": 3743,
+      "sha256": "cc642d080e3c3aed252bf659287ab7d559ae68c7944ddad07b7c6fa0dde0a9ae"
+    },
+    {
+      "file": "evidence/models/mutation-Persistence.cfg",
+      "bytes": 97,
+      "sha256": "6a40dc3a7373389179a2fc59ee992c98d3dd81b04dafe6628d7c0ce1b37af0be"
+    },
+    {
+      "file": "evidence/models/mutation-Persistence.log",
+      "bytes": 2048,
+      "sha256": "fbf6b7f1edae5492dee21a6a29f95a24b2e3844e37480b8f47bd766d2b0da3ea"
+    },
+    {
+      "file": "evidence/models/mutation-Preview.cfg",
+      "bytes": 93,
+      "sha256": "7ec495b080fd1e7ed3b8506dda468c6ce925b5e55168dfed2ecbfffecd30df9c"
+    },
+    {
+      "file": "evidence/models/mutation-Preview.log",
+      "bytes": 4415,
+      "sha256": "4cb3a9ef13771f3db8cead7cefac800fe5f6d80389f33b8d7d049592c85c20f7"
+    },
+    {
+      "file": "evidence/models/mutation-Snapshot.cfg",
+      "bytes": 94,
+      "sha256": "1538f3c7123dc4a465fb6067028a959b867c7043d306cf9d42ab9f4c02723e44"
+    },
+    {
+      "file": "evidence/models/mutation-Snapshot.log",
+      "bytes": 2611,
+      "sha256": "2459189ad271bf10f366e59c4a3bca78976275a4b2ef7a41c9e3ed0c169f1c59"
+    },
+    {
+      "file": "evidence/models/mutation-Target.cfg",
+      "bytes": 92,
+      "sha256": "f50832aa0cca5da14c8724c9f0a6b21d6f3d5942671603531678a8d12f792730"
+    },
+    {
+      "file": "evidence/models/mutation-Target.log",
+      "bytes": 4417,
+      "sha256": "9c29243854bfd9ad238b1bac9ee20e076f047fe30ccf698745dcd2c300935e98"
+    },
+    {
+      "file": "evidence/pinned-source-reproduction.txt",
+      "bytes": 10967,
+      "sha256": "57f02f8159cb367911855f15c55516add375fc3a92a707ad3ed78bfd2f048c09"
+    },
+    {
+      "file": "evidence/pre-execution-state-machine-plan.md",
+      "bytes": 19704,
+      "sha256": "9710ba6a45e8cb838b8c623169db8f5c0c07a5ae01a188c199aee86e2a4e2973"
+    },
+    {
+      "file": "evidence/preview-regressions-before.txt",
+      "bytes": 1917,
+      "sha256": "a157fb83ca50af1c5a53b4a9d0c61db940ef427ceda47d04c64fd840a180f924"
+    },
+    {
+      "file": "evidence/signed-example-verification.json",
+      "bytes": 1671,
+      "sha256": "e42bf8cb75bc0f68d64f944e5aff101bfb3351d748d09f61438301b1f2b6ada1"
+    },
+    {
+      "file": "examples.json",
+      "bytes": 3477,
+      "sha256": "523eb5d4754c4d37c25d9f4bf5aff7edc4fe15f4a79e921d25530d5ed8869d60"
+    },
+    {
+      "file": "sources/client/src/components/overlays/HostOfferDialog.tsx",
+      "bytes": 1644,
+      "sha256": "6c2cc4b6cd359229fd515241da086cec68d257c58f1a0da766c78166eb91ec63"
+    },
+    {
+      "file": "sources/docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md",
+      "bytes": 24443,
+      "sha256": "84061adf58adab0ad9448e285656a6ccd5f81fc8c4f84e9d1114f1ad0be7d9e7"
+    },
+    {
+      "file": "sources/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md",
+      "bytes": 9609,
+      "sha256": "079a2b2bc03473b84343808e90b3684545fb4d0f9e61024db9c809e2413d4a44"
+    },
+    {
+      "file": "sources/docs/SECURE_ROOM_PROTOCOL_V4.md",
+      "bytes": 36665,
+      "sha256": "df4d15678ddb7d0800d51261c7a070c30f9dc4f8f32fbb8a94a9326d8c0e77ce"
+    },
+    {
+      "file": "sources/docs/agents/security.md",
+      "bytes": 24690,
+      "sha256": "bad6635e04067e9cfd9149374dd51b231e60cbd134e6a37121c349812e1c015e"
+    },
+    {
+      "file": "sources/pillowfort-source-10fe8f8b490c.tar.gz",
+      "bytes": 16404982,
+      "sha256": "22006b84418e9b67f3ca7850e9c289ea1588bf0348e54436a05c4f0abb0ee072"
+    },
+    {
+      "file": "sources/scripts/check-protocol-models.py",
+      "bytes": 4397,
+      "sha256": "5891c8c38507e18260e0a438b6c474fffd4bd60354e08da44d4242dd857e0df2"
+    },
+    {
+      "file": "sources/scripts/protocol-browser-evidence.ts",
+      "bytes": 20236,
+      "sha256": "c1f7a5aeb73bf81e0b151598e6e9b80a2ac1a552ecbab183e5068e88697260af"
+    },
+    {
+      "file": "sources/server.ts",
+      "bytes": 135267,
+      "sha256": "31a11f0d78ee6220f6875e012f4cea6395cd4833e97a43aa6d5df65222f155db"
+    },
+    {
+      "file": "sources/src/applicationEventsV4.ts",
+      "bytes": 44742,
+      "sha256": "51197968e082cd719326581fcd5c71497e8e7f0781d5f06c61dca3ffda7dc741"
+    },
+    {
+      "file": "sources/src/participant/secureRoomController.ts",
+      "bytes": 168677,
+      "sha256": "0e57ceb689c3754e9f58cae85ff5f0fe1aecf47246a6ddc6e39a0250a2665b5b"
+    },
+    {
+      "file": "sources/src/participant/secureRoomEngine.ts",
+      "bytes": 154649,
+      "sha256": "2aae654ed2229acc36600e43fe3792ac1fd14371a0166dac5288abc22f95eaf7"
+    },
+    {
+      "file": "sources/src/participant/secureRoomState.ts",
+      "bytes": 70578,
+      "sha256": "cc0a6d89ae9f18c2fd25259c99dedfa7875884d1d1d988266dd5528481d1fe08"
+    },
+    {
+      "file": "sources/src/room.ts",
+      "bytes": 152877,
+      "sha256": "38b9e5ba89d1c8aa9c80705a86c8ff52edc65dd20ebf2335efeffc7cdaf19b97"
+    },
+    {
+      "file": "sources/src/secureGameReducer.ts",
+      "bytes": 57523,
+      "sha256": "4c75b7501ebdaa6ee7628f84091721990e079fc10c6700a8295cf0d3ce4e224f"
+    },
+    {
+      "file": "sources/src/secureRelayV4.ts",
+      "bytes": 197872,
+      "sha256": "f82d2ffb2e05e7b853def4f2e88f037868f3f74b128fcd160f86379e629bc5d8"
+    },
+    {
+      "file": "sources/src/secureTransportV4.ts",
+      "bytes": 22535,
+      "sha256": "e0ffa53315ae6d772f6ee21b1efc45b030872910a484b2c0f778a8401ac2cdf4"
+    },
+    {
+      "file": "sources/test/secure-game-reducer.test.ts",
+      "bytes": 49568,
+      "sha256": "e213ec8eb651792ebcc0d83c13be0c3fd534929f991b20cfef6c0a54c6a8229d"
+    },
+    {
+      "file": "sources/test/secure-relay-v4.test.ts",
+      "bytes": 134610,
+      "sha256": "535080cfafae35991718ee0f250b138f33961e4bd23a6a1c489a7e75bc7a1b6d"
+    },
+    {
+      "file": "sources/test/secure-room-engine.test.ts",
+      "bytes": 221087,
+      "sha256": "94d0f057ad814093d3ad1d6d546fcbdc310500ea1005d6255127146e3bb4bb80"
+    },
+    {
+      "file": "sources/verification/Coordination.tla",
+      "bytes": 1669,
+      "sha256": "35ed59b33945e3ee689bb98413c40b4eb0131fb5b1cdcc21cb9eed644a8a9a35"
+    },
+    {
+      "file": "sources/verification/M1Delivery.tla",
+      "bytes": 3936,
+      "sha256": "751725a371c62849ac7a8caa2f5e8d6af429bb3f100a0ad57e5ee57dc54f1e28"
+    },
+    {
+      "file": "sources/verification/M2Admission.tla",
+      "bytes": 2857,
+      "sha256": "1e235eba1fd14fc4a455af4020ed42a72634b9b38c53f59a4d7de27d7966fd23"
+    },
+    {
+      "file": "sources/verification/M3Resume.tla",
+      "bytes": 2269,
+      "sha256": "608ed5ab8a324118ad2e3f2526f39d34b04bd2baca6dfdd6c6b85f54526bbf01"
+    },
+    {
+      "file": "sources/verification/M4Succession.tla",
+      "bytes": 4474,
+      "sha256": "6d2c9b5e22c291748e32e285397783f3d61740940757fe881f68587f38786462"
+    },
+    {
+      "file": "sources/verification/README.md",
+      "bytes": 2961,
+      "sha256": "3ac08589a256f4e1948ce5d525f0897213fde16efd2d1bdd44aac59dd8cf675e"
+    }
+  ]
+}

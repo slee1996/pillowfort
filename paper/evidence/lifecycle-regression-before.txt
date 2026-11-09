@@ -1,0 +1,19 @@
+bun test v1.4.4 (38afee6c8)
+
+test/secure-room-engine.test.ts:
+error: evaluate: SecureRoomEngineError: the pending outbound MLS mutation must be accepted or rejected before another transition
+    at SecureRoomEngine.assertNoPendingApplication (http://127.0.0.1:5173/@fs/Users/spencerlee/pillowfort/src/participant/secureRoomEngine.ts:1963:13)
+    at SecureRoomEngine.completeAdmissionLifecycle (http://127.0.0.1:5173/@fs/Users/spencerlee/pillowfort/src/participant/secureRoomEngine.ts:1362:10)
+    at eval (eval at evaluate (:370:30), <anonymous>:100:793)
+    at async <anonymous>:381:23
+  log: [],
+
+      at SecureRoomEngine.assertNoPendingApplication (http://127.0.0.1:5173/@fs/Users/spencerlee/pillowfort/src/participant/secureRoomEngine.ts:1963:13)
+      at SecureRoomEngine.completeAdmissionLifecycle (http://127.0.0.1:5173/@fs/Users/spencerlee/pillowfort/src/participant/secureRoomEngine.ts:1362:10)
+      at eval (eval at evaluate (:370:30), <anonymous>:100:793)
+(fail) protocol-v4 durable secure room engine > authenticates composite state and makes send, rollback, CAS, restart, and retirement crash-safe [186.61ms]
+
+ 0 pass
+ 25 filtered out
+ 1 fail
+Ran 1 test across 1 file. [1.61s]

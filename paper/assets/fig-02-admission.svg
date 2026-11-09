@@ -1,0 +1,80 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 600" role="img">
+  <style>text{font-family:&quot;Times New Roman&quot;,Times,serif;fill:currentColor}</style>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse">
+      <path d="M1,1 L7,4 L1,7" fill="none" stroke="currentColor" stroke-width="1.1"/>
+    </marker>
+  </defs>
+  <rect x="25" y="20" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="110" y="48" font-size="18" text-anchor="middle">
+    <tspan x="110" dy="0">Joining device D</tspan>
+  </text>
+  <polyline points="110,64 110,588" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="5 4"/>
+  <rect x="305" y="20" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="390" y="48" font-size="18" text-anchor="middle">
+    <tspan x="390" dy="0">Relay R</tspan>
+  </text>
+  <polyline points="390,64 390,588" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="5 4"/>
+  <rect x="585" y="20" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="670" y="48" font-size="18" text-anchor="middle">
+    <tspan x="670" dy="0">Current host H</tspan>
+  </text>
+  <polyline points="670,64 670,588" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="5 4"/>
+  <polyline points="110,100 390,100" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="250.0" y="92" font-size="15" text-anchor="middle">
+    <tspan x="250.0" dy="0">Invitation proof + bound KeyPackage</tspan>
+  </text>
+  <polyline points="390,135 670,135" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="530.0" y="127" font-size="15" text-anchor="middle">
+    <tspan x="530.0" dy="0">Forward admission material</tspan>
+  </text>
+  <rect x="435" y="144" width="210" height="52" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="540.0" y="166" font-size="15" text-anchor="middle">
+    <tspan x="540.0" dy="0">Verify binding (software)</tspan>
+    <tspan x="540.0" dy="18.6">Authorize device (operator)</tspan>
+  </text>
+  <polyline points="670,220 390,220" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="530.0" y="212" font-size="15" text-anchor="middle">
+    <tspan x="530.0" dy="0">Persisted MLS Add; grant obtained</tspan>
+  </text>
+  <rect x="155" y="232" width="210" height="52" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="260.0" y="254" font-size="15" text-anchor="middle">
+    <tspan x="260.0" dy="0">Commit delivered to</tspan>
+    <tspan x="260.0" dy="18.6">existing members (omitted)</tspan>
+  </text>
+  <polyline points="670,295 390,295" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="530.0" y="287" font-size="15" text-anchor="middle">
+    <tspan x="530.0" dy="0">Targeted Welcome + bootstrap</tspan>
+  </text>
+  <polyline points="390,330 110,330" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="250.0" y="322" font-size="15" text-anchor="middle">
+    <tspan x="250.0" dy="0">Deliver matching join material</tspan>
+  </text>
+  <rect x="135" y="338" width="210" height="52" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="240.0" y="360" font-size="15" text-anchor="middle">
+    <tspan x="240.0" dy="0">Persist joined state</tspan>
+    <tspan x="240.0" dy="18.6">Apply redacted bootstrap</tspan>
+  </text>
+  <polyline points="110,415 390,415" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="250.0" y="407" font-size="15" text-anchor="middle">
+    <tspan x="250.0" dy="0">Device-signed profile proof</tspan>
+  </text>
+  <polyline points="390,450 670,450" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="530.0" y="442" font-size="15" text-anchor="middle">
+    <tspan x="530.0" dy="0">Forward profile proof</tspan>
+  </text>
+  <rect x="435" y="458" width="210" height="52" fill="none" stroke="currentColor" stroke-width="1.1"/>
+  <text x="540.0" y="480" font-size="15" text-anchor="middle">
+    <tspan x="540.0" dy="0">Verify proof (software)</tspan>
+    <tspan x="540.0" dy="18.6">Authorize exact activation</tspan>
+  </text>
+  <polyline points="670,535 390,535" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="530.0" y="527" font-size="15" text-anchor="middle">
+    <tspan x="530.0" dy="0">Activate exact admission</tspan>
+  </text>
+  <polyline points="390,570 110,570" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <text x="250.0" y="562" font-size="15" text-anchor="middle">
+    <tspan x="250.0" dy="0">Activation result</tspan>
+  </text>
+</svg>

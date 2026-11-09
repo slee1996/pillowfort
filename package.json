@@ -28,12 +28,14 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261023.1",
-    "@playwright/test": "1.59.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@playwright/test": "1.65.0",
     "sharp": "0.35.5",
+    "zod": "4.6.7",
     "wrangler": "4.153.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "@noble/ed25519": "3.1.0",
     "@noble/hashes": "2.4.0",
     "@opentelemetry/api": "1.9.1",
@@ -41,7 +43,7 @@
     "@opentelemetry/otlp-transformer": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0",
-    "playwright": "1.59.1",
+    "playwright": "1.65.0",
     "zustand": "5.0.11"
   },
   "overrides": {

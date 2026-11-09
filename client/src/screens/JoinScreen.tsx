@@ -239,7 +239,7 @@ export function JoinScreen() {
           {pendingJoinFingerprint && (
             <div className="auth-note" role="status" aria-live="polite">
               <strong>Waiting for the host to approve this device.</strong>
-              <br />Compare this device fingerprint with your host in your other chat or over a call: <code>{pendingJoinFingerprint}</code>
+              <br />For extra assurance, you can compare this device fingerprint with your host over another chat or call: <code>{pendingJoinFingerprint}</code>
             </div>
           )}
           <Input

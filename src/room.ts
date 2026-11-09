@@ -2241,6 +2241,7 @@ export class Room implements DurableObject {
                 authorizationId: entry.authorizationId,
                 offerMessageId: entry.offerMessageId,
                 expiresAt: entry.expiresAt,
+                ...(entry.policyEventId !== undefined && { policyEventId: entry.policyEventId }),
               });
             }
           }
@@ -2267,6 +2268,7 @@ export class Room implements DurableObject {
             authorizationId: effect.authorizationId,
             offerMessageId: effect.offerMessageId,
             expiresAt: effect.expiresAt,
+            ...(effect.policyEventId !== undefined && { policyEventId: effect.policyEventId }),
           });
           break;
         case "host-transfer-expired":

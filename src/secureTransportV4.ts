@@ -204,6 +204,7 @@ export type SecureServerFrameV4 =
       authorizationId: string;
       offerMessageId: string;
       expiresAt: number;
+      policyEventId?: string;
     }
   | {
       kind: "secure-server";
@@ -232,6 +233,7 @@ export type SecureServerFrameV4 =
       pendingHostTransfer: null | {
         targetDeviceId: string;
         authorizationId: string;
+        policyEventId?: string;
       };
     }
   | {
@@ -468,7 +470,8 @@ export function parseSecureServerFrameV4(value: unknown): SecureServerFrameV4 | 
     case "host-transfer-authorized":
       return exactKeys(value, [
         ...base, "fromHostDeviceId", "authorizationId", "offerMessageId", "expiresAt",
-      ]) && fixedId(value.fromHostDeviceId, SECURE_DEVICE_ID_BYTES)
+      ], ["policyEventId"]) && (value.policyEventId === undefined || fixedId(value.policyEventId)) &&
+        fixedId(value.fromHostDeviceId, SECURE_DEVICE_ID_BYTES)
         && fixedId(value.authorizationId) && fixedId(value.offerMessageId)
         && positiveInteger(value.expiresAt)
         ? value as unknown as SecureServerFrameV4 : null;
@@ -496,11 +499,12 @@ export function parseSecureServerFrameV4(value: unknown): SecureServerFrameV4 | 
       }
       if (new Set(members.map((member) => member.deviceId)).size !== members.length
         || !members.some((member) => member.deviceId === value.hostDeviceId)) return null;
-      let pendingHostTransfer: null | { targetDeviceId: string; authorizationId: string } = null;
+      let pendingHostTransfer: null | { targetDeviceId: string; authorizationId: string; policyEventId?: string } = null;
       const rawPendingHostTransfer = value.pendingHostTransfer;
       if (rawPendingHostTransfer !== null) {
         if (!isPlainRecord(rawPendingHostTransfer)
-          || !exactKeys(rawPendingHostTransfer, ["targetDeviceId", "authorizationId"])
+          || !exactKeys(rawPendingHostTransfer, ["targetDeviceId", "authorizationId"], ["policyEventId"])
+          || (rawPendingHostTransfer.policyEventId !== undefined && !fixedId(rawPendingHostTransfer.policyEventId))
           || !fixedId(rawPendingHostTransfer.targetDeviceId, SECURE_DEVICE_ID_BYTES)
           || !fixedId(rawPendingHostTransfer.authorizationId)
           || !members.some((member) => member.deviceId === rawPendingHostTransfer.targetDeviceId)) {
@@ -509,6 +513,7 @@ export function parseSecureServerFrameV4(value: unknown): SecureServerFrameV4 | 
         pendingHostTransfer = {
           targetDeviceId: rawPendingHostTransfer.targetDeviceId,
           authorizationId: rawPendingHostTransfer.authorizationId,
+          ...(rawPendingHostTransfer.policyEventId !== undefined && { policyEventId: rawPendingHostTransfer.policyEventId as string }),
         };
       }
       return {

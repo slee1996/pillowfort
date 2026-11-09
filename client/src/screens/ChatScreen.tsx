@@ -23,6 +23,7 @@ import { DrawCanvas } from "../components/canvas/DrawCanvas";
 import { BreakoutCanvas } from "../components/canvas/BreakoutCanvas";
 import type { GameQueueItem } from "../../../src/participant/protocol";
 import { agentMode, registerRoomActivities } from "../agent/breakout";
+import { useMentionAttention } from "../hooks/useMentionAttention";
 
 type PickerType = "toss" | "mute" | "vote" | "rps" | "ttt" | "sab-accuse" | null;
 
@@ -140,6 +141,8 @@ export function ChatScreen() {
     requestAnimationFrame(() => document.getElementById("msg-input")?.focus());
   };
 
+  const mentionAttention = useMentionAttention(focusedActivity, handleRestore);
+
   useEffect(() => {
     if (!agentMode()) return;
     return registerRoomActivities({
@@ -233,6 +236,11 @@ export function ChatScreen() {
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
+            {mentionAttention.unreadMentions > 0 && (
+              <span className="mention-badge" role="status" aria-label={`${mentionAttention.unreadMentions} unread ${mentionAttention.unreadMentions === 1 ? "mention" : "mentions"}`}>
+                @{mentionAttention.unreadMentions > 99 ? "99+" : mentionAttention.unreadMentions}
+              </span>
+            )}
           </button>
         </div>
       )}
@@ -263,12 +271,17 @@ export function ChatScreen() {
           onInvite={() => setInviteOpen(true)}
           onPeople={() => setPeopleOpen(true)}
         >
-          <RoomMenu onPickerOpen={handlePickerOpen} onRequestExit={onRequestExit} />
+          <RoomMenu onPickerOpen={handlePickerOpen} onRequestExit={onRequestExit} mentionNotifications={mentionAttention} />
         </RoomHeader>
 
         <div className="room-workspace">
           <div className="room-chat-column">
         <section className="room-conversation" aria-label="Conversation">
+          {mentionAttention.unreadMentions > 0 && (
+            <p className="mention-attention" role="status">
+              {mentionAttention.unreadMentions} unread {mentionAttention.unreadMentions === 1 ? "mention" : "mentions"} for you
+            </p>
+          )}
           {(gameQueue.current || gameQueue.queue.length > 0) && (
             <details className="room-game-queue">
               <summary>

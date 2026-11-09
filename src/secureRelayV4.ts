@@ -17,6 +17,14 @@ import {
   roomInvitationKeyPackageDigestV4,
   type RoomInvitationMemberBindingV4,
 } from "./roomInvitationMemberBindingV4";
+import { sha256 } from "@noble/hashes/sha2.js";
+import {
+  canonicalBase64UrlV4,
+  canonicalJsonV4,
+  isSecureApplicationEventV4,
+  verifySecureApplicationEventV4,
+  type SecureApplicationEventV4,
+} from "./applicationEventsV4";
 
 /**
  * Protocol-v4 relay state is deliberately content-blind.  It contains only
@@ -42,7 +50,8 @@ export const MAX_SECURE_RELAY_STATE_BYTES_V4 = 4 * 1024 * 1024;
 export const SECURE_ORDER_GRANT_TTL_MS_V4 = 5_000;
 export const SECURE_APPLICATION_APPROVAL_TTL_MS_V4 = 5_000;
 export const SECURE_COMMIT_APPROVAL_TTL_MS_V4 = 5_000;
-export const SECURE_ADMISSION_TTL_MS_V4 = 30_000;
+// Three minutes for host approval, plus the existing five-second completion margin.
+export const SECURE_ADMISSION_TTL_MS_V4 = 185_000;
 export const SECURE_HOST_TRANSFER_TTL_MS_V4 = 30_000;
 export const SECURE_ACTIVE_DISCONNECT_GRACE_MS_V4 = 120_000;
 
@@ -142,6 +151,8 @@ export interface SecureApplicationRelayFrameV4 {
   relayKind: "application";
   grant: SecureLogicalOrderGrantV4;
   envelope: SecureRelayEnvelopeV4;
+  /** Only signed succession metadata may be exposed outside MLS ciphertext. */
+  authorityEvent?: SecureApplicationEventV4;
 }
 
 export interface SecureHostTransferAcceptRelayFrameV4 {
@@ -150,6 +161,7 @@ export interface SecureHostTransferAcceptRelayFrameV4 {
   grant: SecureLogicalOrderGrantV4;
   authorizationId: string;
   envelope: SecureRelayEnvelopeV4;
+  authorityEvent?: SecureApplicationEventV4;
 }
 
 export type SecureRelayFrameV4 =
@@ -382,6 +394,7 @@ export interface SecureHostTransferAuthorizationBacklogEntryV4 {
   authorizationId: string;
   offerMessageId: string;
   expiresAt: number;
+  policyEventId?: string;
 }
 
 export type SecureBacklogEntryV4 = SecureRelayBacklogEntryV4 | SecureApplicationResultBacklogEntryV4
@@ -422,6 +435,7 @@ export interface SecurePendingHostTransferStateV4 {
   offerMessageId: string;
   authorizedAt: number;
   expiresAt: number;
+  policyEventId?: string;
 }
 
 export interface SecureZombieRemovalStateV4 {
@@ -452,6 +466,11 @@ export interface SecureRelayStateV4 {
   pendingApplication: SecurePendingApplicationStateV4 | null;
   pendingCommit: SecurePendingCommitStateV4 | null;
   pendingHostTransfer: SecurePendingHostTransferStateV4 | null;
+  hostSuccession?: {
+    event: SecureApplicationEventV4;
+    frameMessageId: string;
+    attemptedDeviceIds: string[];
+  };
   pendingZombieRemovals: SecureZombieRemovalStateV4[];
   orderQueue: SecureOrderQueueEntryV4[];
   recentMessages: SecureReplayRecordV4[];
@@ -534,6 +553,7 @@ export type SecureRelayEffectV4 =
       pendingHostTransfer: null | {
         targetDeviceId: string;
         authorizationId: string;
+        policyEventId?: string;
       };
     }
   | {
@@ -543,6 +563,7 @@ export type SecureRelayEffectV4 =
       authorizationId: string;
       offerMessageId: string;
       expiresAt: number;
+      policyEventId?: string;
     }
   | { type: "host-transfer-expired"; deviceIds: string[]; authorizationId: string }
   | { type: "fresh-admission-required"; deviceId: string }
@@ -837,19 +858,25 @@ export function parseSecureClientFrameV4(input: unknown): SecureClientFrameV4 | 
       } : null;
     }
     if (value.relayKind === "application") {
-      if (!hasExactKeys(value, ["kind", "relayKind", "grant", "envelope"])) return null;
+      if (!hasExactKeys(value, ["kind", "relayKind", "grant", "envelope"], ["authorityEvent"]) ||
+          (value.authorityEvent !== undefined && (!isSecureApplicationEventV4(value.authorityEvent) ||
+            value.authorityEvent.content.type !== "host-succession-policy"))) return null;
       const grant = parseGrant(value.grant);
       const envelope = parseEnvelope(value.envelope);
-      return grant && envelope ? { kind: "relay", relayKind: "application", grant, envelope } : null;
+      return grant && envelope ? { kind: "relay", relayKind: "application", grant, envelope,
+        ...(value.authorityEvent !== undefined && { authorityEvent: JSON.parse(canonicalJsonV4(value.authorityEvent)) as SecureApplicationEventV4 }) } : null;
     }
     if (value.relayKind === "host-transfer-accept") {
-      if (!hasExactKeys(value, ["kind", "relayKind", "grant", "authorizationId", "envelope"])
-        || !isMessageId(value.authorizationId)) return null;
+      if (!hasExactKeys(value, ["kind", "relayKind", "grant", "authorizationId", "envelope"], ["authorityEvent"])
+        || !isMessageId(value.authorizationId) ||
+        (value.authorityEvent !== undefined && (!isSecureApplicationEventV4(value.authorityEvent) ||
+          value.authorityEvent.content.type !== "host-succession"))) return null;
       const grant = parseGrant(value.grant);
       const envelope = parseEnvelope(value.envelope);
       return grant && envelope ? {
         kind: "relay", relayKind: "host-transfer-accept", grant,
         authorizationId: value.authorizationId, envelope,
+        ...(value.authorityEvent !== undefined && { authorityEvent: JSON.parse(canonicalJsonV4(value.authorityEvent)) as SecureApplicationEventV4 }),
       } : null;
     }
     return null;
@@ -1052,7 +1079,8 @@ function parseBacklogEntry(value: unknown): SecureBacklogEntryV4 | null {
   if (value.kind === "host-transfer-authorization") {
     if (!hasExactKeys(value, [
       "kind", "receivedAt", "logicalOrder", "fromHostDeviceId", "authorizationId", "offerMessageId", "expiresAt",
-    ]) || !isSafeTimestamp(value.receivedAt) || value.logicalOrder !== null
+    ], ["policyEventId"]) || (value.policyEventId !== undefined && !isMessageId(value.policyEventId)) ||
+      !isSafeTimestamp(value.receivedAt) || value.logicalOrder !== null
       || !isDeviceId(value.fromHostDeviceId) || !isMessageId(value.authorizationId)
       || !isMessageId(value.offerMessageId) || !isSafeTimestamp(value.expiresAt)
       || value.expiresAt <= value.receivedAt) return null;
@@ -1064,6 +1092,7 @@ function parseBacklogEntry(value: unknown): SecureBacklogEntryV4 | null {
       authorizationId: value.authorizationId,
       offerMessageId: value.offerMessageId,
       expiresAt: value.expiresAt,
+      ...(value.policyEventId !== undefined && { policyEventId: value.policyEventId as string }),
     };
   }
   return null;
@@ -1287,7 +1316,8 @@ function parsePendingCommit(value: unknown): SecurePendingCommitStateV4 | null {
 function parsePendingHostTransfer(value: unknown): SecurePendingHostTransferStateV4 | null {
   if (!isPlainDataRecord(value) || !hasExactKeys(value, [
     "authorizationId", "hostDeviceId", "targetDeviceId", "offerMessageId", "authorizedAt", "expiresAt",
-  ]) || !isMessageId(value.authorizationId) || !isDeviceId(value.hostDeviceId)
+  ], ["policyEventId"]) || (value.policyEventId !== undefined && !isMessageId(value.policyEventId)) ||
+    !isMessageId(value.authorizationId) || !isDeviceId(value.hostDeviceId)
     || !isDeviceId(value.targetDeviceId) || value.targetDeviceId === value.hostDeviceId
     || !isMessageId(value.offerMessageId) || !isSafeTimestamp(value.authorizedAt)
     || !isSafeTimestamp(value.expiresAt) || value.expiresAt <= value.authorizedAt
@@ -1299,6 +1329,7 @@ function parsePendingHostTransfer(value: unknown): SecurePendingHostTransferStat
     offerMessageId: value.offerMessageId,
     authorizedAt: value.authorizedAt,
     expiresAt: value.expiresAt,
+    ...(value.policyEventId !== undefined && { policyEventId: value.policyEventId as string }),
   };
 }
 
@@ -1329,7 +1360,7 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
     "orderQueue", "recentMessages",
     "recentKeyPackageDigests",
   ];
-  if (!isPlainDataRecord(value) || !hasExactKeys(value, keys)
+  if (!isPlainDataRecord(value) || !hasExactKeys(value, keys, ["hostSuccession"])
     || value.schema !== SECURE_RELAY_STATE_SCHEMA_V4 || !isPositiveSafeInteger(value.revision)
     || !isSafeTimestamp(value.clockHighWater) || value.v !== 4 || value.suite !== 1
     || !isRoomInstance(value.roomInstance) || (value.lifecycle !== "open" && value.lifecycle !== "retired")
@@ -1430,7 +1461,9 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
     if (member.admissionId === null) continue;
     const joinRecord = replayById.get(member.admissionId);
     if (!joinRecord || joinRecord.kind !== "join-request" || joinRecord.deviceId !== member.deviceId
-      || member.admissionExpiresAt !== joinRecord.acceptedAt + SECURE_ADMISSION_TTL_MS_V4) {
+      // Retain the original deadline of admissions persisted before the window increased.
+      || (member.admissionExpiresAt !== joinRecord.acceptedAt + SECURE_ADMISSION_TTL_MS_V4
+        && member.admissionExpiresAt !== joinRecord.acceptedAt + 30_000)) {
       return null;
     }
     if (member.proofGrant && !recentMessages.some((record) => record.id === member.proofGrant!.tokenId
@@ -1585,6 +1618,21 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
       || pendingApplication !== null) return null;
   }
 
+  if (value.hostSuccession !== undefined) {
+    const policy = value.hostSuccession;
+    if (!isPlainDataRecord(policy) || !hasExactKeys(policy, ["event", "frameMessageId", "attemptedDeviceIds"]) ||
+        !isMessageId(policy.frameMessageId) || !isSecureApplicationEventV4(policy.event) ||
+        policy.event.content.type !== "host-succession-policy" ||
+        policy.event.roomInstance !== value.roomInstance || policy.event.deviceId !== value.hostDeviceId ||
+        policy.event.logicalOrder >= (value.nextLogicalOrder as number) ||
+        !isPlainDataArray(policy.attemptedDeviceIds) || !policy.attemptedDeviceIds.every(isDeviceId) ||
+        new Set(policy.attemptedDeviceIds).size !== policy.attemptedDeviceIds.length) return null;
+    const deviceIds = policy.event.content.deviceIds;
+    if (!policy.attemptedDeviceIds.every((deviceId) => deviceIds.includes(deviceId as string))) return null;
+    const record = replayById.get(policy.frameMessageId);
+    if (!record || record.kind !== "application" || record.deviceId !== value.hostDeviceId ||
+        record.logicalOrder !== policy.event.logicalOrder) return null;
+  }
   const pendingHostTransfer = value.pendingHostTransfer === null
     ? null
     : parsePendingHostTransfer(value.pendingHostTransfer);
@@ -1594,6 +1642,14 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
     const target = members.find((member) => member.deviceId === pendingHostTransfer.targetDeviceId);
     const authorization = replayById.get(pendingHostTransfer.authorizationId);
     const offer = replayById.get(pendingHostTransfer.offerMessageId);
+    if (pendingHostTransfer.policyEventId !== undefined) {
+      const policy = value.hostSuccession as SecureRelayStateV4["hostSuccession"];
+      if (!policy || policy.event.eventId !== pendingHostTransfer.policyEventId ||
+          policy.frameMessageId !== pendingHostTransfer.offerMessageId ||
+          policy.event.content.type !== "host-succession-policy" ||
+          !policy.event.content.deviceIds.includes(pendingHostTransfer.targetDeviceId) ||
+          !host?.requiresFreshAdmission) return null;
+    }
     const authorizationDeliveries = members.flatMap((candidate) => candidate.backlog
       .filter((entry): entry is SecureHostTransferAuthorizationBacklogEntryV4 =>
         entry.kind === "host-transfer-authorization"
@@ -1639,7 +1695,6 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
       const removalCommit = recentMessages.find((record) =>
         record.id === marker.removalCommitMessageId
         && record.kind === "commit"
-        && record.deviceId === value.hostDeviceId
         && record.acceptedAt >= marker.requestedAt);
       if (!removalCommit || marker.removalCommitMessageId === marker.admissionCommitMessageId) return null;
     }
@@ -1650,13 +1705,16 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
       !== pendingZombieRemovals.length) return null;
   if (pendingZombieRemovals.length !== 0) {
     const barrier = pendingZombieRemovals[0];
+    const automaticTarget = pendingHostTransfer?.policyEventId !== undefined ? pendingHostTransfer.targetDeviceId : null;
     if (pendingZombieRemovals.slice(1).some((marker) => marker.removalCommitMessageId !== null)
-      || pendingApplication !== null || pendingCommit !== null || pendingHostTransfer !== null
+      || pendingApplication !== null || pendingCommit !== null || (pendingHostTransfer !== null && automaticTarget === null)
       || members.some((member) => member.admissionId !== null)
-      || (currentGrant !== null && (barrier.removalCommitMessageId !== null
-        || currentGrant.deviceId !== value.hostDeviceId))
-      || orderQueue.some((entry) => barrier.removalCommitMessageId !== null
-        || entry.deviceId !== value.hostDeviceId)) return null;
+      || (currentGrant !== null && (automaticTarget === null
+        ? barrier.removalCommitMessageId !== null || currentGrant.deviceId !== value.hostDeviceId
+        : currentGrant.deviceId !== automaticTarget))
+      || orderQueue.some((entry) => automaticTarget === null
+        ? barrier.removalCommitMessageId !== null || entry.deviceId !== value.hostDeviceId
+        : entry.deviceId !== automaticTarget)) return null;
   }
   const admissionBarriers = members.filter((member) => member.admissionId !== null
     && member.admissionCommitMessageId !== null);
@@ -1698,6 +1756,7 @@ export function parseSecureRelayStateV4(value: unknown): SecureRelayStateV4 | nu
     pendingApplication,
     pendingCommit,
     pendingHostTransfer,
+    ...(value.hostSuccession !== undefined && { hostSuccession: JSON.parse(canonicalJsonV4(value.hostSuccession)) }),
     pendingZombieRemovals,
     orderQueue,
     recentMessages,
@@ -1810,6 +1869,7 @@ function recordReplay(
         member.proofGrant?.tokenId ?? null,
       ].filter((candidate): candidate is string => candidate !== null)),
       ...state.members.flatMap((member) => member.backlog.map(backlogEntryMessageId)),
+      ...(state.hostSuccession ? [state.hostSuccession.frameMessageId] : []),
       ...state.pendingZombieRemovals.map((marker) => marker.admissionCommitMessageId),
       ...state.pendingZombieRemovals.flatMap((marker) =>
         marker.removalCommitMessageId === null ? [] : [marker.removalCommitMessageId]),
@@ -2060,6 +2120,7 @@ function recoverControlRetry(
         authorizationId: pending.authorizationId,
         offerMessageId: pending.offerMessageId,
         expiresAt: pending.expiresAt,
+        ...(pending.policyEventId !== undefined && { policyEventId: pending.policyEventId }),
       });
     }
     return "handled";
@@ -2166,6 +2227,7 @@ function emitRoomStateSnapshot(
       : {
           targetDeviceId: state.pendingHostTransfer.targetDeviceId,
           authorizationId: state.pendingHostTransfer.authorizationId,
+          ...(state.pendingHostTransfer.policyEventId !== undefined && { policyEventId: state.pendingHostTransfer.policyEventId }),
         },
   });
 }
@@ -2714,14 +2776,23 @@ function issueNextGrant(
 ): SecureRelayErrorCodeV4 | null {
   const removalBarrier = state.pendingZombieRemovals[0];
   const admissionBarrier = activeAdmissionBarrier(state);
+  const automaticTarget = state.pendingHostTransfer?.policyEventId !== undefined
+    ? state.pendingHostTransfer.targetDeviceId : null;
   const proofOrderReserved = state.members.some((member) => member.admissionId !== null
     && member.pendingPhase === "awaiting-proof");
   if (state.currentGrant || state.pendingApplication || state.pendingCommit
     || (!removalBarrier && !admissionBarrier && proofOrderReserved) || state.orderQueue.length === 0
-    || (!!removalBarrier && removalBarrier.removalCommitMessageId !== null)) return null;
-  if (removalBarrier && state.orderQueue[0].deviceId !== state.hostDeviceId) return "invalid-state";
+    || (!!removalBarrier && removalBarrier.removalCommitMessageId !== null && automaticTarget === null)) return null;
+  if (automaticTarget !== null && state.orderQueue[0].deviceId !== automaticTarget) return null;
+  if (removalBarrier && automaticTarget === null && state.orderQueue[0].deviceId !== state.hostDeviceId) return "invalid-state";
   if (admissionBarrier && (admissionBarrier.pendingPhase !== "awaiting-bootstrap"
     || state.orderQueue[0].deviceId !== state.hostDeviceId)) return null;
+  if (automaticTarget === null && state.orderQueue[0].deviceId !== state.hostDeviceId) {
+    const host = connectedHost(state);
+    // A different socket can consume its grant before the host ACKs the
+    // previous delivery. Wait here instead of issuing an unusable preview grant.
+    if (!host || host.backlog.length !== 0) return null;
+  }
   if (!validateGrantTokenId(state, tokenId)) return "grant-token-required";
   if (now > Number.MAX_SAFE_INTEGER - SECURE_ORDER_GRANT_TTL_MS_V4) return "order-exhausted";
   const entry = state.orderQueue.shift()!;
@@ -2942,9 +3013,62 @@ function retireRoomAfterHostLoss(
   state.pendingApplication = null;
   state.pendingCommit = null;
   state.pendingHostTransfer = null;
+  delete state.hostSuccession;
   state.pendingZombieRemovals = [];
   state.orderQueue = [];
   effects.push({ type: "room-retired" });
+}
+
+function continueHostSuccession(
+  state: SecureRelayStateV4,
+  now: number,
+  effects: SecureRelayEffectV4[],
+): void {
+  const host = state.hostDeviceId === null ? null : memberById(state, state.hostDeviceId);
+  const policy = state.hostSuccession;
+  if (!host?.requiresFreshAdmission || !policy || state.pendingHostTransfer) return;
+  if (policy.event.deviceId !== host.deviceId || policy.event.content.type !== "host-succession-policy" ||
+      now > Number.MAX_SAFE_INTEGER - SECURE_HOST_TRANSFER_TTL_MS_V4) {
+    retireRoomAfterHostLoss(state, effects);
+    return;
+  }
+  for (const deviceId of policy.event.content.deviceIds) {
+    const target = memberById(state, deviceId);
+    if (!target || target.status !== "active" || target.connectionId === null ||
+        target.requiresFreshAdmission || policy.attemptedDeviceIds.includes(deviceId) ||
+        state.pendingZombieRemovals.some((marker) => marker.deviceId === deviceId)) continue;
+    const authorizationDigest = sha256(new TextEncoder().encode(
+      `Pillowfort host succession v4\0${state.roomInstance}\0${policy.event.eventId}\0${deviceId}`,
+    ));
+    const authorizationId = canonicalBase64UrlV4(authorizationDigest.subarray(0, SECURE_MESSAGE_ID_BYTES));
+    policy.attemptedDeviceIds.push(deviceId);
+    if (hasReplayId(state, authorizationId)) continue;
+    const transfer: SecurePendingHostTransferStateV4 = {
+      authorizationId, hostDeviceId: host.deviceId, targetDeviceId: deviceId,
+      offerMessageId: policy.frameMessageId, policyEventId: policy.event.eventId,
+      authorizedAt: now, expiresAt: now + SECURE_HOST_TRANSFER_TTL_MS_V4,
+    };
+    state.pendingHostTransfer = transfer;
+    recordReplay(state, authorizationId, "authorize-host-transfer", host.deviceId, now, {
+      frameDigest: canonicalBase64UrlV4(authorizationDigest),
+    });
+    const delivery = appendBacklog(state, target, {
+      kind: "host-transfer-authorization", receivedAt: now, logicalOrder: null,
+      fromHostDeviceId: host.deviceId, authorizationId, offerMessageId: policy.frameMessageId,
+      policyEventId: policy.event.eventId, expiresAt: transfer.expiresAt,
+    }, effects);
+    if (delivery === "overflow") {
+      state.pendingHostTransfer = null;
+      continue;
+    }
+    if (delivery === "live") effects.push({
+      type: "host-transfer-authorized", toDeviceId: deviceId, fromHostDeviceId: host.deviceId,
+      authorizationId, offerMessageId: policy.frameMessageId, policyEventId: policy.event.eventId,
+      expiresAt: transfer.expiresAt,
+    });
+    return;
+  }
+  retireRoomAfterHostLoss(state, effects);
 }
 
 function expireActiveDisconnects(
@@ -2957,8 +3081,18 @@ function expireActiveDisconnects(
     && member.disconnectExpiresAt !== null && now >= member.disconnectExpiresAt);
   if (expired.length === 0) return false;
   if (expired.some((member) => member.deviceId === state.hostDeviceId)) {
-    retireRoomAfterHostLoss(state, effects);
-    return true;
+    if (!state.hostSuccession) {
+      retireRoomAfterHostLoss(state, effects);
+      return true;
+    }
+    expireCurrentGrant(state, now, effects);
+    expirePendingApplication(state, now, effects);
+    expirePendingCommit(state, now, effects);
+    expirePendingHostTransfer(state, now, effects);
+    for (const pending of state.members) {
+      if (pending.admissionId !== null) retirePendingAdmission(state, pending, now, effects);
+    }
+    for (const entry of [...state.orderQueue]) removeDeviceFromOrdering(state, entry.deviceId, "removal-pending");
   }
   for (const member of expired) {
     if (state.pendingApplication?.fromDeviceId === member.deviceId) {
@@ -2997,10 +3131,11 @@ function expireActiveDisconnects(
     member.requiresFreshAdmission = true;
     effects.push({ type: "fresh-admission-required", deviceId: member.deviceId });
     effects.push({ type: "member-lifecycle", deviceId: member.deviceId, status: "disconnected" });
-    if (member.membershipCommitMessageId) {
+    if (member.membershipCommitMessageId && member.deviceId !== state.hostDeviceId) {
       persistZombieRemoval(state, member.deviceId, member.memberBinding.admissionId, now, effects);
     }
   }
+  continueHostSuccession(state, now, effects);
   return true;
 }
 
@@ -3391,8 +3526,12 @@ export async function reduceSecureRelayV4(
     if (retry === "handled") return { ok: true, state, effects };
     if (retry !== "not-found") return reject(retry);
 
+    const automaticSuccession = frame.relayKind === "host-transfer-accept" &&
+      state.pendingHostTransfer?.policyEventId !== undefined &&
+      state.pendingHostTransfer.targetDeviceId === actor.deviceId &&
+      state.pendingHostTransfer.authorizationId === frame.authorizationId;
     const removalBarrier = state.pendingZombieRemovals[0];
-    if (removalBarrier && frame.relayKind !== "commit") return reject("removal-pending");
+    if (removalBarrier && frame.relayKind !== "commit" && !automaticSuccession) return reject("removal-pending");
     if (!removalBarrier && frame.relayKind === "commit"
       && (frame.retirementDeviceId !== undefined
         || frame.retirementAdmissionCommitMessageId !== undefined)) return reject("invalid-reference");
@@ -3615,9 +3754,17 @@ export async function reduceSecureRelayV4(
     }
     if (grant.logicalOrder !== state.nextLogicalOrder) return reject("invalid-state");
     if (state.nextLogicalOrder >= Number.MAX_SAFE_INTEGER) return reject("order-exhausted");
+    if (frame.relayKind === "host-transfer-accept" && frame.authorityEvent?.content.type === "host-succession" &&
+        (!automaticSuccession || !state.pendingHostTransfer || now >= state.pendingHostTransfer.expiresAt)) {
+      state.currentGrant = null;
+      terminalizeGrantBoundRelay(state, actor, frame, relayDigest!, "approval-expired", now, effects);
+      const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
+      if (grantError) return reject(grantError);
+      return { ok: true, state, effects };
+    }
     const isHost = state.hostDeviceId === actor.deviceId;
     const host = connectedHost(state);
-    if (!isHost && (!host || host.backlog.length !== 0)) return reject("recipient-unavailable");
+    if (!isHost && !automaticSuccession && (!host || host.backlog.length !== 0)) return reject("recipient-unavailable");
     const transferAuthorization = frame.relayKind === "host-transfer-accept"
       ? state.pendingHostTransfer
       : null;
@@ -3626,18 +3773,35 @@ export async function reduceSecureRelayV4(
       || transferAuthorization.targetDeviceId !== actor.deviceId
       || transferAuthorization.hostDeviceId !== state.hostDeviceId
       || now >= transferAuthorization.expiresAt)) return reject("invalid-reference");
-    if (isHost && state.orderQueue.length > 0 && !validateGrantTokenId(state, options.nextGrantTokenId)) {
+    if ((isHost || automaticSuccession) && state.orderQueue.length > 0 && !validateGrantTokenId(state, options.nextGrantTokenId)) {
       return reject("grant-token-required");
     }
     if (!isHost && now > Number.MAX_SAFE_INTEGER - SECURE_APPLICATION_APPROVAL_TTL_MS_V4) {
       return reject("order-exhausted");
     }
+    const authorityEvent = frame.authorityEvent;
+    if (authorityEvent !== undefined) {
+      if (authorityEvent.roomInstance !== state.roomInstance || authorityEvent.deviceId !== actor.deviceId ||
+          authorityEvent.logicalOrder !== grant.logicalOrder || member.signaturePublicKey === null ||
+          !await verifySecureApplicationEventV4(authorityEvent, member.signaturePublicKey)) return reject("invalid-reference");
+      if (authorityEvent.content.type === "host-succession-policy") {
+        if (!isHost || frame.relayKind !== "application" ||
+            authorityEvent.content.deviceIds.some((deviceId) => deviceId === actor.deviceId ||
+              !state.members.some((candidate) => candidate.deviceId === deviceId &&
+                (candidate.status === "active" || candidate.resumeStatus === "active")))) return reject("invalid-reference");
+        state.hostSuccession = { event: authorityEvent, frameMessageId: envelope.messageId, attemptedDeviceIds: [] };
+      } else if (authorityEvent.content.type === "host-succession") {
+        if (!automaticSuccession || authorityEvent.content.policyEventId !== transferAuthorization?.policyEventId ||
+            authorityEvent.content.authorizationId !== transferAuthorization.authorizationId) return reject("invalid-reference");
+      } else return reject("invalid-reference");
+    }
+    if (automaticSuccession && authorityEvent?.content.type !== "host-succession") return reject("invalid-reference");
     state.currentGrant = null;
-    recordReplay(state, envelope.messageId, isHost ? "application" : "application-pending", actor.deviceId, now, {
+    recordReplay(state, envelope.messageId, (isHost || automaticSuccession) ? "application" : "application-pending", actor.deviceId, now, {
       logicalOrder: grant.logicalOrder,
       frameDigest: relayDigest!,
     });
-    if (!isHost) {
+    if (!isHost && !automaticSuccession) {
       state.pendingApplication = {
         fromDeviceId: actor.deviceId,
         connectionId: actor.connectionId,
@@ -3653,6 +3817,17 @@ export async function reduceSecureRelayV4(
       return { ok: true, state, effects };
     }
 
+    const successionAccepted = automaticSuccession &&
+      authorityEvent?.content.type === "host-succession" && authorityEvent.content.action === "accept";
+    const previousHost = successionAccepted && state.hostDeviceId !== null ? memberById(state, state.hostDeviceId) : null;
+    if (automaticSuccession) {
+      // Consume this response before fan-out can activate an unrelated removal barrier.
+      state.pendingHostTransfer = null;
+      if (successionAccepted) {
+        state.hostDeviceId = actor.deviceId;
+        delete state.hostSuccession;
+      }
+    }
     state.nextLogicalOrder += 1;
     routeGroupFrame(state, actor.deviceId, frame, grant.logicalOrder, now, effects);
     deliverApplicationResult(
@@ -3665,6 +3840,15 @@ export async function reduceSecureRelayV4(
       now,
       effects,
     );
+    if (successionAccepted) {
+      effects.push({ type: "host-changed", deviceId: actor.deviceId });
+      if (previousHost) {
+        retireMember(previousHost);
+        effects.push({ type: "member-lifecycle", deviceId: previousHost.deviceId, status: "retired" });
+        persistZombieRemoval(state, previousHost.deviceId, previousHost.memberBinding.admissionId, now, effects);
+      }
+    }
+    if (automaticSuccession && !successionAccepted) continueHostSuccession(state, now, effects);
     const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
     if (grantError) return reject(grantError);
     return { ok: true, state, effects };
@@ -3687,9 +3871,12 @@ export async function reduceSecureRelayV4(
     if (hasReplayId(state, frame.requestId)) return reject("duplicate-id");
     const removalBarrier = state.pendingZombieRemovals[0];
     const admissionBarrier = activeAdmissionBarrier(state);
+    const automaticTarget = state.pendingHostTransfer?.policyEventId !== undefined
+      ? state.pendingHostTransfer.targetDeviceId : null;
     const cancellationReason: SecureOrderCancellationReasonV4 | null =
-      removalBarrier && (actor.deviceId !== state.hostDeviceId
-        || removalBarrier.removalCommitMessageId !== null)
+      (automaticTarget !== null && actor.deviceId !== automaticTarget) ||
+      (automaticTarget === null && removalBarrier && (actor.deviceId !== state.hostDeviceId
+        || removalBarrier.removalCommitMessageId !== null))
         ? "removal-pending"
         : admissionBarrier && (admissionBarrier.pendingPhase !== "awaiting-bootstrap"
           || actor.deviceId !== state.hostDeviceId)
@@ -3747,6 +3934,8 @@ export async function reduceSecureRelayV4(
     });
     effects.push({ type: "frame-accepted", deviceId: actor.deviceId, messageId: frame.requestId });
     if (member.backlog.length === 0) emitHostPendingWork(state, member, effects);
+    const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
+    if (grantError) return reject(grantError);
     return { ok: true, state, effects };
   }
 
@@ -3771,6 +3960,8 @@ export async function reduceSecureRelayV4(
     effects.push({ type: "member-lifecycle", deviceId: actor.deviceId, status: "active" });
     effects.push({ type: "frame-accepted", deviceId: actor.deviceId, messageId: frame.requestId });
     emitHostPendingWork(state, member, effects);
+    const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
+    if (grantError) return reject(grantError);
     return { ok: true, state, effects };
   }
 
@@ -3843,6 +4034,11 @@ export async function reduceSecureRelayV4(
       applicationRecord.kind = "application";
       applicationRecord.rejectionReason = null;
       state.nextLogicalOrder += 1;
+      if (transfer) {
+        state.pendingHostTransfer = null;
+        state.hostDeviceId = transfer.targetDeviceId;
+        delete state.hostSuccession;
+      }
       routeGroupFrame(
         state, pending.fromDeviceId, pending.frame, pending.logicalOrder, now, effects,
       );
@@ -3851,8 +4047,6 @@ export async function reduceSecureRelayV4(
         "accepted", null, now, effects,
       );
       if (transfer) {
-        state.pendingHostTransfer = null;
-        state.hostDeviceId = transfer.targetDeviceId;
         effects.push({ type: "host-changed", deviceId: transfer.targetDeviceId });
       }
     } else {
@@ -3986,8 +4180,9 @@ export async function reduceSecureRelayV4(
       || frame.commitMessageId !== activeBarrier.removalCommitMessageId)) {
       return reject("invalid-reference");
     }
-    const removalCommit = replayRecord(state, frame.commitMessageId, "commit", actor.deviceId);
-    if (!removalCommit) return reject("invalid-reference");
+    const removalCommit = replayRecord(state, frame.commitMessageId, "commit");
+    if (!removalCommit || (removalCommit.deviceId !== actor.deviceId &&
+        activeBarrier?.removalCommitMessageId !== frame.commitMessageId)) return reject("invalid-reference");
     const markerIndex = state.pendingZombieRemovals.findIndex((marker) => marker.deviceId === target.deviceId);
     const marker = state.pendingZombieRemovals[markerIndex];
     if (marker && (markerIndex !== 0 || frame.commitMessageId !== marker.removalCommitMessageId
@@ -3999,6 +4194,7 @@ export async function reduceSecureRelayV4(
       recordReplay(state, frame.requestId, "retire-member", actor.deviceId, now, {
         frameDigest: controlDigest!,
       });
+      effects.push({ type: "member-lifecycle", deviceId: target.deviceId, status: "retired" });
       effects.push({ type: "frame-accepted", deviceId: actor.deviceId, messageId: frame.requestId });
       emitZombieRemovalBarrier(state, effects);
       return { ok: true, state, effects };
@@ -4205,6 +4401,7 @@ export function advanceSecureRelayV4(
   expireCurrentGrant(state, options.now, effects);
   expirePendingApplication(state, options.now, effects);
   expirePendingCommit(state, options.now, effects);
+  continueHostSuccession(state, options.now, effects);
   const grantError = issueNextGrant(state, options.now, options.nextGrantTokenId, effects);
   if (grantError) return reject(grantError);
   const host = connectedHost(state);

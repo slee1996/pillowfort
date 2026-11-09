@@ -1,0 +1,37 @@
+bun test v1.4.4 (38afee6c8)
+
+test/secure-relay-v4.test.ts:
+2596 |       state = await ackThrough(state, admitted.guest, previous.envelope.messageId, setup.ids, setup.clock);
+2597 |       const requestId = setup.ids();
+2598 |       const queued = accepted(await reduceSecureRelayV4(state, admitted.guest, {
+2599 |         kind: "order-request", v: 4, suite: 1, roomInstance: setup.roomInstance, requestId,
+2600 |       }, { now: tick(setup.clock), nextGrantTokenId: setup.ids() }));
+2601 |       expect(queued.effects.some((entry) => entry.type === "order-granted")).toBe(false);
+                                                                                    ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/spencerlee/pillowfort/test/secure-relay-v4.test.ts:2601:78)
+(fail) M1 host preview readiness > waits for the host prefix and releases the guest grant on delivery-ack [27.72ms]
+2596 |       state = await ackThrough(state, admitted.guest, previous.envelope.messageId, setup.ids, setup.clock);
+2597 |       const requestId = setup.ids();
+2598 |       const queued = accepted(await reduceSecureRelayV4(state, admitted.guest, {
+2599 |         kind: "order-request", v: 4, suite: 1, roomInstance: setup.roomInstance, requestId,
+2600 |       }, { now: tick(setup.clock), nextGrantTokenId: setup.ids() }));
+2601 |       expect(queued.effects.some((entry) => entry.type === "order-granted")).toBe(false);
+                                                                                    ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/spencerlee/pillowfort/test/secure-relay-v4.test.ts:2601:78)
+(fail) M1 host preview readiness > waits for the host prefix and releases the guest grant on resume-complete [2.91ms]
+
+ 0 pass
+ 50 filtered out
+ 2 fail
+ 2 expect() calls
+Ran 2 tests across 1 file. [177.00ms]

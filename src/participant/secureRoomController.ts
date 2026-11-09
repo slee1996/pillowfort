@@ -273,6 +273,8 @@ function inboundRelayContext(
     };
     case "host-transfer-accept": return {
       kind: "host-transfer-accept", authorizationId: frame.authorizationId,
+      ...(frame.authorityEvent?.content.type === "host-succession" &&
+        { policyEventId: frame.authorityEvent.content.policyEventId }),
     };
   }
 }
@@ -1629,6 +1631,7 @@ export class SecureRoomController {
       admissionId: pending.admissionId,
       deviceFingerprint: pending.deviceFingerprint,
       status: pending.status,
+      expiresAt: pending.expiresAt,
     })));
   }
 
@@ -1704,7 +1707,7 @@ export class SecureRoomController {
       relayContext,
     });
     if (result.kind !== "already-processed") {
-      this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId);
+      this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId, this.replayingBacklog);
       if (result.kind === "inbound-commit" && relayContext.kind === "commit" &&
           relayContext.retirementDeviceId !== undefined) {
         this.consumeRetirementBarrier({
@@ -1947,6 +1950,7 @@ export class SecureRoomController {
       this.resumeCompleteRequestId = null;
       this.replayingBacklog = false;
       await this.retryDurableWork();
+      await this.runAutomations();
       this.maybeSchedulePostCompromiseUpdate(true);
       return;
     }
@@ -2073,10 +2077,13 @@ export class SecureRoomController {
   ): Promise<void> {
     const engine = this.requireEngine();
     if (frame.fromHostDeviceId === engine.deviceId) return;
-    await engine.recordHostTransferAuthorization(frame.offerMessageId, frame.authorizationId);
+    if (frame.policyEventId !== undefined) {
+      await engine.recordHostSuccessionAuthorization(frame.policyEventId, frame.offerMessageId, frame.authorizationId);
+    } else await engine.recordHostTransferAuthorization(frame.offerMessageId, frame.authorizationId);
     // Host-transfer authorization is also a durable target backlog item. Its
     // ACK must precede the order request needed to encrypt the acceptance.
     this.ackDurableDelivery(frame.authorizationId);
+    if (frame.policyEventId !== undefined) await this.runAutomations();
   }
 
   private async handleHostTransferExpired(authorizationId: string): Promise<void> {
@@ -2093,6 +2100,7 @@ export class SecureRoomController {
     if (control) {
       await engine.completeRelayControl({ kind: "host-transfer-expired", authorizationId });
       this.sentDurableControls.delete(authorizationId);
+      this.store.getState().setHostOffer(null);
     }
     this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
     await this.runAutomations();
@@ -2135,7 +2143,9 @@ export class SecureRoomController {
     if (transferControl?.kind === "transfer-host" && transferControl.acceptMessageId !== null) {
       const acceptPending = engine.pendingOutbox.some((entry) =>
         entry.kind === "application" && entry.messageId === transferControl!.acceptMessageId);
-      if (acceptPending && frame.pendingHostTransfer === null) {
+      const samePendingTransfer = frame.pendingHostTransfer?.authorizationId === transferControl.authorizationId &&
+        frame.pendingHostTransfer.targetDeviceId === transferControl.targetDeviceId;
+      if (acceptPending && !samePendingTransfer) {
         if (frame.hostDeviceId === transferControl.targetDeviceId) {
           await engine.acknowledgeOutbound(transferControl.acceptMessageId);
           this.releaseMessageIntent(transferControl.acceptMessageId);
@@ -2154,7 +2164,7 @@ export class SecureRoomController {
             });
           }
         }
-      } else if (!acceptPending && frame.pendingHostTransfer === null &&
+      } else if (!acceptPending && !samePendingTransfer &&
           frame.hostDeviceId === transferControl.targetDeviceId) {
         await engine.completeRelayControl({ kind: "host-changed", deviceId: transferControl.targetDeviceId });
       }
@@ -2162,7 +2172,14 @@ export class SecureRoomController {
 
     transferControl = engine.pendingRelayControls.find((control) => control.kind === "transfer-host");
     if (frame.pendingHostTransfer !== null) {
-      if (engine.state.pendingHostDeviceId !== frame.pendingHostTransfer.targetDeviceId) {
+      const policyEventId = frame.pendingHostTransfer.policyEventId;
+      if (policyEventId !== undefined) {
+        const policy = engine.state.hostSuccession;
+        if (!policy || policy.eventId !== policyEventId || policy.hostDeviceId !== frame.hostDeviceId ||
+            !policy.deviceIds.includes(frame.pendingHostTransfer.targetDeviceId)) {
+          throw new SecureRoomEngineError("unauthorized", "automatic host snapshot lacks its signed succession policy");
+        }
+      } else if (engine.state.pendingHostDeviceId !== frame.pendingHostTransfer.targetDeviceId) {
         throw new SecureRoomEngineError("unauthorized", "relay host-transfer snapshot lacks its signed offer");
       }
       if (transferControl?.kind === "transfer-host" &&
@@ -2307,6 +2324,12 @@ export class SecureRoomController {
   }
 
   private isIntentAllowedDuringMembershipBarrier(key: string): boolean {
+    if (key.startsWith("host-succession:")) {
+      const engine = this.engine;
+      return !!engine && engine.pendingRelayControls.some((control) => control.kind === "transfer-host" &&
+        control.policyEventId !== undefined && control.authorizationId !== null &&
+        control.targetDeviceId === engine.deviceId && key === `host-succession:${control.authorizationId}`);
+    }
     const retirement = this.currentRetirementBarrier();
     if (retirement) return key === this.retirementIntentKey(retirement);
     const engine = this.engine;
@@ -2320,6 +2343,9 @@ export class SecureRoomController {
   }
 
   private isPendingEntryAllowedDuringMembershipBarrier(entry: SecureRoomPendingOutboxEntryV1): boolean {
+    if (entry.kind === "application" && entry.event.content.type === "host-succession" &&
+        entry.relayContext.kind === "host-transfer-accept" &&
+        entry.relayContext.policyEventId === entry.event.content.policyEventId) return true;
     const retirement = this.currentRetirementBarrier();
     if (retirement) {
       return entry.kind === "commit" && this.retirementBarrierForCommit(entry.messageId) !== null;
@@ -2396,6 +2422,8 @@ export class SecureRoomController {
   }
 
   private assertInboundRetirementContext(context: SecureRoomInboundRelayContext, messageId: string): void {
+    if (context.kind === "host-transfer-accept" && context.policyEventId !== undefined &&
+        this.requireEngine().state.hostSuccession?.eventId === context.policyEventId) return;
     const current = this.currentRetirementBarrier();
     if (!current) {
       if (context.kind === "commit" && context.retirementDeviceId !== undefined) {
@@ -2662,7 +2690,8 @@ export class SecureRoomController {
       const envelope = this.envelope(entry.messageId, "group", entry.outbound);
       switch (entry.relayContext.kind) {
         case "application":
-          this.sendClientFrame({ kind: "relay", relayKind: "application", grant: entry.grant, envelope });
+          this.sendClientFrame({ kind: "relay", relayKind: "application", grant: entry.grant, envelope,
+            ...(entry.event.content.type === "host-succession-policy" && { authorityEvent: entry.event }) });
           return;
         case "bootstrap":
           this.sendClientFrame({
@@ -2688,6 +2717,7 @@ export class SecureRoomController {
             authorizationId: entry.relayContext.authorizationId,
             grant: entry.grant,
             envelope,
+            ...(entry.event.content.type === "host-succession" && { authorityEvent: entry.event }),
           });
           return;
       }
@@ -2965,15 +2995,26 @@ export class SecureRoomController {
           return;
         }
         this.enqueueApplication(
-          { type: "host-transfer", action: "accept", authorizationId: control.authorizationId },
-          `host-accept:${control.authorizationId}`,
+          control.policyEventId !== undefined
+            ? { type: "host-succession", action: "accept", policyEventId: control.policyEventId, authorizationId: control.authorizationId }
+            : { type: "host-transfer", action: "accept", authorizationId: control.authorizationId },
+          control.policyEventId !== undefined ? `host-succession:${control.authorizationId}` : `host-accept:${control.authorizationId}`,
           true,
         );
         return;
       }
-      case "reject-host":
-        this.enqueueApplication({ type: "host-transfer", action: "reject" }, "host-reject", true);
+      case "reject-host": {
+        const control = engine.pendingRelayControls.find((candidate) => candidate.kind === "transfer-host" &&
+          candidate.targetDeviceId === engine.deviceId && candidate.authorizationId !== null &&
+          candidate.acceptMessageId === null);
+        if (control?.kind === "transfer-host" && control.policyEventId !== undefined && control.authorizationId !== null) {
+          this.enqueueApplication({
+            type: "host-succession", action: "reject", policyEventId: control.policyEventId,
+            authorizationId: control.authorizationId,
+          }, `host-succession:${control.authorizationId}`, true);
+        } else this.enqueueApplication({ type: "host-transfer", action: "reject" }, "host-reject", true);
         return;
+      }
       case "start-vote": {
         const targetDeviceId = target("target");
         if (!targetDeviceId) return;
@@ -3075,7 +3116,7 @@ export class SecureRoomController {
   }
 
   private enqueueApplication(content: SecureApplicationContentV4, key: string, priority = false): void {
-    if (this.hasMembershipBarrier()) return;
+    if (this.hasMembershipBarrier() && content.type !== "host-succession") return;
     this.enqueueGrantIntent({
       key,
       run: async (grant) => {
@@ -3231,11 +3272,32 @@ export class SecureRoomController {
   private async runAutomations(): Promise<void> {
     const engine = this.engine;
     if (!engine || !this.authenticated || this.replayingBacklog || !engine.isActive()) return;
+    const succession = engine.pendingRelayControls.find((control) => control.kind === "transfer-host" &&
+      control.policyEventId !== undefined && control.targetDeviceId === engine.deviceId &&
+      control.authorizationId !== null && control.acceptMessageId === null);
+    if (succession?.kind === "transfer-host" && succession.policyEventId !== undefined &&
+        succession.authorizationId !== null) {
+      if (!this.intentKeys.has(`host-succession:${succession.authorizationId}`)) {
+        const oldHost = engine.state.members.find((member) => member.deviceId === engine.state.hostDeviceId);
+        this.store.getState().setHostOffer({ oldHost: oldHost?.displayName ?? "The previous host" });
+      }
+      return;
+    }
     if (this.hasMembershipBarrier()) {
       this.activateMembershipBarrier();
       return;
     }
     const state = engine.state;
+    if (state.hostDeviceId === engine.deviceId && state.pendingHostDeviceId === null && !this.hasBlockingOutbox()) {
+      const deviceIds = state.members.filter((member) => member.deviceId !== engine.deviceId &&
+        !state.pendingRemovalDeviceIds.includes(member.deviceId)).map((member) => member.deviceId);
+      const policy = state.hostSuccession;
+      if ((deviceIds.length !== 0 || policy !== undefined) &&
+          (!policy || policy.deviceIds.length !== deviceIds.length ||
+            !policy.deviceIds.every((deviceId, index) => deviceId === deviceIds[index]))) {
+        this.enqueueApplication({ type: "host-succession-policy", deviceIds }, "host-succession-policy", true);
+      }
+    }
 
     if (state.hostDeviceId !== engine.deviceId) {
       this.clearPendingHostAdmissions();
