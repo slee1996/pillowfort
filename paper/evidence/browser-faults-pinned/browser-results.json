@@ -1,0 +1,40 @@
+{
+  "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "acceptance-result-unreceived",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    {
+      "fault": "removal-before-policy",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    {
+      "fault": "permanent-no-policy",
+      "boundaryReached": true,
+      "outcome": "room-retired-after-successor-grace",
+      "noOldPolicyReused": true
+    },
+    {
+      "fault": "peer-membership-storage-failure",
+      "outcome": "affected-peer-failed-closed-other-members-continued",
+      "scope": "A real IndexedDB write failure during delivery of an Add commit; not proof of automatic repair of arbitrary epoch disagreement."
+    }
+  ],
+  "passed": true
+}

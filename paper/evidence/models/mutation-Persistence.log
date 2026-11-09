@@ -1,0 +1,58 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 36 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 19141] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M1Delivery.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M1Delivery
+Starting... (2026-11-09 11:37:09)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-09 11:37:09.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+s = [ id |-> 0,
+  phase |-> "idle",
+  stored |-> {},
+  sent |-> {},
+  accepted |-> {},
+  senderDone |-> {},
+  inbox |-> <<>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> FALSE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 2: <SendBeforeStore line 28, col 20 to line 30, col 73 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "sent",
+  stored |-> {},
+  sent |-> {1},
+  accepted |-> {},
+  senderDone |-> {},
+  inbox |-> <<>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "frame",
+  down |-> FALSE,
+  hostBacklog |-> FALSE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+3 states generated, 3 distinct states found, 1 states left on queue.
+The depth of the complete state graph search is 2.
+Finished in 00s at (2026-11-09 11:37:09)

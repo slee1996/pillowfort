@@ -1,0 +1,159 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 107 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 19147] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M1Delivery.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M1Delivery
+Starting... (2026-11-09 11:37:10)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-09 11:37:10.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+s = [ id |-> 0,
+  phase |-> "idle",
+  stored |-> {},
+  sent |-> {},
+  accepted |-> {},
+  senderDone |-> {},
+  inbox |-> <<>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> FALSE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 2: <Prepare line 13, col 12 to line 18, col 68 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "prepared",
+  stored |-> {1},
+  sent |-> {},
+  accepted |-> {},
+  senderDone |-> {},
+  inbox |-> <<>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> FALSE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 3: <Send line 23, col 9 to line 27, col 82 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "sent",
+  stored |-> {1},
+  sent |-> {1},
+  accepted |-> {},
+  senderDone |-> {},
+  inbox |-> <<>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "frame",
+  down |-> FALSE,
+  hostBacklog |-> FALSE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 4: <CommitResult line 31, col 17 to line 35, col 81 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "sent",
+  stored |-> {1},
+  sent |-> {1},
+  accepted |-> {1},
+  senderDone |-> {},
+  inbox |-> <<1>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> TRUE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 5: <EmitResult line 36, col 15 to line 37, col 69 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "sent",
+  stored |-> {1},
+  sent |-> {1},
+  accepted |-> {1},
+  senderDone |-> {},
+  inbox |-> <<1>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "result",
+  down |-> FALSE,
+  hostBacklog |-> TRUE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 6: <StoreResult line 38, col 16 to line 40, col 68 of module M1Delivery>
+s = [ id |-> 1,
+  phase |-> "idle",
+  stored |-> {1},
+  sent |-> {1},
+  accepted |-> {1},
+  senderDone |-> {1},
+  inbox |-> <<1>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> TRUE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> FALSE ]
+
+State 7: <Prepare line 13, col 12 to line 18, col 68 of module M1Delivery>
+s = [ id |-> 2,
+  phase |-> "prepared",
+  stored |-> {1, 2},
+  sent |-> {1},
+  accepted |-> {1},
+  senderDone |-> {1},
+  inbox |-> <<1>>,
+  seen |-> {},
+  applied |-> <<0, 0>>,
+  acked |-> {},
+  connection |-> 1,
+  grantConnection |-> 1,
+  badBinding |-> FALSE,
+  wire |-> "none",
+  down |-> FALSE,
+  hostBacklog |-> TRUE,
+  hostProcessed |-> FALSE,
+  badHostPreview |-> TRUE ]
+
+56 states generated, 34 distinct states found, 12 states left on queue.
+The depth of the complete state graph search is 7.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 4 and the 95th percentile is 4).
+Finished in 00s at (2026-11-09 11:37:10)

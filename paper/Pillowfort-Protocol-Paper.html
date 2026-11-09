@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Pillowfort Protocol Paper</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="assets/paper.css" />
+</head>
+<body>
+<h1
+id="pillowfort-an-mls-based-protocol-for-ephemeral-rooms">Pillowfort: An
+MLS-Based Protocol for Ephemeral Rooms</h1>
+<div class="subtitle">
+Protocol v4 · Profile CS1 · 9 November 2026
+</div>
+<h2 class="abstract-heading" id="abstract">Abstract</h2>
+<p>Pillowfort is an encrypted room protocol for human-operated and
+software-operated devices. Messaging Layer Security (MLS) supplies group
+cryptographic state; an application coordination layer governs
+admission, causal ordering, delivery reconciliation, and host authority.
+A designated host authorizes membership and automatically validates
+ordinary non-host mutations. Host transfer always requires the
+recipient’s explicit acceptance, including succession after
+disconnection. A relay orders opaque frames and verifies public
+authorization metadata without requiring ordinary application plaintext.
+This paper specifies the coordination model, principal execution paths,
+persistence boundaries, and implementation limitations. It distinguishes
+local authentication from global agreement, durable delivery from
+recipient observation, and recoverable browser state from memory-only
+hosted identities. The contribution is an implementation-oriented
+protocol composition, not a new cryptographic primitive or formal
+security proof.</p>
+<p><strong>Keywords:</strong> group messaging; MLS; authenticated state
+machines; crash recovery; admission control.</p>
+<h2 id="scope-and-design-objectives">1. Scope and design objectives</h2>
+<p>Group encryption does not, by itself, determine who may join a room,
+whether an application action is legal, how interrupted work is
+reconciled, or which device may coordinate subsequent operations.
+Pillowfort assigns these responsibilities to an authenticated
+application state machine surrounding MLS [1,2].</p>
+<p>The design targets bounded, temporary rooms. Its objectives are
+explicit device admission, authenticated and ordered application
+transitions, preservation of uncertain outcomes across recoverable
+interruptions, and authenticated host succession. Progress requires the
+relay and a current host or an eligible successor under an established
+delegation. The protocol is not a consensus service and does not provide
+an externally witnessed transcript.</p>
+<h2 id="system-model-and-assumptions">2. System model and
+assumptions</h2>
+<p>A room contains devices, one designated host device, and a relay.
+Each device has a signing identity and an MLS credential. A display name
+is application data, not evidence of a person’s identity. A software
+agent receives no additional protocol authority merely because it is
+automated.</p>
+<p>A room’s host is an admitted member. It authorizes device admission
+and executes automatic validation of ordinary non-host mutations. The
+relay maintains membership lifecycle metadata, a causal-order grant,
+pending outcomes, and delivery backlogs. Ordinary application plaintext
+and MLS private state reside at participating endpoints, including
+managed endpoints [3].</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">Symbol</th>
+<th style="text-align: left;">Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td
+style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>r</mi><annotation encoding="application/x-tex">r</annotation></semantics></math></td>
+<td style="text-align: left;">Random room instance; distinct from its
+user-facing room code</td>
+</tr>
+<tr>
+<td
+style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi><mo>,</mo><mi>c</mi></mrow><annotation encoding="application/x-tex">d,c</annotation></semantics></math></td>
+<td style="text-align: left;">Device identity and current authenticated
+connection</td>
+</tr>
+<tr>
+<td
+style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi><mo>,</mo><mi>s</mi><mo>,</mo><mo>ℓ</mo></mrow><annotation encoding="application/x-tex">x,s,\ell</annotation></semantics></math></td>
+<td style="text-align: left;">Application event identifier, per-device
+sequence, and causal order</td>
+</tr>
+<tr>
+<td
+style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>g</mi><annotation encoding="application/x-tex">g</annotation></semantics></math></td>
+<td style="text-align: left;">Relay-issued, context-bound ordering
+grant</td>
+</tr>
+<tr>
+<td
+style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>σ</mi><mi>d</mi></msub><mo>,</mo><msub><mi>A</mi><mi>d</mi></msub><mo>,</mo><msub><mi>O</mi><mi>d</mi></msub></mrow><annotation encoding="application/x-tex">\sigma_d,A_d,O_d</annotation></semantics></math></td>
+<td style="text-align: left;">Device MLS state, application state, and
+durable outbox</td>
+</tr>
+</tbody>
+</table>
+<p>Cryptographic authenticity assumes uncompromised signing keys and the
+security of the selected MLS ciphersuite. Recovery additionally assumes
+that the required committed local state remains available. Network
+messages may be lost, repeated, delayed, or interrupted. Claims of
+progress require participating parties to remain available and a
+sufficiently timely interval for expiring protocol steps to
+complete.</p>
+<h2 class="page-start" id="cryptographic-and-authority-boundaries">3.
+Cryptographic and authority boundaries</h2>
+<p>The implementation uses MLS ciphersuite 1: X25519, AES-128-GCM,
+SHA-256, and Ed25519. Invitation authentication is separate from MLS
+membership. The resolved invitation secret authorizes a request for
+admission; it is not an MLS group key and does not decrypt group traffic
+[3].</p>
+<p>An unsigned application event is represented abstractly as</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>e</mi><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>v</mi><mo>,</mo><mi>r</mi><mo>,</mo><mi>x</mi><mo>,</mo><mi>d</mi><mo>,</mo><mi>s</mi><mo>,</mo><mo>ℓ</mo><mo>,</mo><mi>m</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">e=(v,r,x,d,s,\ell,m),</annotation></semantics></math></p>
+<p>where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>
+is its typed application content. The device signs a domain-separated
+deterministic encoding of these fields before MLS protection. The
+concrete encoding enforces bounded structure, canonical numbers, and
+normalized strings [4]. Changing the room context or causal order
+therefore invalidates the corresponding signed event; signature validity
+alone does not establish application legality.</p>
+<figure id="fig-system">
+<img src="assets/fig-01-system-model.svg" alt="System model separating participant plaintext and MLS state from relay metadata and opaque frame delivery.">
+<figcaption>
+<strong>Figure 1.</strong> System and trust boundaries. The host is an
+admitted endpoint, not a cryptographically neutral intermediary. Solid
+links denote protected group traffic; dashed links denote coordination
+and delivery controls. The relay observes metadata and controls
+availability, but does not require ordinary application plaintext. A
+managed agent endpoint is inside the participant confidentiality
+boundary.
+</figcaption>
+</figure>
+<p>The relay enforces grant bindings, retains exact outcomes, and
+coordinates delivery. It cannot determine the semantic validity of
+ordinary encrypted content independently. Host validation supplies that
+decision for ordinary non-host mutations. Succession after host loss is
+a narrower exception: the relay verifies a previously signed delegation
+and the candidate’s signed response through public authorization
+sidecars. Recipients still authenticate the MLS sender and apply their
+transition rules.</p>
+<p>Neither an invitation nor a valid device signature establishes human
+identity. Optional out-of-band fingerprint comparison supplies
+additional identity assurance; it does not replace invitation binding or
+explicit host authorization.</p>
+<h2 class="page-start" id="device-admission">4. Device admission</h2>
+<p>Admission separates invitation possession, host authorization, and
+active membership. The relay first authenticates the joining socket and
+retains a binding among the room instance, admission identifier, device
+signing key, and exact MLS KeyPackage digest. Host software
+independently checks that binding and the MLS credential before
+presenting the request for authorization [3,7].</p>
+<p>No MLS Add is performed before the host explicitly approves the
+selected request. After approval, the host obtains an ordering grant and
+persists the resulting MLS state and outbound commit before
+transmission. Existing members receive the commit; only the joining
+device receives its corresponding Welcome and ratchet-tree material. The
+joiner stores its MLS state, applies a history-redacted bootstrap, and
+submits a device-signed profile proof. Activation follows validation of
+that proof against the admitted credential.</p>
+<figure id="fig-admission">
+<img src="assets/fig-02-admission.svg" alt="Admission sequence showing invitation verification, explicit host authorization, MLS Add, targeted Welcome and bootstrap, proof validation, and relay activation.">
+<figcaption>
+<strong>Figure 2.</strong> Admission sequence. The two authorization
+decisions are distinct: the operator explicitly approves an exact
+pending device; software verifies the binding and joining proof. Arrows
+summarize logical messages routed through the relay. Persistence
+precedes dependent transmission or activation; delivery acknowledgments
+are omitted for clarity.
+</figcaption>
+</figure>
+<p>A pending device cannot send ordinary member traffic or invoke
+active-device resume. The bootstrap excludes pre-admission chat and
+drawings; an existing member may nevertheless disclose earlier content
+independently.</p>
+<p>In v2.1.1, the host-local approval window is 180 seconds. The relay
+bounds admission to 185 seconds from acceptance of the join, leaving a
+five-second completion margin under timely forwarding. Delay can reduce
+that margin. Expiration, rejection, or cancellation requires the
+prescribed fresh-admission context. Host observations expose an advisory
+<code>expiresAt</code>; it is not an authorization to bypass a current
+request or fingerprint check.</p>
+<h2 class="page-start" id="ordered-application-execution">5. Ordered
+application execution</h2>
+<p>The relay issues at most one current causal-order grant.
+Abstractly,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>g</mi><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>r</mi><mo>,</mo><mi>q</mi><mo>,</mo><mi>τ</mi><mo>,</mo><mi>d</mi><mo>,</mo><mi>c</mi><mo>,</mo><mo>ℓ</mo><mo>,</mo><msub><mi>t</mi><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">x</mi><mi mathvariant="normal">p</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">g=(r,q,\tau,d,c,\ell,t_{\mathrm{exp}}),</annotation></semantics></math></p>
+<p>where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>
+identifies the request and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math>
+is a fresh grant token. The relay accepts a frame only in the matching
+room, device, connection, order, and expiry context. The signed
+application event also commits to
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>ℓ</mo><annotation encoding="application/x-tex">\ell</annotation></semantics></math>
+[4,5].</p>
+<p>Before transmission, the sender persists its post-transition MLS
+state, application transition context, and outbox entry. For an ordinary
+non-host mutation, the relay retains the opaque frame and requests a
+host preview. Host software decrypts and checks the candidate in an
+isolated engine copy. It returns an accept or reject decision bound to
+that exact pending frame. This is automatic protocol processing, not a
+per-message operator approval.</p>
+<figure id="fig-operation">
+<img src="assets/fig-03-ordered-operation.svg" alt="Ordered application sequence showing grant acquisition, sender persistence, automatic host preview, relay result persistence, recipient delivery, and sender acknowledgment.">
+<figcaption>
+<strong>Figure 3.</strong> Non-host application execution. Local
+persistence, relay persistence, and network effects are separate steps.
+Recipients validate accepted events before application. A retained
+result and its exact acknowledgment support reconciliation; they do not
+establish that every recipient displayed or processed the content.
+</figcaption>
+</figure>
+<p>The relay records the outcome before emitting dependent delivery
+effects. The sender records the result before acknowledging it and
+releasing dependent work. A blocked ordering request receives an exact
+retained cancellation rather than an unbound generic error. Membership,
+removal, and transfer barriers restrict which subsequent steps may
+advance [3].</p>
+<p>A non-host grant is deferred while the connected host has an
+unacknowledged delivery backlog. Otherwise a sender on another
+connection could use its grant before the host had reconciled the
+previous operation. Host delivery acknowledgment or successful host
+resume releases the queued request.</p>
+<p>The statuses <em>locally queued</em>, <em>relay accepted</em>, and
+<em>observed at a receiving device</em> are not interchangeable. An
+application requiring recipient evidence must inspect the intended
+receiver or obtain an application-level acknowledgment.</p>
+<h2 class="page-start" id="persistence-and-recovery">6. Persistence and
+recovery</h2>
+<p>Persistence is part of protocol execution, not an independent backup
+mechanism. Browser state is revisioned, wrapped under authenticated
+encryption, and mutated under room-scoped exclusive ownership. Required
+writes precede dependent sends and acknowledgments. Failure of storage
+or exclusive ownership stops the affected execution path rather than
+allowing volatile-only progress [3,6].</p>
+<p>Rejection handling depends on the mutation class. An application
+rejection restores application metadata while retaining advanced MLS
+sender state, avoiding sender-generation reuse. Rejection of a locally
+generated membership or update commit instead retires that identity;
+reverting the epoch could resurrect consumed secrets. An invalid or
+unstorable incoming commit stops the receiving path without
+acknowledging it. Other peers do not roll back their accepted epochs
+merely because that receiver stopped. There is no automatic fork merge:
+recovery requires a valid retained state and authorized replay, fresh
+admission, or room recreation [3,6].</p>
+<figure id="fig-recovery">
+<img src="assets/fig-04-recovery.svg" alt="Abstract operation and recovery state machine separating persisted pending state, durable result, acknowledgment, and reconciliation after interruption.">
+<figcaption>
+<strong>Figure 4.</strong> Recovery abstraction for an application
+operation. States describe protocol obligations, not one implementation
+enum. A restart restores committed state and reconciles the same
+operation identifier. Rejection of a locally generated MLS
+membership/update commit is excluded from the application-rejection path
+and requires identity retirement.
+</figcaption>
+</figure>
+<p>Active-device resume is a separate protocol. The device authenticates
+its retained identity, processes and persists the backlog prefix,
+reconciles the relay snapshot with its MLS roster and signed host view,
+and accepts the exact replay terminator. The relay activates the device
+only after matching resume completion; ordinary outbound work remains
+blocked until the corresponding acknowledgment.</p>
+<p>Historical removal markers must remain paired with the membership
+transition that justifies removal. Backlog acknowledgment is
+prefix-based: acknowledging a later identifier cannot discard an
+unapplied earlier entry. Hosted-runtime loss differs from browser
+recovery: a memory-only hosted identity is unavailable after loss and
+must not be silently reconstructed as a replacement participant.</p>
+<h2 class="page-start"
+id="host-transfer-and-preauthorized-succession">7. Host transfer and
+preauthorized succession</h2>
+<p>Host authority moves to an existing admitted identity; it does not
+create a replacement participant. The protocol supports manual handoff
+and offers after host disconnection. Both require the target’s explicit
+acceptance [3,5–7].</p>
+<h3 id="explicit-handoff">7.1 Explicit handoff</h3>
+<p>The current host issues a signed offer naming the target device.
+Relay authorization binds the source host, target, exact offer, room
+context, and expiration. The target persists the authorization and
+explicitly accepts it as a person or authorized agent. Its signed
+acceptance references that authorization. The current host validates the
+acceptance automatically. The relay commits the authority change before
+dependent delivery effects. The former host remains an admitted
+member.</p>
+<figure id="fig-transfer">
+<img src="assets/fig-05-host-transfer.svg" alt="Manual host-transfer sequence separating the signed offer, bound authorization, explicit target acceptance, automatic validation, and persisted relay authority change.">
+<figcaption>
+<strong>Figure 5.</strong> Explicit host handoff. Source and target
+decisions are distinguished from automatic checks. This path requires
+the outgoing host’s validation; it is not the disconnection-recovery
+path. Endpoint views may reconcile at different times.
+</figcaption>
+</figure>
+<h3 id="consent-based-succession-after-disconnection">7.2 Consent-based
+succession after disconnection</h3>
+<p>While connected, host software maintains a signed
+<code>host-succession-policy</code> event containing admitted devices in
+authenticated admission order, excluding the host and members awaiting
+removal. Reconnection does not change that order. Membership or
+authority changes require a new policy.</p>
+<p>The relay preserves the current host during a <strong>120-second
+disconnect grace</strong>. On expiry it fences that identity from resume
+and offers a <strong>30-second authorization</strong> to the earliest
+connected, active candidate in the current signed policy. Unavailable
+and removal-bound devices are ineligible. Candidate attempts and
+outstanding capabilities are durable; refusal or an unanswered offer
+advances to the next eligible candidate. An admitted device absent from
+the current policy is not implicitly authorized to succeed.</p>
+<figure id="fig-succession">
+<img src="assets/fig-06-automatic-succession.svg" alt="Consent-based succession: the relay offers the pillow in signed admission order; each candidate explicitly accepts or declines. Acceptance transfers authority; refusal advances to the next candidate. If all refuse, the fort collapses.">
+<figcaption>
+<strong>Figure 6.</strong> Succession after host loss. Policy
+maintenance, offer delivery, and cryptographic checks are automatic;
+accepting the role is not. The disconnected host need not validate the
+response. The accepted successor completes the former host’s MLS removal
+before ordinary work continues. Refusal or expiry advances the offer;
+exhaustion collapses the fort.
+</figcaption>
+</figure>
+<p>The target persists the exact authorization before acknowledging
+delivery. Neither delivery acknowledgment nor membership accepts the
+host role. The participant explicitly chooses to accept or decline; its
+signed, encrypted <code>host-succession</code> response binds that
+choice to the policy and capability. The relay verifies the credential,
+candidate, connection, grant, order, and expiry. Recipients authenticate
+the MLS sender and response. This narrow response may pass a membership
+barrier to restore its coordinator; it does not authorize arbitrary
+traffic through the barrier.</p>
+<p>On acceptance, authority and capability consumption are committed
+before dependent delivery effects. An unrelated delivery overflow cannot
+revoke an accepted transfer. The former host is retired; the successor
+completes its exact MLS Remove and retirement notification, then
+publishes a new policy. A refusal consumes the current offer without
+promoting or removing the refusing member. If every eligible member
+refuses, the fort collapses and the relay closes the room. Unanswered or
+unavailable candidates cannot force another member to accept. Old
+policies cease to authorize transfer after the host changes.</p>
+<p>These steps are not one atomic transaction across devices. A
+successor that returns with its retained identity must reconcile the
+authority result and finish the exact former-host removal. Publishing
+its own policy establishes delegation for a subsequent host loss. If it
+is permanently lost before the relay accepts that policy, the preceding
+host’s delegation cannot authorize another promotion: after the
+successor’s disconnect grace, the relay retires the room. This preserves
+the authority boundary at the cost of availability.</p>
+<p>The outgoing host need not remain online. The mechanism is not
+quorum-based or Byzantine leader election. The relay is the connectivity
+and deadline oracle: signatures authenticate delegation and acceptance,
+not evidence that another endpoint is offline. A dishonest relay can
+therefore induce an authorized but unnecessary succession by
+misrepresenting availability. It cannot forge the host’s delegation or
+the candidate’s consent.</p>
+<h2 class="page-start"
+id="agent-interfaces-and-notification-semantics">8. Agent interfaces and
+notification semantics</h2>
+<p>Browser WebMCP, local MCP, and hosted MCP expose the same participant
+engine and room authorization rules. A hosted service access grant
+allocates access to a runtime; it is neither a room invitation nor
+admission to a room. A local process and a managed hosted endpoint have
+different custody boundaries [8].</p>
+<p>The implemented attention mechanisms include bounded
+participant-local observations, filtered event waits, a private mention
+resource with MCP subscription notifications, and hosted asynchronous
+event-wait Tasks. A mention is detected after decryption and application
+at the receiving participant. A notification or completed Task reports
+available attention; the client or host application decides whether to
+schedule an agent turn [8–10].</p>
+<p>These mechanisms do not provide an offline inbox, exactly-once agent
+actions, or preservation of hosted cryptographic identity. The hosted
+participant has a 600-second absolute lifetime and 120-second idle
+deadline. Delivery metadata does not extend those limits.</p>
+<h2 id="security-and-availability-limitations">9. Security and
+availability limitations</h2>
+<p><strong>Endpoint trust.</strong> Confidentiality excludes admitted
+endpoints from the adversary set. A member, model operator, or
+compromised browser may disclose content available to that endpoint.
+Same-origin malicious code can access plaintext and keys despite
+encryption at rest. Memory wiping cannot guarantee removal of copies
+retained by a runtime, operating system, backup, or storage device.</p>
+<p><strong>Host and relay behavior.</strong> An adversarial host may
+deny valid transitions; an adversarial relay may withhold, delay, or
+selectively deliver frames. During succession the relay also determines
+connectivity, deadlines, and candidate eligibility within the authorized
+order. Signatures do not prove the accuracy of those liveness judgments
+or establish a globally complete transcript. Local validation is not
+Byzantine agreement.</p>
+<p><strong>Compromise recovery.</strong> Forward secrecy depends on
+erasure of obsolete secrets. Post-compromise recovery requires
+appropriate fresh key material, removal of the attacker’s continuing
+access, and updates or removal of affected members that relevant peers
+process. Fresh entropy from an unrelated member alone is not an
+unconditional recovery guarantee. Subsequent updates do not undo earlier
+disclosure [1,2].</p>
+<p><strong>Bounded operation.</strong> Grants, admissions, delivery
+buffers, and identifier histories have explicit limits. Exhaustion and
+ambiguous recovery may require fresh admission or room recreation.
+Finite storage and transient success cannot establish indefinite replay
+protection or eventual delivery under permanent failures.</p>
+<h2 class="page-start" id="evaluation">10. Evaluation</h2>
+<h3 id="specification-and-implementation-evidence">10.1 Specification
+and implementation evidence</h3>
+<p>The technical appendix [11] defines the signed fields,
+domain-separated encodings, public sidecar checks, and guarded
+transitions for delivery, admission, resume, and succession. Profile
+<code>pf-v4-cs1</code> distinguishes this contract from the earlier
+host-available design; the transport integer <code>4</code> is not a
+compatibility negotiation. Implementation references identify the tested
+source revision. The companion artifact supplies commands, lockfiles,
+raw results, and a claim-to-test matrix.</p>
+<p>Five protocol suites passed <strong>86 tests and 740
+assertions</strong>. The real-MLS engine suite passed <strong>26 tests
+and 306 assertions</strong>, including storage failure, restart,
+rejection, and revision-conflict paths. The complete
+<code>npm run check</code> gate also passed. Signed fixtures in
+<code>examples.json</code> cover chat, a transfer offer, and acceptance;
+changing the signed order or expected room invalidates verification.
+Their deterministic test seeds are not production keys.</p>
+<h3 id="crash-boundary-executions">10.2 Crash-boundary executions</h3>
+<p>Six relay regressions cover successor return and permanent absence at
+three boundaries: authority committed but result unacknowledged, removal
+unstarted, and removal completed before the new policy. They check
+persisted state export/import, exact cleanup, and rejection of
+predecessor-policy reuse.</p>
+<p>Four browser fault scenarios use the production client, real MLS,
+WebSockets, and IndexedDB. A successor recovers its original device
+after the acceptance result is withheld and after its new-policy frame
+is withheld following removal; encrypted delivery succeeds in both
+directions afterward. Permanent loss before policy acceptance retires
+the room at grace expiry. An injected write failure during another
+peer’s incoming Add stops that peer while remaining members continue.
+These executions use the actual 120-second grace; they do not establish
+automatic repair of arbitrary epoch disagreement.</p>
+<p>The runs exposed two implementation defects: issuing a guest grant
+before the host’s prior delivery ACK, and attempting admission-lifecycle
+mutation on a resumed device with a pending application but no admission
+barrier. Both were reproduced before correction and retain regressions.
+The latter run exercises the successor’s previously unspecified
+unsent-policy boundary.</p>
+<h3 id="bounded-state-analysis">10.3 Bounded state analysis</h3>
+<p>The M1–M4 analysis separates endpoint state, committed storage, relay
+decisions, and network effects. Nine finite TLC configurations completed
+without an invariant violation. Seven deliberately weakened
+configurations produced counterexamples for persistence, grant binding,
+preview readiness, KeyPackage reuse, snapshot reconciliation, target
+binding, and membership interlocks.</p>
+<p>The largest composed configuration explored <strong>1,202,973
+distinct abstract states</strong>, with backlog capacity two and a
+16-step bound. The companion report records all configurations and maps
+their coverage to implementation checks. Cryptography is abstracted;
+these are safety results for bounded abstractions, not implementation
+refinement, deadlock freedom, or unbounded liveness. No independent
+security audit is claimed.</p>
+<h3 id="coordination-cost">10.4 Coordination cost</h3>
+<p>Each profile submits 20 ordinary non-host chat messages and measures
+UI submission to application in the host’s DOM. Runs share one Apple M3
+Max machine and a local relay. One message is outstanding at a time,
+followed by a 500 ms pause after delivery; the throughput column is the
+achieved paced rate, not maximum capacity.</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: right;">Members</th>
+<th style="text-align: right;">Added preview delay</th>
+<th style="text-align: right;">p50 latency</th>
+<th style="text-align: right;">p95 latency</th>
+<th style="text-align: right;">Delivered messages/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0 ms</td>
+<td style="text-align: right;">29.71 ms</td>
+<td style="text-align: right;">30.74 ms</td>
+<td style="text-align: right;">1.872</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0 ms</td>
+<td style="text-align: right;">29.60 ms</td>
+<td style="text-align: right;">30.77 ms</td>
+<td style="text-align: right;">1.872</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">100 ms</td>
+<td style="text-align: right;">130.27 ms</td>
+<td style="text-align: right;">246.14 ms</td>
+<td style="text-align: right;">1.513</td>
+</tr>
+<tr>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">0 ms</td>
+<td style="text-align: right;">29.87 ms</td>
+<td style="text-align: right;">44.95 ms</td>
+<td style="text-align: right;">1.860</td>
+</tr>
+</tbody>
+</table>
+<p>Measurements include grants, durable writes, MLS processing,
+automatic host preview, queueing, and rendering; quantiles use
+nearest-rank selection. The delayed-host profile measures coordinator
+sensitivity in the normal UI workload; it does not isolate each
+contributor to tail latency. Twenty samples per profile do not establish
+a stable tail-latency estimate, WAN performance, or scalability beyond
+these rooms. Raw samples and environment versions accompany the
+results.</p>
+<h2 id="related-designs">11. Related designs</h2>
+<p>MLS architecture already assigns access control, delivery
+consistency, invalid-commit handling, and state-loss recovery to the
+surrounding application [2]. Pillowfort specifies one such composition
+rather than a new cryptographic primitive. Matrix Megolm uses per-sender
+ratchets and session-key distribution [12]; Signal’s private-group
+design combines encrypted canonical group state with privacy-preserving
+authorization [13]. Their state and metadata goals differ from
+Pillowfort’s visible relay coordination and admitted-host authority. The
+appendix compares these mechanisms; no cross-system performance
+experiment is implied.</p>
+<h2 id="conclusion">12. Conclusion</h2>
+<p>Pillowfort composes MLS with explicit admission, context-bound
+ordering, persist-before-effect execution, exact replay reconciliation,
+and authenticated host transfer. A signed admission-order policy permits
+offers without the disconnected host’s further participation, while
+every recipient retains the choice to accept or decline. Its recovery
+contract preserves uncertainty and refuses to reuse an invalid
+delegation. The bounded analysis and fault executions support specific
+coordination properties under the stated storage, endpoint, and relay
+assumptions.</p>
+<h2 class="references-heading" id="references">References</h2>
+<ol type="1">
+<li>IETF. <em>The Messaging Layer Security (MLS) Protocol</em>. RFC
+9420. <a
+href="https://www.rfc-editor.org/rfc/rfc9420.html">rfc-editor.org/rfc/rfc9420</a>.</li>
+<li>IETF. <em>The Messaging Layer Security (MLS) Architecture</em>. RFC
+9750. <a
+href="https://www.rfc-editor.org/rfc/rfc9750.html">rfc-editor.org/rfc/rfc9750</a>.</li>
+<li>Pillowfort. <em>Secure Room Protocol v4</em>. Implementation
+contract, revision <code>10fe8f8b490c</code>. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
+<li>Pillowfort. <em>Application Event Encoding and Signatures</em>. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/applicationEventsV4.ts">Pinned
+source</a>.</li>
+<li>Pillowfort. <em>Relay State and Transitions</em>. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/secureRelayV4.ts">Pinned
+source</a>.</li>
+<li>Pillowfort. <em>Secure Room Engine</em>. Persistence, rejection, and
+recovery. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomEngine.ts">Pinned
+source</a>.</li>
+<li>Pillowfort. <em>Participant Controller</em>. Admission and host
+succession. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/src/participant/secureRoomController.ts">Pinned
+source</a>.</li>
+<li>Pillowfort. <em>Agent Security and Custody</em>. <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/agents/security.md">Pinned
+source</a>.</li>
+<li>Model Context Protocol. <em>Subscriptions</em>, protocol revision
+2026-07-28. <a
+href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions.md">Specification</a>.</li>
+<li>Model Context Protocol. <em>Tasks Extension</em>. <a
+href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
+<li>Pillowfort. <em>Protocol v4-CS1: Wire Contract and Failure
+Semantics</em>. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Protocol-Technical-Appendix.pdf">Technical
+appendix</a>.</li>
+<li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
+href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
+<li>Signal. <em>The Signal Private Group System</em>. <a
+href="https://signal.org/blog/signal-private-group-system/">Design</a>.</li>
+</ol>
+<p><strong>Companion artifacts:</strong> <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09/paper/Formal-State-Machine-Analysis.pdf">bounded
+analysis report</a>; <a
+href="https://github.com/slee1996/pillowfort/blob/10fe8f8b490c9e890d5a642bc25568e985c2fe8a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md">claim-to-test
+matrix</a>; <a
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+evidence bundle</a>.</p>
+</body>
+</html>

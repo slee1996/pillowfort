@@ -1,0 +1,106 @@
+{
+  "warning": "Synthetic public test fixtures only. Disclosed deterministic seeds must never be used in production. Signed pre-MLS plaintext events and parser-checked control frames: not captured network traffic or complete state-machine executions.",
+  "ids": {
+    "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+    "alice": "AgICAgICAgICAgICAgICAg",
+    "bob": "AwMDAwMDAwMDAwMDAwMDAw",
+    "chatEvent": "BAQEBAQEBAQEBAQEBAQEBA",
+    "offerEvent": "BQUFBQUFBQUFBQUFBQUFBQ",
+    "acceptEvent": "BgYGBgYGBgYGBgYGBgYGBg",
+    "authorization": "BwcHBwcHBwcHBwcHBwcHBw",
+    "offerMessage": "CAgICAgICAgICAgICAgICA",
+    "orderRequest": "CQkJCQkJCQkJCQkJCQkJCQ"
+  },
+  "signedExamples": [
+    {
+      "name": "chat",
+      "publicKey": "Zr5-Myx6RTMyvZ0Kf32wVfXF7xoGraZtmLOftoEMRzo",
+      "exampleOnlySeedByte": 11,
+      "event": {
+        "content": {
+          "text": "@alice the sketch is ready",
+          "type": "chat"
+        },
+        "deviceId": "AwMDAwMDAwMDAwMDAwMDAw",
+        "deviceSequence": 2,
+        "eventId": "BAQEBAQEBAQEBAQEBAQEBA",
+        "logicalOrder": 12,
+        "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+        "v": 4,
+        "signature": "PNmBORubAXivtZvskF65PJJbn-LnyajSLxLM5-6r-BTqc3I6sbeOnFvRmzsh_2QfIjpRTv6sCVWFNDrcUhcBDA"
+      },
+      "verified": true,
+      "changedOrderRejected": true,
+      "wrongRoomRejected": true
+    },
+    {
+      "name": "pillow-toss",
+      "publicKey": "C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0",
+      "exampleOnlySeedByte": 12,
+      "event": {
+        "content": {
+          "targetDeviceId": "AwMDAwMDAwMDAwMDAwMDAw",
+          "type": "pillow-toss"
+        },
+        "deviceId": "AgICAgICAgICAgICAgICAg",
+        "deviceSequence": 2,
+        "eventId": "BQUFBQUFBQUFBQUFBQUFBQ",
+        "logicalOrder": 13,
+        "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+        "v": 4,
+        "signature": "BlUytScte64I1M-joxpKNzJ6CcqplfNwdmiu-tHPHENr_Ptw3OAwLzxiKMGylN-ChlAAmkv3HUa2lIwBVxb1Dw"
+      },
+      "verified": true,
+      "changedOrderRejected": true,
+      "wrongRoomRejected": true
+    },
+    {
+      "name": "host-transfer-accept",
+      "publicKey": "Zr5-Myx6RTMyvZ0Kf32wVfXF7xoGraZtmLOftoEMRzo",
+      "exampleOnlySeedByte": 11,
+      "event": {
+        "content": {
+          "action": "accept",
+          "authorizationId": "BwcHBwcHBwcHBwcHBwcHBw",
+          "type": "host-transfer"
+        },
+        "deviceId": "AwMDAwMDAwMDAwMDAwMDAw",
+        "deviceSequence": 3,
+        "eventId": "BgYGBgYGBgYGBgYGBgYGBg",
+        "logicalOrder": 14,
+        "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+        "v": 4,
+        "signature": "0j6FNoEIrIRpWLWpjmSg8apZ7PzNx193kf80U-l_tkq1r91xA53Y8KqzBW7rZse-DMtZHWGVJSvJ1bnDEI6VAA"
+      },
+      "verified": true,
+      "changedOrderRejected": true,
+      "wrongRoomRejected": true
+    }
+  ],
+  "controlFrames": [
+    {
+      "kind": "order-request",
+      "v": 4,
+      "suite": 1,
+      "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+      "requestId": "CQkJCQkJCQkJCQkJCQkJCQ"
+    },
+    {
+      "kind": "authorize-host-transfer",
+      "v": 4,
+      "suite": 1,
+      "roomInstance": "AQEBAQEBAQEBAQEBAQEBAQ",
+      "requestId": "BwcHBwcHBwcHBwcHBwcHBw",
+      "deviceId": "AwMDAwMDAwMDAwMDAwMDAw",
+      "offerMessageId": "CAgICAgICAgICAgICAgICA"
+    }
+  ],
+  "checks": {
+    "signedEvents": 3,
+    "signatureVerifications": 3,
+    "changedOrderRejections": 3,
+    "wrongRoomRejections": 3,
+    "validControlFrames": 2,
+    "unknownFieldRejections": 2
+  }
+}

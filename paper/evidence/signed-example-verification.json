@@ -1,0 +1,32 @@
+{
+  "sourceCommit": "10fe8f8b490c9e890d5a642bc25568e985c2fe8a",
+  "command": [
+    "bun",
+    "-e",
+    "import { verifySecureApplicationEventV4 } from './src/applicationEventsV4.ts';\nconst input=await Bun.file('/Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/examples.json').json();\nconst results=[];\nfor (const item of input.signedExamples) {\n const context={expectedRoomInstance:item.event.roomInstance};\n const changed={...item.event,logicalOrder:item.event.logicalOrder+1};\n const room=Buffer.from(item.event.roomInstance,'base64url');room[0]^=255;\n const row={name:item.name,verified:await verifySecureApplicationEventV4(item.event,item.publicKey,context),changedOrderRejected:!await verifySecureApplicationEventV4(changed,item.publicKey,context),wrongRoomRejected:!await verifySecureApplicationEventV4(item.event,item.publicKey,{expectedRoomInstance:room.toString('base64url')})};\n results.push(row);\n if(!row.verified||!row.changedOrderRejected||!row.wrongRoomRejected)throw new Error(JSON.stringify(row));\n}\nconsole.log(JSON.stringify({passed:true,results}));"
+  ],
+  "workingDirectory": "extracted pinned source archive",
+  "result": {
+    "passed": true,
+    "results": [
+      {
+        "name": "chat",
+        "verified": true,
+        "changedOrderRejected": true,
+        "wrongRoomRejected": true
+      },
+      {
+        "name": "pillow-toss",
+        "verified": true,
+        "changedOrderRejected": true,
+        "wrongRoomRejected": true
+      },
+      {
+        "name": "host-transfer-accept",
+        "verified": true,
+        "changedOrderRejected": true,
+        "wrongRoomRejected": true
+      }
+    ]
+  }
+}

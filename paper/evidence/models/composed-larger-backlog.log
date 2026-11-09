@@ -1,0 +1,31 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 18 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 19000] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/Coordination.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M1Delivery.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M2Admission.tla
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M3Resume.tla
+Parsing file /Users/spencerlee/Downloads/Pillowfort-Protocol-Paper-Academic-2026-11-08/evidence/models/M4Succession.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M1Delivery
+Semantic processing of module M2Admission
+Semantic processing of module M3Resume
+Semantic processing of module M4Succession
+Semantic processing of module Coordination
+Starting... (2026-11-09 11:36:43)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-09 11:36:43.
+Progress(13) at 2026-11-09 11:36:46: 467,555 states generated (467,555 s/min), 154,062 distinct states found (154,062 ds/min), 67,517 states left on queue.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 1.8E-7
+  based on the actual fingerprints:  val = 1.5E-8
+3968326 states generated, 1202973 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 17.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 11 and the 95th percentile is 4).
+Finished in 25s at (2026-11-09 11:37:08)
