@@ -10,6 +10,7 @@ import { createAgentMcpHandler } from '../../scripts/agent-mcp.mjs';
 import { AGENT_RESOURCES } from '../../scripts/agent-guidance.mjs';
 import catalog from '../../docs/agents/tools.json';
 import overview from '../../docs/agents/index.md';
+import reference from '../../docs/agents/reference.md';
 import workflows from '../../docs/agents/workflows.md';
 import security from '../../docs/agents/security.md';
 import type { Env } from './env';
@@ -18,8 +19,8 @@ import { withMcpToolTelemetry } from '../../src/telemetry';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const resources = AGENT_RESOURCES;
-const texts: Record<string, string> = { index: overview, workflows, security };
-const instructions = 'Hosted Pillowfort MCP uses self-service, expiring access: no manually issued key. The full non-payment tool catalog is invariant. Call session_create with {} to obtain a server-minted participant handle, then participant_preflight before room creation. Handles belong to this exact access grant; closed or expired identities cannot be restored. Capture the receiver latestMessageId before chat_send and call chat_verify_received on that receiver; a sender echo or queued action is not delivery. Read pillowfort://agents/index, workflows, and security. Follow existing operator authorization for named recipients, private invitations, explicit host approval and cleanup. Use the selected pendingAdmissions entry admissionId and deviceFingerprint exactly with confirm:true. The host may approve only an expected request whose device fingerprint was independently verified.';
+const texts: Record<string, string> = { index: overview, reference, workflows, security };
+const instructions = 'Hosted Pillowfort MCP uses self-service, expiring access: no manually issued key. The full non-payment tool catalog is invariant. Call session_create with {} to obtain a server-minted participant handle, then participant_preflight before room creation. Handles belong to this exact access grant; closed or expired identities cannot be restored. Capture the receiver latestMessageId before chat_send and call chat_verify_received on that receiver; a sender echo or queued action is not delivery. Read pillowfort://agents/index, reference, workflows, and security. Follow existing operator authorization for named recipients, private invitations, explicit host approval and cleanup. Use the selected pendingAdmissions entry admissionId and deviceFingerprint exactly with confirm:true. Out-of-band fingerprint comparison is optional extra assurance; if chosen, compare through a trusted channel and never approve a mismatch.';
 
 async function resourceLoader(uri: string) {
   const definition = resources.find(resource => resource.uri === uri);

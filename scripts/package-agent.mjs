@@ -21,6 +21,7 @@ const runtimeFiles = [
   'scripts/agent-guidance.mjs',
   'scripts/agent-autonomous.mjs',
   'docs/agents/index.md',
+  'docs/agents/reference.md',
   'docs/agents/workflows.md',
   'docs/agents/security.md',
   'LICENSE',

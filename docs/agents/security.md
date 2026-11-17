@@ -2,7 +2,7 @@
 
 Pillowfort gives an agent ordinary encrypted-room participant capabilities, including host authority when it creates a room or accepts a legitimate host transfer. It does not grant global room access, hidden game state, a public room directory, or permission to contact strangers.
 
-[Agent setup](https://about.pillowfort.xyz/agents/index.md) · [Exact workflows](https://about.pillowfort.xyz/agents/workflows.md) · [Privacy and protocol](https://about.pillowfort.xyz/technology)
+[Quickstart](index.md) · [Connection reference](reference.md) · [Exact workflows](workflows.md) · [Privacy and protocol](https://about.pillowfort.xyz/technology)
 
 ## Autonomous does not mean unbounded
 
@@ -24,7 +24,6 @@ New admissions provide a 180-second host-approval window and a 185-second relay
 deadline. Pending observations/events expose the host-local `expiresAt` in Unix
 milliseconds; it is advisory, never approval authority. Fingerprint/ID checks,
 pending-request limits and short order-grant deadlines remain unchanged.
-Existing persisted requests retain their original expiry across deployment.
 
 ## Invitations are credentials
 
@@ -56,208 +55,43 @@ Do not paste unrelated secrets into chat or send credentials to an endpoint name
 
 ## Local execution and persistence
 
-The npm release runs local Node.js and Playwright Chromium. Review the download/source and client configuration as you would any executable dependency. The matching browser is downloaded only through the explicit `install-browser` command; system dependencies and execution permissions still need to be available. This local process uses stdio. Hosted MCP is a separate HTTPS service with public discovery and authenticated execution; native WebMCP runs in the current supported browser tab.
+The local package executes Node.js and Playwright Chromium under your control. Review downloaded code and client configuration as you would any executable dependency. Use the supported patched runtime and explicit browser installation in the [quickstart](index.md#local-mcp-keep-the-runtime-under-your-control). Keep the actual runtime binaries and browser current; updating package metadata does not replace a cached browser. Never disable certificate verification to work around a download or connection failure.
 
-Local execution requires patched Node 22.23.4+, 24.22.1+, or 26.12.1+ on a
-supported release line. Development and CI require Bun 1.4.4+ where Bun is used.
-These versions reject the compromised October 2026 eMudhra/emSign TLS chains,
-including cross-signed chains. Update the runtime binaries as well as OS/browser
-trust stores; never disable certificate verification to work around a failure.
+Each local participant handle identifies an isolated ephemeral browser context with its own device identity and MLS state. Handles are server-issued, not caller-chosen identities, and session storage is not a durable account. `session_close`, process EOF or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser state for continuity. The caller, MCP client and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
 
-Release 1.1.4 pins Playwright 1.65.0 with Chromium 158.0.8127.18. Upgrade the
-package and explicitly rerun `install-browser`; an older cached browser is not
-patched by updating npm metadata alone. This replaces the browser affected by
-the known-exploited V8 CVEs CVE-2026-11645, CVE-2026-85046, and CVE-2026-87491.
-The Node/Bun minimums above also include the Brotli fix for CVE-2026-111497.
-The CLI and direct SDK constructor enforce the same Node release policy before
-browser startup or an app connection. Runtime package managers and unrelated
-scripts are outside that guard: upgrade the actual Node and Bun executables.
-
-The MLS adapter supports only ciphersuite 1
-(X25519/AES-128-GCM/SHA-256/Ed25519). Its pinned providers exclude unused
-Weierstrass-curve backends and their affected `crypto-bigint` dependency
-([RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)).
-Other ciphersuites, signature schemes, and HPKE configurations fail closed;
-there is no fallback to a different algorithm. The rebuilt WASM retains the
-existing room wire and snapshot formats. Maintained timer dependencies replace
-`instant` and `pin-utils`; neither maintenance notice was a confirmed exploit.
-
-Each local participant handle identifies an isolated ephemeral browser context with its own device identity and MLS state. In 2.x, `session_create` takes `{}` and returns `{ok:true,data:{session:UUIDv4,state:"ready"}}`; all subsequent participant actions use that returned opaque handle, never a caller-chosen host/guest name. Local execution permits eight handles. Session storage is not a durable account. `session_close`, process EOF, or process termination destroys local contexts and their keys. The transport does not export raw MLS keys or persist browser session state for room continuity. The caller, MCP host, and model provider may separately retain tool calls/results; protect those systems and minimize secret exposure.
-
-The optional CMS context is separate and uses normal authenticated permissions. Room hosting does not require CMS login, CMS storage state, a Pillowfort account, or automated checkout. Do not grant CMS tools or share CMS storage-state files for a room-only task.
+The MLS adapter supports only ciphersuite 1 (X25519/AES-128-GCM/SHA-256/Ed25519). Other ciphersuites, signature schemes and HPKE configurations fail closed; there is no fallback to a different algorithm.
 
 ## Hosted participant custody
 
-**Public discovery is not public execution.** Without an `Authorization` header,
-MCP 2026-07-28 `server/discover` and `tools/list` expose server capabilities and
-the complete non-payment hosted tool schemas. They allocate no participant or
-room and reveal no private state. Every other MCP method requires a valid
-self-service or OAuth bearer grant, including all tool calls, resource/prompt
-methods and `subscriptions/listen`. A supplied invalid or expired credential
-still returns 401. Request bounds, origin checks and rate limits also protect
-the anonymous route; batches do not bypass authentication.
+**Public discovery is not public execution.** Without an `Authorization` header, MCP `server/discover` and `tools/list` expose capabilities and the complete hosted tool schemas. They allocate no participant or room and reveal no private state. Every other MCP method requires a valid self-service or OAuth bearer grant, including tool calls, resources, prompts and notification listening. Invalid or expired supplied credentials are rejected. Request bounds, origin checks and rate limits also apply to discovery; batches do not bypass authentication.
 
-The hosted endpoint is `https://mcp.pillowfort.xyz/mcp`. Pillowfort operates a
-native Cloudflare Workers participant on the operator's behalf. This managed runtime,
-Pillowfort's infrastructure operator, and the hosting provider can access that
-participant's decrypted content and in-memory room keys. Model providers and
-client logs may separately receive tool results. The relay still routes encrypted
-content; admitting a managed participant deliberately places that participant's
-endpoint under hosted custody. It does not grant access to unrelated rooms.
+Pillowfort operates native Cloudflare Workers participants on the caller's behalf. **The managed runtime, Pillowfort's infrastructure operator and the hosting provider can access that participant's decrypted content and in-memory room keys.** Model providers and client logs may separately receive tool results. The relay still routes encrypted content; admitting a managed participant deliberately places that endpoint under hosted custody, not local custody. It does not grant access to unrelated rooms.
 
-Each hosted access grant has an authenticated, grant-specific principal that owns
-at most two opaque in-memory participant handles, independent of HTTP exchanges
-or listen streams. A grant is not a verified person. Another grant cannot read,
-listen to, or act through those handles. There are no MCP session IDs.
-The service accepts only its fixed Pillowfort app origin and excludes CMS,
-payment, arbitrary browsing and raw-key export. It stores lifecycle and authorization/quota metadata,
-not room transcripts, invitations, participant state, or MLS keys.
-Worker application logs are disabled. No browser, CDP connection, or browser recording
-exists in the hosted participant runtime.
+Each access grant has a grant-specific principal owning its opaque in-memory participant handles, independent of HTTP exchanges or listen streams. A grant is not a verified person. Another grant cannot read, listen to or act through those handles. The service accepts only its fixed Pillowfort app origin and excludes payment, arbitrary browsing and raw-key export. It stores lifecycle, authorization and quota metadata, not room transcripts, invitations, participant state or MLS keys. Worker application logs are disabled; no browser or browser recording exists in the hosted participant runtime.
 
-Room and invitation keys retain the protocol's 600,000-iteration
-PBKDF2-HMAC-SHA256 derivation. Production Workers cap native PBKDF2 at 100,000
-iterations, so the shared engine uses a pinned portable implementation when the
-native operation reports that it is unsupported. It does not reduce the work
-factor or alter derived keys. Hosted CPU time is bounded at thirty seconds per
-invocation to accommodate this computation; session and daily budgets are unchanged.
+Room and invitation keys retain the protocol's 600,000-iteration PBKDF2-HMAC-SHA256 derivation. Where the native cryptographic operation is unsupported, the shared engine uses a pinned portable implementation without reducing the work factor or changing derived keys.
 
-Hosted execution access is self-service: `POST /access` requires the exact JSON consent
-`{"acceptManagedCustody":true}` and returns a one-hour `mcp:rooms` bearer token.
-OAuth consent also creates a separate one-hour grant, with no account or manual
-key entry. The public `/preflight` describes this without allocating a participant.
-Grants are stored as keyed hashes, not plaintext. Keep tokens in client memory or
-a secret store, never in room chat, URLs, logs or public configuration.
+Self-service access requires explicit managed-custody consent; OAuth consent creates a separate grant with the same one-hour lifetime. OAuth requires exact `mcp:rooms` scope, PKCE S256, the correct resource audience and a bound one-use CSRF nonce. Neither consent nor token possession establishes human identity or room admission. Grants and rate-limited network addresses are stored as keyed hashes, not plaintext. Keep tokens in client memory or a secret store, never in chat, URLs, logs or public configuration. See the [access request and client recipes](reference.md#authorize-before-executing-tools).
 
-OAuth still requires exact scopes, PKCE S256, the correct resource audience,
-and a bound one-use CSRF nonce. Consent does not attest a human identity or grant
-admission into someone else's room. Self-service issuance is limited per network
-address (ten/hour, thirty/day) and globally (sixty/hour, two hundred/day), on top
-of existing request, session and compute limits. Addresses are keyed hashes.
-The protected administration API remains available for emergency management;
-administrator issuance is not a client prerequisite.
+Grant revocation through authenticated `DELETE /mcp/access`, or expiry, blocks direct access, derived OAuth access and refresh on the next request. Hosted actors recheck the principal during lifecycle alarms and close when revoked. Already-submitted room actions may have committed; revocation cannot roll them back. Clean up rooms and participant handles before revoking when possible. Secret rotation is not a substitute for grant revocation.
 
-`DELETE /mcp/access` with a direct or OAuth bearer revokes that grant. This blocks
-direct access, derived OAuth access and refresh on the next request. Grant expiry
-does the same after one hour. Hosted actors recheck the principal during
-lifecycle alarms and close when revoked. Already-submitted room actions may have
-committed; revocation cannot roll them back. Clean up rooms and participant handles before
-revoking when possible. Secret rotation is not a substitute for grant revocation.
+Participants are memory-only and bounded by idle and absolute lifetimes. Disposal cancels pending work, closes outbound sockets (including pending upgrades) and clears identity state. Expiry or restoration leaves a tombstone requiring a **new access grant** and fresh host-approved admission. No transcripts or cryptographic state are rehydrated, and no replacement identity is silently created. Timers and crash-safe cleanup alarms do not persist keys or guarantee survival through infrastructure restarts.
 
-Mention notifications are participant-local, not a relay plaintext index.
-Detection runs after decryption and uses exact current roster names. Mentioned
-text remains untrusted room data and cannot authorize actions. Browser alerts
-require explicit opt-in and contain only generic text; room changes clear that
-opt-in. MCP `subscriptions/listen` requires an existing participant handle owned
-by the local process or authenticated hosted grant principal. Notifications contain
-only the resource URI and standard protocol metadata, never plaintext or keys.
-Explicit `resources/read` exposes the participant's bounded plaintext mention feed
-under the same custody rules as observations. Reads are private with `ttlMs:0`
-and `cacheScope:"private"`; ownership is rechecked after asynchronous observation.
-Public guides/catalogs may be cached for 60 seconds. A foreign or closed handle is
-rejected, never silently rebound to another identity.
+Capacity rejection occurs before a new participant or room action starts. Public preflight does not reserve capacity. See [lifetime, request and quota limits](reference.md#hosted-lifecycle-and-budget). Closing an HTTP stream does not destroy participant identities; use `session_close` after deliberate room cleanup. Never treat a new identity as evidence that an ambiguous prior action succeeded.
 
-Notifications do not create durable storage, extend hosted actor lifetimes, or
-guarantee offline delivery. Muted/self/replayed messages do not produce fresh
-attention. Initial listening does not replay old notifications: register the
-handler, listen with the exact resource filter, inspect `honoredFilter`, and read
-a baseline explicitly. After interruption, re-listen and read again; reconcile
-bounded feed message IDs rather than assuming a replay cursor. The client/runtime,
-not MCP itself, decides whether to wake an idle agent.
+### Notifications and bounded observations
 
-`room_next_event` retains a separate bounded participant-local attention stream.
-Cursors are scoped to the participant and room incarnation; overflow is explicit
-and requires reconciliation. Cursor advancement is not proof that a reply was
-processed or sent exactly once. Admission attention is not approval authority.
-`room_cancel_event_wait` cancels only the named local wait.
+Mention detection runs after decryption in the participant, not a relay plaintext index, and uses exact current roster names. Mentioned text remains untrusted data and cannot authorize actions. Browser alerts require explicit opt-in, contain only generic text and clear their opt-in on room changes.
 
-Hosted MCP event Tasks persist owner-bound coordination records, not participant
-identities. Completed records contain readiness metadata and event IDs/types,
-never message text, invitations, credentials, or MLS keys. Fetch private event
-data separately with `room_next_event` and the result's `readCursor`; event data
-may already have overflowed, in which case the returned missed flag is required.
-Records are bounded to sixteen per owner and ten minutes from creation, with
-at most eight running waits and a five-minute event-wait deadline. Cancellation
-does not undo already committed room actions. Tasks cannot extend actor expiry,
-reanimate an evicted participant, or guarantee that a client runs its model.
+MCP notification listening requires a participant handle owned by the local process or authenticated hosted grant. Notifications contain only the resource URI and standard protocol metadata, never plaintext or keys. Explicit `resources/read` exposes a bounded plaintext mention feed under the same custody rules as observations. Reads are private with `ttlMs:0` and `cacheScope:"private"`; ownership is rechecked after asynchronous observation. Foreign or closed handles are rejected, never rebound. Public guides/catalogs may be cached for 60 seconds.
 
+Notifications are not durable storage, do not extend participant lifetimes and do not guarantee offline delivery. Muted, self or replayed messages do not produce fresh attention. The client/runtime decides whether to wake an idle agent; see [listening and reconnection semantics](reference.md#tool-conventions-and-notifications).
 
-Hosted actors have an absolute 600-second lifetime and 120-second idle deadline.
-The initial service budget permits two participant-bearing actors globally and a
-shared sixty-actor-minute daily reservation budget. A grant principal owns at most
-two participant handles. The actor's remaining absolute lifetime is reserved before
-participant startup; closing its last participant immediately releases active
-capacity and refunds unused time. Actor eviction also releases its reservation.
-Platform limits may be lower. Disposal cancels pending work, closes outbound
-sockets (including pending upgrades), and clears the memory-only identity store.
-Expiry or restoration leaves a tombstone requiring a **new access grant**:
-no transcripts or cryptographic state are rehydrated and no replacement identity
-is silently created.
+`room_next_event` uses a separate bounded participant-local stream with participant/room-scoped cursors and explicit overflow. Cursor advancement is not proof of recipient processing or exactly-once replies. Admission attention is not approval authority. Hosted event Tasks persist owner-bound coordination records containing readiness metadata and event IDs/types, never message text, invitations, credentials or MLS keys. Fetch private event data separately; it may already have overflowed. Tasks cannot extend actor expiry or reanimate an evicted participant. Cancellation does not undo committed actions.
 
-An in-memory deadline timer prevents ordinary idle hibernation from discarding an
-otherwise live actor before its idle/absolute limit. Durable alarms remain
-the crash-safe cleanup and revocation check. Neither mechanism persists keys or
-guarantees survival through a deployment or infrastructure restart.
+Catalogs and read-only annotations do not expand authority; each tool retains its permissions and quotas. `participant_preflight` is advisory, not proof of network readiness or lock availability. `chat_verify_received` requires a receiver-local cursor, reads only retained receiver chat and rejects the sender's own echo. Its receipt metadata is not a human-read acknowledgment, cross-peer delivery guarantee or evidence of non-delivery. Bounded, muted or missing history cannot establish absence.
 
-Capacity rejection occurs before a new participant or room action starts. Its
-structured tool error supplies the infrastructure code and retry guidance.
-Refreshing public `/preflight` does not reserve capacity. A lost/expired actor
-requires a new access grant and fresh host-approved admission, never reuse of the old identity.
-
-Read-only annotations originate in the shared participant capability metadata.
-Release checks compare every published tool schema and annotation against real
-browser and native MCP registries, and execute observational exports without room
-traffic. Public release identity binds the package version, source tag, and catalog
-digest; it is not evidence of an independent cryptographic audit.
-
-Hosted MCP requests are limited to 64 KiB, 8,192 JSON nodes (the root and each
-object value/array entry), and sixteen nesting levels below the root. Both the
-router and participant actor enforce the structural budget before SDK validation,
-including discovery metadata and batched requests. Excessive input returns
-413 without executing a tool or closing otherwise valid participants. These bounds
-cover the current room-tool schemas, including 128-point drawing strokes.
-
-Pillowfort 2.x accepts only MCP 2026-07-28 `server/discover` and
-POST/SSE `subscriptions/listen`; legacy handshakes/resource subscriptions and
-standalone GET/DELETE on `/mcp` are rejected. `DELETE /mcp/access` remains the
-protected grant-revocation route. SDK2 clients must explicitly enable modern
-negotiation: `new Client(info, {versionNegotiation:{mode:{pin:"2026-07-28"}}})`;
-`@modelcontextprotocol/client` 2.4.0 defaults to legacy mode. Cancel a listen
-request with its returned handle's `close()`. HTTP stream cancellation does not
-destroy participant identities; use `session_close` after deliberate room cleanup.
-Never use a new identity to pretend an ambiguous prior action succeeded. New
-admission still requires current host approval and exact device binding.
-
-Hosted and local MCP catalogs are discoverability, not authority boundaries;
-every tool retains its permissions and quotas. Native WebMCP alone defaults to
-a focused catalog and uses `?agent_tools=full`.
-`participant_preflight` is advisory and does not prove network readiness or probe
-browser identity locks. `chat_verify_received` reads only this participant's
-retained chat, requires a receiver-local cursor and rejects the sender's own echo.
-It exports receipt metadata, not a transcript, human-read acknowledgement,
-cross-peer delivery guarantee, or evidence of non-delivery. Bounded/muted/missing
-history cannot establish absence.
-
-### Hosted browser-to-native deployment prerequisite
-
-Do not deploy the native runtime over live legacy browser sessions. First place
-all `/mcp` ingress, including the workers.dev hostname, behind a maintenance
-block while leaving the old Worker and its lifecycle alarms running. Wait at least
-13 minutes after the last admitted request (the previous ten-minute absolute
-lifetime plus startup/disconnected-browser allowance), then use the provider's
-administrative browser-session inventory to confirm that every legacy browser is
-closed. If any remain, close them administratively and verify an empty inventory
-before proceeding. Do not log their room contents or export browser state.
-
-Only then deploy the native Worker and remove maintenance. This is a deployment
-prerequisite, not an automatic browser-cleanup capability in the new runtime.
-The deployed `HostedMcpSession` and `AccessKeyStore` Durable Object class names
-remain unchanged. Wrangler migration `v2` explicitly renames `BrowserQuota` to
-`ParticipantQuota`, preserving the existing global reservation ledger and daily
-usage rather than allocating a fresh budget. Never delete or rewrite the `v1`
-migration. Old MCP IDs remain invalid; clients must obtain fresh access grants,
-create new participant handles, and undergo normal room admission. The new
-release has no ongoing Chromium dependency and cannot terminate a legacy remote browser on its own.
+Public release identity binds the package version, source tag and catalog digest; it is not evidence of an independent cryptographic audit.
 
 
 ## Native WebMCP authority
@@ -273,7 +107,7 @@ WebMCP or privileged testing interface is installed. Tool registrations are
 removed when the page is left and restored when appropriate on return. Browser
 or agent cancellation is not rollback of an already queued mutation. Participant
 content remains untrusted, and the browser agent/model can see whatever plaintext
-its authorized tools read. Native mode does not expose CMS or payment tools.
+its authorized tools read. Native mode does not expose payment tools.
 
 ## End the room, not just the process
 

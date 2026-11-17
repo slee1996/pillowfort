@@ -85,20 +85,9 @@ npm run deploy
 
 ## Hosted MCP edge prerequisite
 
-Keep Cloudflare's Browser Integrity Check from treating the MCP API as a
-browser-only website. The zone custom rule **MCP API clients — BIC only**
-(`7c20b291bd894f068384bfca91510f47`) is active with this expression:
-
-```text
-http.host eq "mcp.pillowfort.xyz"
-```
-
-Action: **Skip**, with **Browser Integrity Check** as the only selected
-component. Do not skip custom rules, managed rules, rate limiting, bot-fight
-rules, User Agent Blocking, Security Level, or Zone Lockdown. Log matching
-requests is off, matching the existing marketing BIC-only exception and avoiding
-additional access/OAuth URL logging. This rule does not cover the app, marketing,
-or telemetry hostnames and is managed in Cloudflare, not by Wrangler deployment.
+Ensure the deployment's edge protections allow non-browser MCP clients to reach
+the API. Do not weaken application authorization, rate limits, or other security
+controls to work around an edge rejection.
 
 Cloudflare 1010 / an HTML 403 can precede the Worker entirely. Inspect Security
 Events for the matched service rather than weakening application authorization
@@ -266,7 +255,7 @@ Security behavior:
   participant can expose plaintext. Do not describe browser E2EE as protection
   from those parties.
 
-## Observability Checks
+## Post-deploy Privacy and Payment Checks
 
 Immediately after deploy:
 
@@ -295,17 +284,6 @@ Immediately after deploy:
   authorized live-mode purchase, return, redemption, and refund. A sandbox smoke
   or `checkoutConfigured: true` is not sufficient.
 - Use `docs/FORT_PASS_SUPPORT_RUNBOOK.md` for paid beta support and refunds.
-- Watch for repeated websocket close/error patterns.
-- Watch room creation rate-limit hits.
-
-Useful beta questions from the logs:
-
-- How many rooms are created?
-- How often is an invite copied?
-- How often does a guest join?
-- How often does a first message happen?
-- How often does a game start?
-- How often are forts knocked down?
 
 ## Rollback Plan
 
@@ -329,8 +307,8 @@ destruction:
 6. Preserve only sanitized application events and redacted exception details from
    the failed deploy. Never save raw real-time tail output, request envelopes or
    URLs, room codes, secrets, authentication material, or message content.
-7. Write the incident summary in `docs/` or the issue tracker before retrying,
-   using only those sanitized records.
+7. Keep deployment-specific incident records private. Publish only sanitized,
+   contributor-relevant findings, without machine paths or infrastructure access details.
 
 If analytics breaks but rooms still work:
 

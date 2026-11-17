@@ -4,7 +4,8 @@
 
 Do not open a public GitHub issue for security-sensitive bugs.
 
-Report vulnerabilities privately to the maintainer with:
+Use [GitHub private vulnerability reporting](https://github.com/slee1996/pillowfort/security/advisories/new).
+Include:
 
 - a clear description of the issue
 - affected paths or features
@@ -45,11 +46,9 @@ The agent CLI and local server reject older Node/Bun versions before starting
 participants or listening for requests; package engine declarations alone are
 not relied on to enforce these entrypoint minimums.
 
-Hosted MCP limits every request to 64 KiB, 8,192 JSON nodes and sixteen levels
-below the root before SDK/Zod validation. Excessive metadata, batches and tool
-arguments return 413. CI audits all four committed npm lockfiles. The ignored
-local video tooling and alternative root Bun lock are patched and audited
-separately; they are not required inputs in a fresh repository checkout.
+Hosted MCP rejects oversized or overly nested requests before tool execution.
+Keep runtime binaries and dependencies patched; updating a lockfile alone does
+not update an installed Node, Bun, or browser binary.
 
 ### Retained Rust advisory
 
@@ -66,17 +65,3 @@ enabled, the reviewed WASM artifacts remain pinned, and the warning is not
 suppressed. A compatible upstream crypto-stack fix is required before claiming
 the Cargo graph is advisory-free. `instant` 0.1.13 also has an unmaintained-crate
 notice, not a demonstrated exploit. Neither warning is included in npm's audit.
-
-Agent release 1.1.1 is packaged from the checked-out source during marketing
-builds. Publish the generated tarball and matching MCP Registry metadata before
-deploying its public installation instructions; local verification does not
-publish packages, deploy Workers, or upgrade system-wide runtime installations.
-
-### Video tooling compatibility
-
-The video package overrides Zod to 4.6.7 to fix
-[collection-validation exhaustion](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
-Remotion 4.0.496 hard-codes a recommendation for vulnerable Zod 4.3.6, so its CLI
-still reports a version mismatch. Do not downgrade Zod or suppress that check.
-Composition discovery and an actual frame render were verified with the patched
-override. Remove it when a compatible Remotion release requires patched Zod.
