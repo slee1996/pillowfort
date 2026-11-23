@@ -1,0 +1,10 @@
+{
+  "scope": "Ordinary private hosted room; no induced failures or third-party participants.",
+  "publicDiscovery": true,
+  "publicTools": 61,
+  "activeHostObserved": true,
+  "terminalRetirementObserved": true,
+  "participantClosed": true,
+  "accessRevoked": true,
+  "passed": true
+}

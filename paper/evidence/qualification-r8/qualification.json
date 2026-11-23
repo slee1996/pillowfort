@@ -1,0 +1,131 @@
+{
+  "profile": "pf-v4-cs1",
+  "source": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+  "sourceUrl": "https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+  "codePullRequest": "https://github.com/slee1996/pillowfort/pull/16",
+  "mergeCommit": "db501e0d352c2354de4be937f77a32d96f2b862e",
+  "ci": [
+    {
+      "name": "check",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120425346/job/137512680795"
+    },
+    {
+      "name": "check",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120419739/job/137512664926"
+    },
+    {
+      "name": "protocol-models",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120425346/job/137512681070"
+    },
+    {
+      "name": "protocol-models",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120419739/job/137512664483"
+    },
+    {
+      "name": "hosted-mcp",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120425346/job/137512681031"
+    },
+    {
+      "name": "hosted-mcp",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120419739/job/137512664190"
+    },
+    {
+      "name": "dependency-audit",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120425346/job/137512681002"
+    },
+    {
+      "name": "dependency-audit",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45120419739/job/137512664513"
+    }
+  ],
+  "commands": [
+    "npm ci && npm --prefix client ci && npm --prefix hosted-mcp ci",
+    "npx playwright install chromium",
+    "npm run check",
+    "npm --prefix hosted-mcp run check",
+    "python3 scripts/check-protocol-models.py --jar /path/to/tla2tools-v1.7.4.jar --output /tmp/pf-models",
+    "bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pf-browsers",
+    "node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction",
+    "node scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent"
+  ],
+  "gates": {
+    "application": {
+      "tests": 583,
+      "failed": 0,
+      "log": "application-gate.log",
+      "bunGroups": [
+        320,
+        5,
+        26,
+        15,
+        9,
+        192
+      ],
+      "nodeTests": 16,
+      "openMlsArtifacts": 4,
+      "reviewedInputsHashed": 51
+    },
+    "hostedMcp": {
+      "tests": 14,
+      "failed": 0,
+      "log": "hosted-gate.log"
+    },
+    "models": {
+      "passed": true,
+      "safeConfigurations": 12,
+      "mutationsWithExpectedSafetyCounterexample": 15,
+      "positiveWitnesses": 6,
+      "largestDistinctStates": 2292582,
+      "report": "models/model-results.json"
+    },
+    "browser": {
+      "report": "browser/browser-results.json",
+      "scenarios": 9
+    },
+    "workerd": {
+      "eviction": "restart/eviction.json",
+      "recovery": "restart/browser-results.json",
+      "silentPath": "silent/browser-results.json"
+    }
+  },
+  "priorFailures": [
+    {
+      "base": "f14074e0b62ea50d87fe71e1cdc5dca52b0ea819",
+      "harness": "new isolated cut, pre-fix Worker",
+      "result": "restart-before/browser-results.json",
+      "eviction": "restart-before/eviction.json"
+    },
+    {
+      "stage": "Only the Worker delivery wakeup applied; prior controller",
+      "result": "declining-candidate-before.json"
+    }
+  ],
+  "dependencyAlertTriage": {
+    "asOf": "2026-11-22",
+    "openGitHubAlertsAtPush": 84,
+    "matchingAffectedVersionInReferencedManifest": 0,
+    "referencedManifestAbsent": 33,
+    "packageAbsentFromReferencedLock": 27,
+    "lockedVersionOutsideAdvisoryRange": 24,
+    "scope": "Comparison to exact versions in this revision. Not evidence that all transitive code, underlying libraries or deployed infrastructure are free of vulnerabilities."
+  },
+  "limits": [
+    "Honest serialized relay and correct endpoint cryptography assumed in the models; no TLA+-to-TypeScript refinement or independent security audit.",
+    "Finite participants, operation tokens and deadline regions; 12/16-step composed prefixes. No unbounded fairness or availability guarantee.",
+    "Local workerd eviction retained sockets and durable storage. This does not establish disk power-loss recovery or recovery after permanent identity loss.",
+    "Loopback blackhole dropped WebSocket bytes while TCP endpoints acknowledged locally; no hard failure detector, WAN latency or offline agent-wakeup claim."
+  ],
+  "production": {
+    "record": "deployment.json",
+    "browserCommand": "bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --production --output /tmp/pf-live",
+    "hostedCommand": "python3 paper/evidence/qualification-r8/production/hosted-smoke.py /tmp/pf-hosted.json"
+  }
+}

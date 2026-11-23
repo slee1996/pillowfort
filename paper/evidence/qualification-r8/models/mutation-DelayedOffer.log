@@ -1,0 +1,58 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 74 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 88876] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-qualification-r8-d89niw0w/models/M4Succession.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M4Succession
+Starting... (2026-11-22 22:39:57)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-22 22:39:57.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+s = [ host |-> 1,
+  connected |-> {1, 2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+State 2: <Disconnect line 26, col 18 to line 27, col 65 of module M4Succession>
+s = [ host |-> 1,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  signedBy |-> 0,
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+
+2 states generated, 2 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 2.
+Finished in 00s at (2026-11-22 22:39:57)

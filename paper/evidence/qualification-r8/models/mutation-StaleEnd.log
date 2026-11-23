@@ -1,0 +1,397 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 51 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 88887] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-qualification-r8-d89niw0w/models/ResumeAcrossSuccession.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-qualification-r8-d89niw0w/models/M3Resume.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-qualification-r8-d89niw0w/models/M4Succession.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/FiniteSets.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module M3Resume
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module M4Succession
+Semantic processing of module ResumeAcrossSuccession
+Starting... (2026-11-22 22:40:00)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-22 22:40:00.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ succession = [ host |-> 1,
+  signedBy |-> 0,
+  connected |-> {1, 2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+/\ signer = 0
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 1,
+  authenticatedHost |-> 1,
+  terminator |-> 0,
+  phase |-> "ready",
+  request |-> 0,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 2: <HostStep line 16, col 13 to line 19, col 64 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 1,
+  signedBy |-> 0,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "none",
+  storedChoice |-> FALSE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+/\ signer = 0
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 1,
+  authenticatedHost |-> 1,
+  terminator |-> 0,
+  phase |-> "ready",
+  request |-> 0,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 3: <HostStep line 16, col 13 to line 19, col 64 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 1,
+  signedBy |-> 2,
+  connected |-> {2, 3},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "accept",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+/\ signer = 0
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 1,
+  authenticatedHost |-> 1,
+  terminator |-> 0,
+  phase |-> "ready",
+  request |-> 0,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 4: <DisconnectGuest line 24, col 20 to line 25, col 63 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 1,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "accept",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+/\ signer = 0
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 0,
+  phase |-> "disconnected",
+  request |-> 0,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 5: <BeginReplay line 26, col 16 to line 28, col 66 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 1,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 1,
+  policy |-> {2, 3},
+  attempted |-> {2},
+  offered |-> 2,
+  choice |-> "accept",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> FALSE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 0,
+  consent |-> {},
+  badTarget |-> FALSE ]
+/\ signer = 0
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "replay",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 6: <Handoff line 20, col 12 to line 22, col 55 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "replay",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> FALSE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 7: <GuestStep line 32, col 14 to line 35, col 69 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "snapshot",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> TRUE,
+  reconciled |-> FALSE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 8: <GuestStep line 32, col 14 to line 35, col 69 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "terminator",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> TRUE,
+  reconciled |-> TRUE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 9: <GuestStep line 32, col 14 to line 35, col 69 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "complete",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> TRUE,
+  reconciled |-> TRUE,
+  snapshotHost |-> 1,
+  sent |-> FALSE,
+  down |-> FALSE ]
+
+State 10: <GuestStep line 32, col 14 to line 35, col 69 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 0
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "waiting",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> TRUE,
+  reconciled |-> TRUE,
+  snapshotHost |-> 1,
+  sent |-> TRUE,
+  down |-> FALSE ]
+
+State 11: <RelayAccept line 40, col 16 to line 43, col 51 of module ResumeAcrossSuccession>
+/\ succession = [ host |-> 2,
+  signedBy |-> 2,
+  connected |-> {2, 3},
+  policyHost |-> 0,
+  policy |-> {},
+  attempted |-> {2},
+  offered |-> 0,
+  choice |-> "none",
+  storedChoice |-> TRUE,
+  grace |-> 0,
+  fenced |-> {1},
+  removal |-> TRUE,
+  removeStored |-> FALSE,
+  removeAcked |-> FALSE,
+  retired |-> FALSE,
+  switches |-> 1,
+  consent |-> {2},
+  badTarget |-> FALSE ]
+/\ signer = 2
+/\ cut = [signer |-> 0, host |-> 1]
+/\ completedUnder = 2
+/\ resume = [ connection |-> 2,
+  authenticatedHost |-> 1,
+  terminator |-> 1,
+  phase |-> "waiting",
+  request |-> 1,
+  acknowledged |-> FALSE,
+  persisted |-> TRUE,
+  reconciled |-> TRUE,
+  snapshotHost |-> 1,
+  sent |-> TRUE,
+  down |-> FALSE ]
+
+288 states generated, 139 distinct states found, 27 states left on queue.
+The depth of the complete state graph search is 11.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 3 and the 95th percentile is 3).
+Finished in 00s at (2026-11-22 22:40:00)

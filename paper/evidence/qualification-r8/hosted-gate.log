@@ -1,0 +1,63 @@
+
+> pillowfort-hosted-mcp@2.1.1 check
+> npm run typecheck && bun ../scripts/check-agent-catalog.ts --runtime hosted && npm test && npm run build
+
+
+> pillowfort-hosted-mcp@2.1.1 typecheck
+> tsc --noEmit
+
+{"ok":true,"release":{"version":"2.1.1","sourceTag":"v2.1.1","sourceUrl":"https://github.com/slee1996/pillowfort/tree/v2.1.1","toolsSha256":"90e63f8d1ca4403561583fff9de447e14b70ecf10a1e5ca637e81647b5c620b2"},"hostedTools":61,"roomActionsPerformed":false}
+
+> pillowfort-hosted-mcp@2.1.1 test
+> node --test --test-concurrency=1 test/security.test.mjs test/upgrade-cleanup.test.mjs
+
+✔ public modern discovery exposes one full catalog without allocating identities or permitting tools (1331.439292ms)
+✔ modern transport rejects legacy methods and validates request headers and envelopes (41.001833ms)
+✔ self-service requires custody consent, cannot elevate lifetime or scope, and revokes without an administrator (44.578292ms)
+✔ enabled telemetry exports from the real Worker runtime without leaking credentials (2.030084ms)
+✔ MCP metadata and tool arguments are bounded before validation without losing a principal (51.719375ms)
+✔ unauthenticated traffic cannot consume emergency key-revocation capacity (298.5905ms)
+✔ self-service native rooms preserve encrypted admission, verified receiver chat, principal isolation, and terminal closure (14508.060583ms)
+✔ shared capacity reports a bounded retry and preserves existing participants (26198.479791ms)
+✔ active requests cannot extend absolute participant lifetime or resurrect an expired identity (50155.007333ms)
+✔ real Worker restart cannot restore memory-only participant identities and refunds quota (1030.455ms)
+✔ idle expiry closes POST subscriptions and refunds the last participant lease (31081.088875ms)
+✔ real browser consent preserves Origin and completes the registered OAuth callback (410.363667ms)
+✔ self-service issuance stays bounded while existing grants remain usable (93.724458ms)
+✔ upgrading a historical allocation refunds its reservation and retires only its exact grant across routes (21146.895125ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 146807.170417
+
+> pillowfort-hosted-mcp@2.1.1 build
+> wrangler deploy --dry-run --outdir dist
+
+
+ ⛅️ wrangler 4.153.0 (update available 4.166.0)
+───────────────────────────────────────────────
+Total Upload: 4193.84 KiB / gzip: 973.29 KiB
+Your Worker has access to the following bindings:
+Binding                                                                           Resource                  
+env.MCP_SESSIONS (HostedMcpSession)                                               Durable Object            
+env.MCP_ACCESS_KEYS (AccessKeyStore)                                              Durable Object            
+env.MCP_QUOTAS (ParticipantQuota)                                                 Durable Object            
+env.OAUTH_KV (60b3fd14382a4718a6f588a400887f6c)                                   KV Namespace              
+env.OTEL_ENABLED ("false")                                                        Environment Variable      
+env.OTEL_EXPORTER_OTLP_ENDPOINT ("https://otel.pillowfort.xyz")                   Environment Variable      
+env.OTEL_DEPLOYMENT_ENVIRONMENT ("production")                                    Environment Variable      
+env.OTEL_SERVICE_VERSION ("2.1.1")                                                Environment Variable      
+env.OTEL_SAMPLE_RATE ("0.1")                                                      Environment Variable      
+env.PUBLIC_MCP_URL ("https://mcp.pillowfort.xyz/mcp")                             Environment Variable      
+env.APP_URL ("https://pillowfort.xyz")                                            Environment Variable      
+env.ALLOWED_ORIGINS ("https://pillowfort.xyz,https://about....")                  Environment Variable      
+env.MAX_ACTIVE_SESSIONS ("2")                                                     Environment Variable      
+env.MAX_DAILY_SESSION_MINUTES ("60")                                              Environment Variable      
+env.MAX_SESSION_SECONDS ("600")                                                   Environment Variable      
+env.IDLE_TIMEOUT_SECONDS ("120")                                                  Environment Variable      
+
+--dry-run: exiting now.

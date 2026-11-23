@@ -1,0 +1,105 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 122 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 88923] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-qualification-r8-d89niw0w/models/ReconnectRace.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module ReconnectRace
+Starting... (2026-11-22 22:40:08)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-22 22:40:08.
+Error: Invariant NoHostReturned is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+s = [ host |-> 1,
+  socket |-> "none",
+  guest |-> "offline",
+  fenced |-> FALSE,
+  staleClosed |-> FALSE,
+  badClose |-> FALSE,
+  badCandidate |-> FALSE,
+  offer |-> 0,
+  next |-> 2,
+  signed |-> 0,
+  visible |-> 0,
+  now |-> 0,
+  until |-> 0,
+  issued |-> 0,
+  restored |-> FALSE,
+  declined |-> FALSE ]
+
+State 2: <ReopenHost line 15, col 15 to line 16, col 47 of module ReconnectRace>
+s = [ host |-> 1,
+  socket |-> "B",
+  guest |-> "offline",
+  fenced |-> FALSE,
+  staleClosed |-> FALSE,
+  badClose |-> FALSE,
+  badCandidate |-> FALSE,
+  offer |-> 0,
+  next |-> 2,
+  signed |-> 0,
+  visible |-> 0,
+  now |-> 0,
+  until |-> 0,
+  issued |-> 0,
+  restored |-> FALSE,
+  declined |-> FALSE ]
+
+State 3: <StaleClose line 17, col 15 to line 19, col 86 of module ReconnectRace>
+s = [ host |-> 1,
+  socket |-> "B",
+  guest |-> "offline",
+  fenced |-> FALSE,
+  staleClosed |-> TRUE,
+  badClose |-> FALSE,
+  badCandidate |-> FALSE,
+  offer |-> 0,
+  next |-> 2,
+  signed |-> 0,
+  visible |-> 0,
+  now |-> 0,
+  until |-> 0,
+  issued |-> 0,
+  restored |-> FALSE,
+  declined |-> FALSE ]
+
+State 4: <GuestBegin line 20, col 15 to line 20, col 85 of module ReconnectRace>
+s = [ host |-> 1,
+  socket |-> "B",
+  guest |-> "replaying",
+  fenced |-> FALSE,
+  staleClosed |-> TRUE,
+  badClose |-> FALSE,
+  badCandidate |-> FALSE,
+  offer |-> 0,
+  next |-> 2,
+  signed |-> 0,
+  visible |-> 0,
+  now |-> 0,
+  until |-> 0,
+  issued |-> 0,
+  restored |-> FALSE,
+  declined |-> FALSE ]
+
+State 5: <GuestComplete line 21, col 18 to line 21, col 87 of module ReconnectRace>
+s = [ host |-> 1,
+  socket |-> "B",
+  guest |-> "active",
+  fenced |-> FALSE,
+  staleClosed |-> TRUE,
+  badClose |-> FALSE,
+  badCandidate |-> FALSE,
+  offer |-> 0,
+  next |-> 2,
+  signed |-> 0,
+  visible |-> 0,
+  now |-> 0,
+  until |-> 0,
+  issued |-> 0,
+  restored |-> FALSE,
+  declined |-> FALSE ]
+
+31 states generated, 22 distinct states found, 10 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 2 (minimum is 1, the maximum 3 and the 95th percentile is 3).
+Finished in 00s at (2026-11-22 22:40:08)

@@ -1,21 +1,23 @@
 {
   "schemaVersion": 4,
   "edition": {
-    "number": 7,
+    "number": 8,
     "title": "Pillowfort: An MLS-Based Protocol for Ephemeral Rooms",
     "date": "2026-11-22",
     "wireVersion": 4,
     "profile": "pf-v4-cs1",
-    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r7",
-    "previousArtifactCommit": "3bd98397be04ec82e7374296707fab8f03e032d5",
+    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r8",
+    "previousArtifactCommit": "ceebcd61b9ad958066556067bcc5b7c410aa28fb",
     "previousEditionPreserved": true,
     "changes": [
-      "Offer host succession in the owning socket disconnect transition when a signed-policy candidate is ready; preserve bounded recovery when there is no recipient.",
-      "Update the worked example, sequence figure, transition table and evidence map. Retain provenance of earlier model, recovery, latency, and shutdown evidence."
+      "Specify immediate fencing and offer creation in M4 and exercise both authenticated reconnect orders, delayed old closure, choice deadlines, and restart witnesses.",
+      "Recover a committed offer before its first delivery through a persisted wakeup and authenticated same-device replay; do not extend its authorization.",
+      "Defer blocked participant work until independent relay progress; retain explicit refusal and encrypted chat after the next candidate accepts.",
+      "Publish all model logs, the nine browser scenarios, two isolated workerd fault scenarios, and separate production checks."
     ],
-    "publicPullRequest": "https://github.com/slee1996/pillowfort/pull/15",
-    "evidenceRetainedFrom": "protocol-v4-cs1-evidence-2026-11-22-r3",
-    "currentImplementationCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad"
+    "evidenceRetainedFrom": "protocol-v4-cs1-evidence-2026-11-22-r7",
+    "currentImplementationCommit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+    "implementationPullRequest": "https://github.com/slee1996/pillowfort/pull/16"
   },
   "source": {
     "commit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
@@ -33,23 +35,29 @@
       "verifiedReconstructedNonPublicationFiles": 381,
       "scope": "Apply to the extracted baseline archive from its root. The extracted, patched tree matches every non-paper Git blob and executable mode of the new revision."
     },
-    "archiveScope": "Baseline for historical recovery/models; apply promptSuccession.sourcePatch for the current relay."
+    "archiveScope": "Historical archive and excerpts; apply qualification.sourcePatch for the edition 8 implementation, test sources and models.",
+    "qualification": {
+      "commit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+      "publicUrl": "https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+      "baselineCommit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
+      "sourcePatch": "sources/qualification-f03fa147f798.patch",
+      "sourcePatchSha256": "aec731cd5a7026cea96db8525759d8bff941e3df174c71fa095067fbc0a5d7cf",
+      "verifiedReconstructedNonPublicationFiles": 384,
+      "scope": "Apply the single cumulative qualification patch to the extracted baseline. Every non-paper Git blob and executable bit matched."
+    }
   },
   "verification": {
     "models": {
-      "sourceCommit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
-      "command": "python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output /path/to/evidence/models",
       "passed": true,
-      "safeConfigurations": 11,
-      "expectedCounterexamples": 11,
-      "largestDistinctAbstractStates": 1202973,
-      "result": "evidence/models/model-results.json",
+      "safeConfigurations": 12,
+      "mutationsWithExpectedSafetyCounterexample": 15,
+      "positiveWitnesses": 6,
+      "largestDistinctStates": 2292582,
+      "sourceCommit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+      "result": "evidence/qualification-r8/models/model-results.json",
       "checker": "TLC 2.19 / tla2tools v1.7.4",
       "jarSha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
-      "scope": "Finite coordination safety abstraction; no cryptographic proof, deadlock freedom, fairness or unbounded liveness claim.",
-      "excludedConcretePath": "Concrete FIFO marker identities, exact retirement-control serialization, browser message-close dispatch and explicit room retirement are not modeled.",
-      "positiveReachabilityWitnesses": 2,
-      "sourceComparison": "Bundled model sources verified byte-for-byte against the pinned source archive."
+      "scope": "Finite coordination safety abstraction; no cryptographic proof, deadlock freedom, fairness or unbounded liveness claim."
     },
     "shutdown": {
       "sourceCommit": "c726c5eccafacb6fe6c881be3fcc174287c2f86f",
@@ -146,14 +154,14 @@
             9,
             10
           ],
-          "outOfPageText": [],
           "blankPages": [],
+          "outOfPageText": [],
           "localOrRelativeLinks": [],
           "replacementCharacters": 0
         },
         {
           "file": "Protocol-Technical-Appendix.pdf",
-          "pages": 11,
+          "pages": 12,
           "a4Portrait": true,
           "verifiedPageNumbers": [
             1,
@@ -166,10 +174,11 @@
             8,
             9,
             10,
-            11
+            11,
+            12
           ],
-          "outOfPageText": [],
           "blankPages": [],
+          "outOfPageText": [],
           "localOrRelativeLinks": [],
           "replacementCharacters": 0
         },
@@ -185,8 +194,8 @@
             5,
             6
           ],
-          "outOfPageText": [],
           "blankPages": [],
+          "outOfPageText": [],
           "localOrRelativeLinks": [],
           "replacementCharacters": 0
         }
@@ -196,11 +205,11 @@
         "SVG",
         "2x PNG"
       ],
-      "figuresUnchanged": false,
-      "visualVerification": "Rendered all three documents in Chromium. All seven figures loaded. The prompt offer appears on page one, the fallback and response deadline on page six and Figure 6 on page seven. Visually checked the revised pages and the evidence map. Numbered A4 pages contain no blanks, out-of-page text, invalid links or replacement characters.",
+      "figuresUnchanged": true,
+      "visualVerification": "Chromium rendered all three documents and loaded every illustration. Verified page numbers and bounds on every PDF page; inspected the introduction and evaluation spread. The evidence and latency tables, including the original measurement caveat, fit on page 9.",
       "claimsTable": {
         "paperPage": 9,
-        "claims": 6,
+        "claims": 7,
         "columns": [
           "Protocol claim",
           "Supporting observation",
@@ -211,8 +220,7 @@
       "latencyTable": {
         "paperPage": 9,
         "captionOnSamePageAsAllRows": true,
-        "originalSourceCommit": "10fe8f8b490c9e890d5a642bc25568e985c2fe8a",
-        "nearestRankMatchesRawSamples": true
+        "originalSourceCommit": "10fe8f8b490c9e890d5a642bc25568e985c2fe8a"
       }
     },
     "previousEditionImplementation": {
@@ -292,7 +300,6 @@
       "failureRecordScope": "Negative tests and pre-fix executions during development, not results on the final source. Browser records contain frame categories, not plaintext or invitations. Focused unit failure logs normalize the local test-root path and loopback port.",
       "twoTargetRelayRegression": "evidence/recovery-r3/two-target-retirement.txt",
       "outcome": "After replacement, ordinary sends wait for the current completion ACK. Roster absence and lifecycle notices do not discharge outstanding retirement work. An observer that processed the Remove before close verifies its duplicate and recovers."
-    }
     },
     "edition3Implementation": {
       "sourceCommit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
@@ -335,7 +342,7 @@
       "securityGateFiles": 25,
       "focusedLog": "evidence/recovery-r3/protocol-suites.txt"
     },
-    "currentImplementation": {
+    "edition7Implementation": {
       "sourceCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad",
       "regressions": "evidence/prompt-succession-r7/relay-regressions.json",
       "command": "bun test ./test/secure-relay-v4.test.ts",
@@ -352,38 +359,64 @@
       },
       "localBrowser": "evidence/prompt-succession-r7/local/browser-results.json",
       "productionBrowser": "evidence/prompt-succession-r7/production/browser-results.json"
+    },
+    "edition3Models": {
+      "sourceCommit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
+      "command": "python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output /path/to/evidence/models",
+      "passed": true,
+      "safeConfigurations": 11,
+      "expectedCounterexamples": 11,
+      "largestDistinctAbstractStates": 1202973,
+      "result": "evidence/models/model-results.json",
+      "checker": "TLC 2.19 / tla2tools v1.7.4",
+      "jarSha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+      "scope": "Finite coordination safety abstraction; no cryptographic proof, deadlock freedom, fairness or unbounded liveness claim.",
+      "excludedConcretePath": "Concrete FIFO marker identities, exact retirement-control serialization, browser message-close dispatch and explicit room retirement are not modeled.",
+      "positiveReachabilityWitnesses": 2,
+      "sourceComparison": "Bundled model sources verified byte-for-byte against the pinned source archive."
+    },
+    "currentImplementation": {
+      "sourceCommit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+      "qualificationRecord": "evidence/qualification-r8/qualification.json",
+      "applicationTestsPassed": 583,
+      "hostedTestsPassed": 14,
+      "browserScenarios": 9,
+      "workerdScenarios": 2,
+      "priorFailuresAndLimits": "See qualificationRecord; scheduled forced close is a positive control, not spontaneous failure detection."
+    }
   },
   "production": {
-    "implementationCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad",
-    "applicationVersion": "6b669622-6ec9-425b-818c-adfdc50d2b60",
-    "verificationRecord": "evidence/prompt-succession-r7/deployment.json",
-    "newDeploymentForPaperUpdate": true,
-    "hostedMcpRedeployed": false,
-    "scope": "App and secure relay deployed at 100%; three real browser profiles exercised refusal, explicit acceptance and subsequent encrypted chat. PRODUCTION_DEPLOYMENT.json is the separate historical shutdown record."
+    "implementationCommit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+    "mergeCommit": "db501e0d352c2354de4be937f77a32d96f2b862e",
+    "applicationVersion": "130f6019-669a-4b7e-b9a2-8f60de4b754e",
+    "hostedVersion": "6e2d4c8d-ed96-48f8-91ce-7ab216cc0e48",
+    "trafficPercent": 100,
+    "verificationRecord": "evidence/qualification-r8/deployment.json",
+    "hostedMcpRedeployed": true,
+    "scope": "Normal use of two verification-owned rooms in production. No eviction, network cuts or changes to third-party rooms. Browser time is a single explicit close-to-visible-offer observation, not a network failure bound."
   },
   "evidenceLimits": [
-    "No independent security audit or cryptographic proof",
-    "Bounded abstract safety, not implementation refinement, deadlock freedom or unbounded liveness",
-    "No maximum-throughput, WAN or mobile-performance claim",
-    "Retained latency and browser-fault runs are not relabeled as current-revision experiments",
-    "Three local three-browser schedules; no guarantee of recovery against arbitrary power loss, unbounded disconnects or permanent state loss.",
-    "Two clean host-close observations (one local, one on production); neither establishes a network failure-detection or offer-delivery bound."
+    "Honest serialized relay and correct endpoint cryptography assumed in the models; no TLA+-to-TypeScript refinement or independent security audit.",
+    "Finite participants, operation tokens and deadline regions; 12/16-step composed prefixes. No unbounded fairness or availability guarantee.",
+    "Local workerd eviction retained sockets and durable storage. This does not establish disk power-loss recovery or recovery after permanent identity loss.",
+    "Loopback blackhole dropped WebSocket bytes while TCP endpoints acknowledged locally; no hard failure detector, WAN latency or offline agent-wakeup claim.",
+    "No independent audit or new performance benchmark. Historical latency and release observations retain their original attribution."
   ],
   "artifacts": [
     {
       "file": "Formal-State-Machine-Analysis.html",
-      "bytes": 28084,
-      "sha256": "48dfd2267f9aa605c13d2055f063430715ce6e8a9dd3225aa0fd601aa0bc36a5"
+      "bytes": 28702,
+      "sha256": "bbba1c9f05199cd93d25677400f96366a131a8e7f9f2df1b2a4754ddfad3bf97"
     },
     {
       "file": "Formal-State-Machine-Analysis.md",
-      "bytes": 23400,
-      "sha256": "21b754bbd99554f0ac796f92db27641e9545fd7e4125a32b9a2b0811fff0e32d"
+      "bytes": 23877,
+      "sha256": "a1f77f1d8bb0d800db71c09c0c8ae004500f6f732dff09ebd5e24998794e50ad"
     },
     {
       "file": "Formal-State-Machine-Analysis.pdf",
-      "bytes": 328354,
-      "sha256": "c93526d62580a30585cd45fb382d4cba628edd26a5ade72bf591daf62a254ff1"
+      "bytes": 330903,
+      "sha256": "26a8bf813a26f3ca55679af6987b41dcebf4c63d618b8e4b4095a4a089f8b008"
     },
     {
       "file": "PRODUCTION_DEPLOYMENT.json",
@@ -392,43 +425,43 @@
     },
     {
       "file": "Pillowfort-Protocol-Paper.html",
-      "bytes": 39169,
-      "sha256": "1dcdeb25888f1e926243059aa75a0017139b241e465618d09f5d974e39d427ec"
+      "bytes": 40591,
+      "sha256": "5d6f0ccd026217ff709763ce4303223ab8cb0b231b73cfb93a2d17e63e3b1a82"
     },
     {
       "file": "Pillowfort-Protocol-Paper.md",
-      "bytes": 31219,
-      "sha256": "0ab1fd1451f6a15850a79cf27fe98bb9780744ba949c64191f161ba7ed955fcc"
+      "bytes": 32411,
+      "sha256": "ec04e81c0656b4c2dd801b6bf01e2cd303168582c3852eaac38e2787084b8173"
     },
     {
       "file": "Pillowfort-Protocol-Paper.pdf",
-      "bytes": 670206,
-      "sha256": "72a8698e777456c1212e68357ce9f0f4ce5cbc39749a508cd24d6ce83e44eba1"
+      "bytes": 674662,
+      "sha256": "ac6eb45896acfc9c8b3c19766928b326292905825f368b912574d080c150a148"
     },
     {
       "file": "Protocol-Technical-Appendix.html",
-      "bytes": 45746,
-      "sha256": "9f333e4c1e9236bbc288fc29b839f874d687c2310199cd11bc39447ccd1957c2"
+      "bytes": 48845,
+      "sha256": "662bc06a814503a5c22064f1aa13d07e74b4bf86e1fe3763b57af0055d5a092e"
     },
     {
       "file": "Protocol-Technical-Appendix.md",
-      "bytes": 33365,
-      "sha256": "ab54f8a98fcb023e5741ba932c4c7ed8f803fb4aa9a5ad637794dbed394695f6"
+      "bytes": 35423,
+      "sha256": "0632dfc5fc56b60a688a4842dcf874683b7c7f00f20607a1b056c76192b3a021"
     },
     {
       "file": "Protocol-Technical-Appendix.pdf",
-      "bytes": 568630,
-      "sha256": "dd5ca573ae65b52acaa4b9609fbfdd6c7994f90a5333a5ffebd600349ba0311f"
+      "bytes": 590240,
+      "sha256": "d60dc56033e13e49a8809740a8515641ae3d707e091753ce7ce84aab4a52457b"
     },
     {
       "file": "Protocol-Verification-Matrix.md",
-      "bytes": 13112,
-      "sha256": "cd384ba2b9082180f6489c3ecf6cd2524b3c6decdfb6f83d3398e37a15778483"
+      "bytes": 16210,
+      "sha256": "cc7b55312f83133038ec1686f7bccd41bdbfae35ec955888574459e4dc5ed3c7"
     },
     {
       "file": "SOURCE_REVISION.txt",
-      "bytes": 1817,
-      "sha256": "2e9476bd46d5882bc920fbf1eb67fb5b7c19b6fc39b882ea2ae366ecfb892bac"
+      "bytes": 1370,
+      "sha256": "36d7c61504ab2ac0e92b5106fd23fd224edfe1dd9c65862fef3a26a0ba187c75"
     },
     {
       "file": "assets/fig-01-system-model.png",
@@ -886,6 +919,451 @@
       "sha256": "0a7ae1a6fde46a23306068cf7b940716037f2d45ab9d6392c659b88282a8e2ca"
     },
     {
+      "file": "evidence/qualification-r8/application-gate.log",
+      "bytes": 9751,
+      "sha256": "803bd96c3f046a51ec826f339fb95d7b62cd169ea97de4bc1f8b2da190d15599"
+    },
+    {
+      "file": "evidence/qualification-r8/browser/browser-results.json",
+      "bytes": 2470,
+      "sha256": "413095e3b4868a93625303664feac3ddcf411013be25afee5d24d81816883467"
+    },
+    {
+      "file": "evidence/qualification-r8/declining-candidate-before.json",
+      "bytes": 3299,
+      "sha256": "c67642da21a7de9fd13a3550b1db109e836ec60ed2e0c5edadba343e7b0e077e"
+    },
+    {
+      "file": "evidence/qualification-r8/deployment.json",
+      "bytes": 1362,
+      "sha256": "6a8f5ab18fa65ed7a5f6aa0d5777cfe09fef36ff4d414c402a6e683e497e85e6"
+    },
+    {
+      "file": "evidence/qualification-r8/hosted-gate.log",
+      "bytes": 4470,
+      "sha256": "3cc4aa9ccadf8ed36e634100a99796c0cfdaa41fc1337673b8fc072da79ded2a"
+    },
+    {
+      "file": "evidence/qualification-r8/models/Coordination.tla",
+      "bytes": 1669,
+      "sha256": "35ed59b33945e3ee689bb98413c40b4eb0131fb5b1cdcc21cb9eed644a8a9a35"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M1Delivery.cfg",
+      "bytes": 91,
+      "sha256": "65e6daae92a9e1395bd14289e99baa62aa2545dd4a8998bfd978b90ac7df5d4d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M1Delivery.log",
+      "bytes": 1474,
+      "sha256": "92fa1936ce8cc5dd71e5236bdfdc9ebbeecd4ef3c068e8c6e6fa6498738aceaf"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M1Delivery.tla",
+      "bytes": 3936,
+      "sha256": "751725a371c62849ac7a8caa2f5e8d6af429bb3f100a0ad57e5ee57dc54f1e28"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M2Admission.cfg",
+      "bytes": 91,
+      "sha256": "65e6daae92a9e1395bd14289e99baa62aa2545dd4a8998bfd978b90ac7df5d4d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M2Admission.log",
+      "bytes": 1475,
+      "sha256": "5b5773c49bad247d3468c37f7b9d25b5b03246b25160b397b4f456ff4ff9d1e3"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M2Admission.tla",
+      "bytes": 2857,
+      "sha256": "1e235eba1fd14fc4a455af4020ed42a72634b9b38c53f59a4d7de27d7966fd23"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M3Resume.cfg",
+      "bytes": 91,
+      "sha256": "65e6daae92a9e1395bd14289e99baa62aa2545dd4a8998bfd978b90ac7df5d4d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M3Resume.log",
+      "bytes": 1216,
+      "sha256": "171c992bebbe2c1a46d5ee8223cd19406a548b5b485beeb53e86fe368e2d5642"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M3Resume.tla",
+      "bytes": 2502,
+      "sha256": "42947fbaf958f096e58ba80b88b3bdd109916bfd9471d7dea3fb5a293c3f5b52"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M4Succession.cfg",
+      "bytes": 91,
+      "sha256": "65e6daae92a9e1395bd14289e99baa62aa2545dd4a8998bfd978b90ac7df5d4d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M4Succession.log",
+      "bytes": 1478,
+      "sha256": "f8d46006244c090439e8b853a74f8240e71f637d7e80eb1eb70cd035a04266e1"
+    },
+    {
+      "file": "evidence/qualification-r8/models/M4Succession.tla",
+      "bytes": 4936,
+      "sha256": "a588970895af74d7bf7d4d2735ee2efb296897f8e841de10277bcc5f4612d09b"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ReconnectRace.cfg",
+      "bytes": 91,
+      "sha256": "5957edf0617858c11dbf58fbcc41fccc8efcb89ec6621929d0cf4d5be8f07285"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ReconnectRace.log",
+      "bytes": 1229,
+      "sha256": "d4fe67202f13a5d3a7c34c73e1637bdc904fa4e874ffa92b881c5ba26ddea8f9"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ReconnectRace.tla",
+      "bytes": 3354,
+      "sha256": "91132aeeb424a8c7cae01114bf07e05241fa1f2dc5091f32d4a28e7ff0ff4c44"
+    },
+    {
+      "file": "evidence/qualification-r8/models/RepeatedResume.cfg",
+      "bytes": 91,
+      "sha256": "5957edf0617858c11dbf58fbcc41fccc8efcb89ec6621929d0cf4d5be8f07285"
+    },
+    {
+      "file": "evidence/qualification-r8/models/RepeatedResume.log",
+      "bytes": 1394,
+      "sha256": "5ad48ed16d30987a9554c03be2e8ef1e2fc362978bdb13501775a06660962d8d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/RepeatedResume.tla",
+      "bytes": 3179,
+      "sha256": "7257bebe496127fec6904cb201a70454f56762efc77c91e06e7dfb880c688160"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ResumeAcrossSuccession.cfg",
+      "bytes": 91,
+      "sha256": "5957edf0617858c11dbf58fbcc41fccc8efcb89ec6621929d0cf4d5be8f07285"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ResumeAcrossSuccession.log",
+      "bytes": 1837,
+      "sha256": "0ec849e52d71e7a16626d56392f568ef298f41e4e386704d0b9be78b7a4e563a"
+    },
+    {
+      "file": "evidence/qualification-r8/models/ResumeAcrossSuccession.tla",
+      "bytes": 3100,
+      "sha256": "703a1b2c7c788e0cd11d7c14cb1822898eec161b7b86883f354995cecf14b727"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M1.cfg",
+      "bytes": 117,
+      "sha256": "3f414df8560a2c9acbe5a762fa2517c67cdf2f19bac9ee830316dc96a2f6dccb"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M1.log",
+      "bytes": 2161,
+      "sha256": "78ea8bfc4460a2562070553f6bb0a46b0e1af5e2dafcad493e0b385ccbf40295"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M2.cfg",
+      "bytes": 117,
+      "sha256": "ed5e9e7b894c7f7125d77aa26fc90aeadb4ae6befd1a8325399a18ff31864150"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M2.log",
+      "bytes": 2162,
+      "sha256": "eb1ded3f4f682cef60c4f8221b42e9438d484c50a8e2447464c3eb7acc042baa"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M3.cfg",
+      "bytes": 117,
+      "sha256": "730c37fad212f3a8b855c9cd79bb67ef5ae677ba6314d24b046f64cb6b10721d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M3.log",
+      "bytes": 2163,
+      "sha256": "f907b690a26d1c733c616b716c0948dc8bcf6ef03289c54532bde2bd2c2043bc"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M4.cfg",
+      "bytes": 117,
+      "sha256": "ea6f1e3c28b23bdf2944b21fb8bb7141b488b43517ef2e74cb4dccc1fb4f0eee"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-M1-M4.log",
+      "bytes": 2373,
+      "sha256": "5fc8744a944d948bc4509b6417c22e8fba0aeb1b3932b469756c86830ad7828a"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-larger-backlog.cfg",
+      "bytes": 117,
+      "sha256": "2a37bab9133f4f23a3672ca408240b9bd620b9727ee6a9361480edcd53c4b625"
+    },
+    {
+      "file": "evidence/qualification-r8/models/composed-larger-backlog.log",
+      "bytes": 2373,
+      "sha256": "8b2c9d1911e3a69ff1f1893e22699df63312bd44a3e55217fa5a6c6163d3f05b"
+    },
+    {
+      "file": "evidence/qualification-r8/models/model-results.json",
+      "bytes": 35266,
+      "sha256": "e0fc4ea3cd717c0d97605fb24ac9c10a9cffc1a09393193c45965606f3e968d7"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-DelayedOffer.cfg",
+      "bytes": 99,
+      "sha256": "41c696a3183657dd2ea22445e037778a3c8587a4d82e317d5f7df06a646bcde3"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-DelayedOffer.log",
+      "bytes": 2065,
+      "sha256": "f305fbd935f82d9452cb24880a6802388ee6fb3bc9cadd389f58fa6831f9471a"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-EarlyCandidate.cfg",
+      "bytes": 101,
+      "sha256": "aeaed8135198d8808bf70ba3a94c7b5b4cedf9b6a1c26a03b5b6f0ffcf432132"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-EarlyCandidate.log",
+      "bytes": 1687,
+      "sha256": "70825a3592822ec2983173b924caf8efe2d64fce26c0654e30bcc8c8eb15e520"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Grant.cfg",
+      "bytes": 92,
+      "sha256": "4df0bf772b6c2f5784a8ebe4d78e009fa051a3ac60e97f2e393a0c07f8834e58"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Grant.log",
+      "bytes": 3067,
+      "sha256": "edfda1e168e49854024d581408a04e6db1655b5b744e65dc574651681198016d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Interlock.cfg",
+      "bytes": 121,
+      "sha256": "f0ac9514e2b87f618fe8a10930f64b5581a71f04637e01c2feee97c4a48bf378"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Interlock.log",
+      "bytes": 7605,
+      "sha256": "00e5071444122eedad1088912429443b48264af43b974ffe46ad3dcf99ee97bc"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-KeyReuse.cfg",
+      "bytes": 95,
+      "sha256": "730ef3831f3b5cfd93fd7270b2a4aa1164aea77293d4a18ef3623c41f09bcc1e"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-KeyReuse.log",
+      "bytes": 3753,
+      "sha256": "e4451205cc3e930b3a3586b80d323719385ff27b47e41020628ca65a36b9dc94"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-OldAck.cfg",
+      "bytes": 93,
+      "sha256": "4bffacab276ad83efce4354d51307e9fee7a2c0742a9cc19aa7175ae931792e1"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-OldAck.log",
+      "bytes": 8175,
+      "sha256": "f43aabca2440e3888a1e60ae98a3240efe07a33f0a4c55b36bf25a0ff3848676"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-OldCompletion.cfg",
+      "bytes": 100,
+      "sha256": "f9a283b10a4768cda9eaf842c74638c4b871dddd5c3f6ebd58f90a96bd375bef"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-OldCompletion.log",
+      "bytes": 5558,
+      "sha256": "3accb40fded5102d39fa4acfee0abee28f446a6dfab5b7c66887c422ee964741"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Persistence.cfg",
+      "bytes": 98,
+      "sha256": "68dfe089680e0f5b15fb0d51e22b6c923633ba471ce2bf8d804e913c8e6c68c2"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Persistence.log",
+      "bytes": 2059,
+      "sha256": "9a712edf5b4079614c210b7a597639773f66aa1ad2ea97cf5717bf6af3757e21"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Preview.cfg",
+      "bytes": 94,
+      "sha256": "2648cd81928b29ca38791a5b2d60ee81899dd766e5e04ec47554b14cd0ba74b0"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Preview.log",
+      "bytes": 4425,
+      "sha256": "4aaaa2c02c999134b074e47c6b61ebee5d955468b0925ea0de1de1fb49a1ea7f"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-RenewOffer.cfg",
+      "bytes": 97,
+      "sha256": "83a58057825e8382b2edd08744ce053a553e0254e23ae7388185f2f14a4ebe0a"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-RenewOffer.log",
+      "bytes": 2961,
+      "sha256": "cb7e271ed3cd541a1c0a2c230e96545a8d70fc4146784279cf1f9b6fca9a1079"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-ResumeSnapshot.cfg",
+      "bytes": 95,
+      "sha256": "172115705ae568ae6afa6ed3039111bd21978e385d54877e17c4985ca5434daa"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-ResumeSnapshot.log",
+      "bytes": 7981,
+      "sha256": "8f005c74bf2eb72a511f5cc2e7dbb1f522eeb845563d0b90a45eb68d09b17a24"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Snapshot.cfg",
+      "bytes": 95,
+      "sha256": "0ce5ae76dcc19f052f66c293b5fe15f2b252ac1b62e38962e05b616de2a2c9b5"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Snapshot.log",
+      "bytes": 2627,
+      "sha256": "e02b07cf0222871c47d7cdc5dc4c18ecbcf92bd9c58143cf957dcdbdb54dbb63"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-StaleClose.cfg",
+      "bytes": 97,
+      "sha256": "c0455be70f48ab63b4b917f35fbd115128ba54547b770a262e3fc096414e630f"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-StaleClose.log",
+      "bytes": 2185,
+      "sha256": "245e12e02f3bd82cc475573083da777d6530a758522772f55e10dcabdf84a87f"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-StaleEnd.cfg",
+      "bytes": 95,
+      "sha256": "23ba704602056e304255c205c32fb6a688fdad1a860f9c3e5741417c85f71cb2"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-StaleEnd.log",
+      "bytes": 10351,
+      "sha256": "7f216040f2f13589a79e4411235eb02ae84d8e04e5db4947fa4fc7df5a45d97e"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Target.cfg",
+      "bytes": 93,
+      "sha256": "fc2fac03753f564f558e9910704d3ef0f9bc873a817fe3c2ae3903dee4774b06"
+    },
+    {
+      "file": "evidence/qualification-r8/models/mutation-Target.log",
+      "bytes": 3089,
+      "sha256": "13958fb9e766349cbd4ce46f2c71fc96080b7dcce022d40640ddb9070e84a0b1"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-GuestWon.cfg",
+      "bytes": 102,
+      "sha256": "5f3fdef3b755c0033594dc83f0a172be280b53797773767ea27d1bd3d47d5ee4"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-GuestWon.log",
+      "bytes": 2197,
+      "sha256": "c520ee4e44dee04e20885cb4dd9bf942e547f0e28177edc9ff04e50bba2cbb6f"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-HostReturned.cfg",
+      "bytes": 106,
+      "sha256": "6fd875b9ef287d0cee05250a50dafbbd731cf0929ab0df6d9b9843e25f97805b"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-HostReturned.log",
+      "bytes": 2967,
+      "sha256": "3e435ba86450362e1895019a8d2b3c9e7260561f1a918fc021ba13070d6e3713"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-RecoveredGuest.cfg",
+      "bytes": 108,
+      "sha256": "b476d9261f1573ee2d7e394a5ce43e36413951df1f241dffc4d3b5c6e89e0ff8"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-RecoveredGuest.log",
+      "bytes": 13520,
+      "sha256": "2dfa8b7c20f5c43700d3511d47629961b30c61bea947d0e11c17c82e0fe520d0"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-RefusalAdvanced.cfg",
+      "bytes": 109,
+      "sha256": "ea47211999845190fc5f31b3b62a1a08e129411979c39ec66f05987512b7b745"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-RefusalAdvanced.log",
+      "bytes": 4499,
+      "sha256": "4615e3b3380f7aede23ce42f1f6d67139e0b439547dcf347bbac9267117a9228"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-ReplayedOffer.cfg",
+      "bytes": 107,
+      "sha256": "855a700a28d3f3820e93e969e0e3b20155003c91eaf987900022978ea20c4db8"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-ReplayedOffer.log",
+      "bytes": 3733,
+      "sha256": "c6b5b098ea0d05717093486553c07f191badbf8de8b795ca541d6ee5ead44bba"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-SecondRecovery.cfg",
+      "bytes": 108,
+      "sha256": "0b9e6428b86ec46d8c3fc57e626d72a656bd2f1d0075d46e150deae529a8c83d"
+    },
+    {
+      "file": "evidence/qualification-r8/models/witness-SecondRecovery.log",
+      "bytes": 8805,
+      "sha256": "fb7e4d8a6a09b40479bb7364e70004fb500d3bd8ebd36a280147f0e72ccaabeb"
+    },
+    {
+      "file": "evidence/qualification-r8/production/browser-results.json",
+      "bytes": 611,
+      "sha256": "7e429c98b626f34385881dc92b4a1adc6eb41846ea34f16f1d1d805e31e43e10"
+    },
+    {
+      "file": "evidence/qualification-r8/production/hosted-results.json",
+      "bytes": 284,
+      "sha256": "62de729e6d0d0e312760e610d41a137fcc50daba8975882b7d558f4578d54d42"
+    },
+    {
+      "file": "evidence/qualification-r8/production/hosted-smoke.py",
+      "bytes": 4051,
+      "sha256": "973d78c8498157dd04fa78077c32c994692344b10d739bb2280583ff397638fd"
+    },
+    {
+      "file": "evidence/qualification-r8/qualification.json",
+      "bytes": 4941,
+      "sha256": "3413c382e525bccea2d4a67315df3886c686e7ebe734210c159409985b20fb99"
+    },
+    {
+      "file": "evidence/qualification-r8/restart-before/browser-results.json",
+      "bytes": 577,
+      "sha256": "3b27a8afaa61f1bbb953a2b8dc9ad7a9bb05f6c2ac14f589d336ac08f50b56e7"
+    },
+    {
+      "file": "evidence/qualification-r8/restart-before/eviction.json",
+      "bytes": 127,
+      "sha256": "8bab6e8fd931477ba063ec0957a5f494feed6e2a2a95f6300864c61726dbe3c1"
+    },
+    {
+      "file": "evidence/qualification-r8/restart/browser-results.json",
+      "bytes": 824,
+      "sha256": "4ad98486f3d79ad1a7931e60a12c5438f966c1788edfc003e5c5604c9d883ade"
+    },
+    {
+      "file": "evidence/qualification-r8/restart/eviction.json",
+      "bytes": 126,
+      "sha256": "9df20862196d7c6bddf94d36904ac47d4b1df9c19bd79ae8dfe18349ec32cbf3"
+    },
+    {
+      "file": "evidence/qualification-r8/silent/browser-results.json",
+      "bytes": 1050,
+      "sha256": "8274987bb0e58bc9742f53b076646a3daf02e839f919da222974d728995f166e"
+    },
+    {
       "file": "evidence/recovery-r3/after-retirement-bindings.txt",
       "bytes": 116,
       "sha256": "de01918743b9df84014325ac4032317a00cd2b79084255944fe1610b89984201"
@@ -999,6 +1477,11 @@
       "file": "sources/prompt-succession-0df3215d9813.patch",
       "bytes": 52690,
       "sha256": "622fa11b20aca5860c8eee8cdbfb03ca972046388088194a5d47a5a7e5711c00"
+    },
+    {
+      "file": "sources/qualification-f03fa147f798.patch",
+      "bytes": 104005,
+      "sha256": "aec731cd5a7026cea96db8525759d8bff941e3df174c71fa095067fbc0a5d7cf"
     },
     {
       "file": "sources/scripts/check-protocol-models.py",

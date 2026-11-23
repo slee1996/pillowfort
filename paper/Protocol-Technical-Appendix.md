@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 7 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 8 · 22 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Immediate-offer relay:** [`0df3215d9813`](https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad). **Earlier recovery and model evidence:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
+**Tested implementation and models:** [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
 
 ## A. Profile and interoperability
 
@@ -175,6 +175,7 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
 | Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
+| Restart after offer commit, before dispatch | Original capability unexpired; its delivery still unacknowledged on the owning connection | Persist a one-shot delivery check with the offer. At four seconds, a still-unacknowledged owner is asked to reconnect; authenticated replay delivers the whole prefix with the original deadline. A healthy delivery does not wait four seconds |
 | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
 | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
 | Candidate explicitly refuses | Same exact authorization checks | Consume that offer; keep refuser admitted; offer next eligible member |
@@ -299,7 +300,24 @@ npm run build
 bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --output /tmp/pillowfort-offer
 ```
 
-The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
+The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
+
+### H.4 Current qualification: reconnect, eviction and silent transport failure
+
+Check out `f03fa147f79847dda5dac5b0a8ed37c8d040cee5`. Install the three locked workspaces (`npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`) and the pinned Playwright Chromium. Use the SHA-checked TLC JAR from H.1. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) links the logs, environment and limits.
+
+```sh
+npm run check
+npm --prefix hosted-mcp run check
+python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pf-models
+bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pf-browsers
+node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction
+node scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent
+```
+
+The eviction fixture interrupts the first effect dispatch **after** the production room transaction. Miniflare evicts the real local Durable Object with both guest sockets hibernated; a different instance handles the durable alarm. The restored offer retains the original policy, candidate, authorization, and absolute deadline. Replayed receipts may repeat, but a repeated signed acceptance neither republishes the action nor adds a removal. The separate planned-transfer run keeps the former host admitted and then exercises loss of the *next* host under its own policy.
+
+The silent-path fixture discards bytes in both directions without forwarding a WebSocket close, FIN, or reset at onset. Its two TCP legs acknowledge locally: this is application-path isolation, not an IP-level outage on a carrier network. A forced close after the observation window is a separate positive control. No destructive failure was induced in production.
 
 ## I. Related designs
 
