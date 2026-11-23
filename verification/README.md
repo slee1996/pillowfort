@@ -10,6 +10,8 @@ The executable models implement the M1–M4 planning decomposition. The source-g
 - `ResumeAcrossSuccession.tla`: M3 replay and M4 consent joined by a signed acceptance in a returning guest's backlog. The relay can change host before or during replay; completion is checked against its current backlog end.
 - `RepeatedResume.tla`: two consecutive guest replacement sockets after handoff. Delayed completions retain their authenticated socket; delayed ACKs name a completion, not a backlog position.
 
+- `ReconnectRace.tla`: host resume ownership versus guest replay completion, a late close from a replaced socket, and a cut after storing but before delivering a time-limited offer. Four unweakened witnesses reach both reconnect orders, a post-restore acceptance, and a refusal followed by another member's acceptance.
+
 Run Java 21 or compatible with pinned `tla2tools` v1.7.4:
 
 ```sh
@@ -19,7 +21,7 @@ python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output
 
 The runner checks the JAR SHA-256 before execution. It writes source copies, exact configurations, raw TLC logs, deliberate-mutant counterexamples, commands and per-configuration state counts to the output directory. It fails if a normal model violates its invariant or any deliberately weakened model does not produce a counterexample.
 
-The default run requires eleven safe configurations, eleven deliberate mutations and two reachability witnesses. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
+The default run requires twelve safe configurations, fifteen deliberate mutations and six reachability witnesses. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
 
 To check just the cross-host resume:
 
@@ -43,6 +45,16 @@ bun scripts/protocol-browser-evidence.ts --mode faults --fault former-host-remov
 ```
 
 The second model distinguishes which socket activated the relay from which ACK released the guest. The safe witness requires recovery with the first ACK still in flight. The removal experiment instead tests real MLS storage, page reload and browser message/close ordering; TLC does not model those mechanisms.
+
+To exercise the production Worker locally (ephemeral storage, no live credentials):
+
+```sh
+npm run build
+node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pillowfort-worker-restart
+node scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pillowfort-worker-loss
+```
+
+The first cut discards the initial post-commit dispatch and evicts the real Durable Object with the guest sockets hibernated. The second discards bytes on the host path without sending a WebSocket close and records the relay close callback separately from the visible offer. If no callback arrives within 150 seconds, the measurement is censored and a separately labeled forced-close control checks the remaining path. Neither experiment injects a fault in production.
 
 ## Bounds and exclusions
 

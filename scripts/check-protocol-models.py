@@ -33,7 +33,8 @@ def main():
     profiles += [("composed-larger-backlog", "Coordination", 2, 1, "None", 4, 16)]
     profiles += [(f"mutation-{mutation}", module, 2, 2, mutation, None, None) for module, mutation in
                  [("M1Delivery", "Persistence"), ("M1Delivery", "Grant"), ("M1Delivery", "Preview"),
-                  ("M2Admission", "KeyReuse"), ("M3Resume", "Snapshot"), ("M4Succession", "Target")]]
+                  ("M2Admission", "KeyReuse"), ("M3Resume", "Snapshot"), ("M4Succession", "Target"),
+                  ("M4Succession", "DelayedOffer")]]
     profiles += [("mutation-Interlock", "Coordination", 1, 1, "Interlock", 2, 8)]
     coupled = "ResumeAcrossSuccession"
     witnesses = {"witness-RecoveredGuest": "NoRecoveredGuest", "witness-SecondRecovery": "NoSecondRecovery"}
@@ -43,6 +44,13 @@ def main():
     profiles += [(name, "RepeatedResume", 1, 1, mutation, None, None) for name, mutation in
                  [("RepeatedResume", "None"), ("mutation-OldCompletion", "OldCompletion"),
                   ("mutation-OldAck", "OldAck"), ("witness-SecondRecovery", "None")]]
+    race = "ReconnectRace"
+    for witness in ("HostReturned", "GuestWon", "ReplayedOffer", "RefusalAdvanced"):
+        witnesses["witness-" + witness] = "No" + witness
+    profiles += [(name, race, 1, 1, mutation, None, None) for name, mutation in
+                 [(race, "None"), ("mutation-StaleClose", "StaleClose"),
+                  ("mutation-RenewOffer", "RenewOffer"), ("mutation-EarlyCandidate", "EarlyCandidate")] +
+                 [("witness-" + w, "None") for w in ("HostReturned", "GuestWon", "ReplayedOffer", "RefusalAdvanced")]]
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:

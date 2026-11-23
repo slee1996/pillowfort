@@ -41,6 +41,18 @@ jobs:
       - name: Run release gate
         run: npm run check
 
+      - name: Verify a committed host offer across Worker eviction
+        run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
+
+  protocol-models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check finite safety, mutations and recovery witnesses
+        run: |
+          curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar --output "$RUNNER_TEMP/tla2tools.jar"
+          python3 scripts/check-protocol-models.py --jar "$RUNNER_TEMP/tla2tools.jar" --output "$RUNNER_TEMP/pillowfort-models"
+
   hosted-mcp:
     runs-on: ubuntu-latest
     steps:

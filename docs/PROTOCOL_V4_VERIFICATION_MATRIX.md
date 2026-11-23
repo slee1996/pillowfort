@@ -30,6 +30,12 @@ This matrix maps the existing M1–M4 analysis plan to evidence, not to claims o
 | Composition | Staged M1→M1+M2→M1+M2+M3→M1–M4 send guards; Interlock mutant must fail | Existing admission/removal/host-transfer barriers and full project gate | 12/16-step bounded prefixes; no refinement, deadlock-freedom or liveness proof |
 | Peer membership/storage disagreement | Not represented as malicious MLS divergence in TLC | Browser storage-failure experiment and real MLS engine validation/rollback tests | Failure isolation, not automatic epoch merging |
 
+## Reconnect and offer delivery
+
+`ReconnectRace` refines the host/guest recovery race. `M4Succession` fences and offers in the same transition when a candidate is eligible. Relay tests cover both socket orders, four interrupted admission phases, exact signed acceptance one millisecond before, at and after expiry, and replay without a second publication. Replayed receipts may repeat.
+
+The local workerd restart and silent-path experiments use three real browser profiles. See `verification/README.md` for commands and exclusions. The former drops the post-commit dispatch and hibernates live sockets; the latter separates observed relay loss from offer delivery. A planned-transfer browser case (`--fault planned-then-unplanned`) checks that the former host stays admitted and that a later automatic offer uses the *new* host's signed policy.
+
 ## Named successor crash regressions
 
 `bun test test/secure-relay-v4.test.ts --test-name-pattern 'M4 successor crash boundaries'` exercises these six cases against the actual relay reducer and its strict exported/imported state:

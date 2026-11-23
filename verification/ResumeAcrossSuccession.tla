@@ -13,7 +13,7 @@ Tail == IF signer = 0 THEN 1 ELSE 2
 Init == R!Init /\ H!Init /\ signer = 0 /\ completedUnder = 0
         /\ cut = [signer |-> 0, host |-> 1]
 
-HostStep == /\ (H!Disconnect(1) \/ H!Grace \/ H!Fence \/ H!Offer
+HostStep == /\ (H!Disconnect(1) \/ H!Grace
                 \/ H!Choose("accept", 2) \/ H!StoreRemove \/ H!AckRemove
                 \/ H!CompleteRemove \/ H!PublishPolicy)
             /\ UNCHANGED <<resume, signer, cut, completedUnder>>

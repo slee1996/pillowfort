@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page, type WebSocket as BrowserSocket } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer, connect, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { cpus, platform, release, totalmem } from "node:os";
 import { startLocalServer } from "../server";
@@ -18,7 +19,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -33,8 +34,13 @@ const report: Record<string, unknown> = {
     memoryBytes: totalmem(), bun: Bun.version, playwright: "1.65.0" },
   benchmarks: [], faults: [], passed: false,
 };
-const server = live ? null : startLocalServer(0);
-const origin = server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz";
+const staged = process.env.PILLOWFORT_QUALIFICATION_ORIGIN;
+const cuts = process.env.PILLOWFORT_QUALIFICATION_CUTS;
+if (staged && (live || !cuts || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
+if (["persisted-offer", "silent-host-loss"].includes(selectedFault ?? "") && !staged) throw Error("Use protocol-workerd-evidence.mjs");
+const server = live || staged ? null : startLocalServer(0);
+const origin = staged ?? (server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz");
+if (staged) report.scope = "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.";
 let browser: Browser | null = null;
 const save = () => writeFile(resolve(output, "browser-results.json"), JSON.stringify(report, null, 2) + "\n");
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
@@ -113,13 +119,13 @@ async function newParticipant(browser: Browser): Promise<Participant> {
   });
   return { context, page };
 }
-async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>): Promise<RoomEvidence> {
+async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin): Promise<RoomEvidence> {
   const participants: Participant[] = [];
   const names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`);
   const host = await newParticipant(browser);
   participants.push(host);
   await configure?.(host, 0);
-  await host.page.goto(origin);
+  await host.page.goto(hostOrigin);
   await host.page.locator("input").fill(names[0]);
   await host.page.getByRole("button", { name: "Start a new fort", exact: true }).click();
   const secret = await host.page.locator("#setup-password").inputValue();
@@ -425,6 +431,159 @@ async function promptHostSuccession(browser: Browser) {
   } finally { await closeRoom(room); }
 }
 
+async function plannedThenUnplanned(browser: Browser) {
+  const ready = Promise.withResolvers<void>(), refreshed = Promise.withResolvers<void>();
+  const devices: string[] = [], signedChoices: string[] = [];
+  let originalPolicy = "", replacementPolicy = "", deliveredPolicy = "", previewedAcceptance = false;
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    page.on("websocket", socket => {
+      let policyFrame = "";
+      socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString()), action = f.authorityEvent?.content;
+        if (action?.type === "host-succession-policy" && action.deviceIds.length === 2) {
+          policyFrame = f.envelope.messageId;
+          if (index === 0) originalPolicy ||= f.authorityEvent.eventId;
+          if (index === 2 && action.deviceIds.join() === [devices[0], devices[1]].join()) replacementPolicy = f.authorityEvent.eventId;
+        }
+        if (action?.type === "host-succession") signedChoices.push(`${index}:${action.action}`);
+      });
+      socket.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (f.type === "authenticated") devices[index] = f.deviceId;
+        if (index === 0 && f.type === "application-preview" && f.frame?.relayKind === "host-transfer-accept") previewedAcceptance = true;
+        if (index === 0 && f.type === "host-transfer-authorized" && f.policyEventId) deliveredPolicy = f.policyEventId;
+        if (policyFrame && f.type === "application-result" && f.messageId === policyFrame && f.result === "accepted") {
+          if (index === 0) ready.resolve();
+          if (index === 2 && replacementPolicy) refreshed.resolve();
+        }
+      });
+    });
+  });
+  const [old, peer, next] = room.participants;
+  try {
+    await awaitBoundary(ready.promise, "first tenure committed policy");
+    await old.page.locator("#btn-room-menu").click();
+    await old.page.locator("#aim-btn-toss").click();
+    await old.page.locator("#member-picker-body .member-picker-item", { hasText: room.names[2] }).click();
+    await next.page.locator("#btn-catch").click();
+    await awaitBoundary(refreshed.promise, "manual successor published its own policy");
+    await deliver(old.page, peer.page, "former host remains admitted after manual transfer");
+    await next.context.close();
+    await old.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+    if (!previewedAcceptance || !replacementPolicy || replacementPolicy === originalPolicy || deliveredPolicy !== replacementPolicy || signedChoices.length) throw Error("Transfer modes or tenures were conflated");
+    await old.page.locator("#btn-duck").click();
+    await peer.page.locator("#btn-catch").click();
+    await peer.page.getByText("Buddies (2)", { exact: true }).waitFor();
+    await deliver(old.page, peer.page, "declining member still present");
+    await deliver(peer.page, old.page, "second transfer is usable");
+    if (signedChoices.join(",") !== "0:reject,1:accept") throw Error("Wrong succession choices");
+    return { fault: "planned-then-unplanned", formerHostRemainedAdmitted: true, manualAcceptancePreviewed: true,
+      freshPolicyBoundToOffer: true, signedChoices, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
+// Drop WebSocket bytes in both directions on the host's dedicated loopback TCP
+// path. Keep both TCP legs open; do not forward FIN/RST or answer WebSocket pings.
+async function hostPath(destination: string) {
+  let blocked = false;
+  const sockets = new Set<Socket>();
+  const sink = createServer(client => {
+    if (blocked) { client.destroy(); return; }
+    const upstream = connect(Number(new URL(destination).port), "127.0.0.1");
+    for (const [from, to] of [[client, upstream], [upstream, client]]) {
+      sockets.add(from);
+      from.on("data", data => { if (!blocked && !to.destroyed && !to.write(data)) from.pause(); });
+      to.on("drain", () => from.resume());
+      from.on("error", () => {});
+      from.on("close", () => { sockets.delete(from); if (!blocked) to.destroy(); });
+    }
+  });
+  await new Promise<void>((ok, fail) => { sink.once("error", fail); sink.listen(0, "127.0.0.1", ok); });
+  const address = sink.address();
+  if (!address || typeof address === "string") throw Error("Missing TCP port");
+  return { origin: `http://127.0.0.1:${address.port}`, block() { blocked = true; },
+    closePaths() { for (const socket of sockets) socket.destroy(); },
+    stop() { this.closePaths(); sink.close(); } };
+}
+
+async function workerdHandoff(browser: Browser, fault: "persisted-offer" | "silent-host-loss") {
+  const path = fault === "silent-host-loss" ? await hostPath(origin) : null;
+  const policyReady = Promise.withResolvers<void>();
+  const choices: string[] = [], notices: any[] = [], resumes: string[] = [], switches = new Set<string>();
+  let consecutiveCancellations = 0, maxConsecutiveCancellations = 0;
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    let policyId: string | undefined;
+    page.on("websocket", socket => {
+      socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString()), action = f.authorityEvent?.content;
+        if (index === 0 && action?.type === "host-succession-policy" && action.deviceIds.length === 2) policyId = f.envelope.messageId;
+        if (action?.type === "host-succession") choices.push(`${index}:${action.action}`);
+      });
+      socket.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (policyId && f.type === "application-result" && f.messageId === policyId && f.result === "accepted") policyReady.resolve();
+        if (index === 1) {
+          if (f.type === "order-cancelled") maxConsecutiveCancellations = Math.max(maxConsecutiveCancellations, ++consecutiveCancellations);
+          else consecutiveCancellations = 0;
+        }
+        if (index === 1 && f.type === "host-transfer-authorized") notices.push(f);
+        if (index === 1 && f.type === "authenticated") resumes.push(`${f.mode}:${f.deviceId}`);
+        if (index === 2 && f.type === "host-changed") switches.add(f.deviceId);
+      });
+    });
+  }, path?.origin ?? origin);
+  try {
+    await awaitBoundary(policyReady.promise, "both admitted devices in committed policy");
+    const [host, first, second] = room.participants;
+    const offer = first.page.locator("#host-offer-overlay");
+    const metrics: Record<string, unknown> = {};
+    if (path) {
+      const windowMs = 150_000;
+      const onset = Date.now(); path.block();
+      let forced: number | null = null;
+      try { await offer.waitFor({ timeout: windowMs }); } catch (error) {
+        if ((error as Error).name !== "TimeoutError") throw error;
+        forced = Date.now(); path.closePaths();
+        await offer.waitFor({ timeout: 15_000 });
+      }
+      const observed = Date.now();
+      const detected = JSON.parse(await readFile(resolve(cuts!, "detected.json"), "utf8"));
+      const silent = forced === null || detected < forced;
+      if (detected < onset || detected > observed) throw Error("Inconsistent host loss clock");
+      Object.assign(metrics, { observationWindowMs: windowMs, actualSilentObservationMs: (forced ?? detected) - onset,
+        lossToRelayDetectionMs: silent ? detected - onset : null, rightCensored: !silent,
+        forcedCloseToRelayDetectionMs: silent ? null : detected - forced!, relayDetectionToObservedVisibleOfferMs: observed - detected,
+        transport: "Two loopback TCP legs ACK locally; dropped WebSocket bytes, no forwarded FIN/RST at onset. Not packet-level WAN loss." });
+    } else {
+      await host.context.close();
+      await offer.waitFor({ timeout: 17_000 }); // Must precede the original 30-second authorization deadline.
+      const saved = JSON.parse(await readFile(resolve(cuts!, "cut.json"), "utf8"));
+      const n = notices[0];
+      if (!n || n.authorizationId !== saved.authorizationId || n.offerMessageId !== saved.offerMessageId ||
+          n.expiresAt !== saved.expiresAt || n.policyEventId !== saved.policyEventId || n.fromHostDeviceId !== saved.hostDeviceId ||
+          resumes[0] !== `join:${saved.targetDeviceId}` || Date.now() >= saved.expiresAt) throw Error("Restored offer differs from durable authorization");
+      Object.assign(metrics, { sameAuthorizationPolicyTargetAndDeadline: true, originalTtlMs: saved.expiresAt-saved.authorizedAt,
+        remainingMsWhenVisible: saved.expiresAt-Date.now(), sameDeviceResume: resumes.includes(`resume:${saved.targetDeviceId}`) });
+    }
+    if (choices.length || await second.page.locator("#host-offer-overlay").isVisible()) throw Error("Transferred before consent or skipped first candidate");
+    await first.page.locator("#btn-duck").click();
+    await second.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+    if (fault === "persisted-offer") await wait(500); // Deliberate human choice interval; the declining client must not spin.
+    await second.page.locator("#btn-catch").click();
+    await second.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 15_000 });
+    await deliver(first.page, second.page, "resumed room: one to two");
+    await deliver(second.page, first.page, "resumed room: two to one");
+    if (choices.join(",") !== "1:reject,2:accept" || switches.size !== 1 || maxConsecutiveCancellations > 1) throw Error("Missing exact consent or host transition");
+    return { fault, ...metrics, maxConsecutiveCancellations, signedChoices: choices, distinctNewHosts: switches.size, deliveredBothDirections: true };
+  } catch (e) {
+    report.failureDiagnostics = await Promise.all(room.participants.filter(p => !p.page.isClosed()).map(async p => ({
+      surface: (await text(p.page)).replace(/f-[a-z2-7]{10}/g, "[room]"),
+      frames: await p.page.evaluate(() => (globalThis as typeof globalThis & { __pillowfortEvidenceFrames: unknown[] }).__pillowfortEvidenceFrames),
+    })));
+    throw e;
+  } finally { path?.stop(); await closeRoom(room); }
+}
+
 async function secondResume(browser: Browser) {
   const withheld = Promise.withResolvers<() => void>();
   let joined: string | undefined, oldAck: string | undefined;
@@ -659,14 +818,17 @@ try {
   }
   if (mode !== "benchmark") {
     if (mode === "all") await wait(60_000); // Respect the normal five-new-rooms/minute ceiling.
+    const planned = selectedFault === null || selectedFault === "planned-then-unplanned" ? await plannedThenUnplanned(browser!) : null;
     const faults: Fault[] = ["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy"];
     const results: unknown[] = await Promise.all(faults.filter(fault => selectedFault === null || fault === selectedFault)
       .map(fault => faultScenario(browser!, fault)));
+    if (planned) results.unshift(planned);
     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
     if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
     if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
     if (selectedFault === null || selectedFault === "prompt-host-succession") results.push(await promptHostSuccession(browser!));
+    if (selectedFault === "persisted-offer" || selectedFault === "silent-host-loss") results.push(await workerdHandoff(browser!, selectedFault));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;
