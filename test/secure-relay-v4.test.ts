@@ -2571,6 +2571,60 @@ it("requires a fresh replay boundary when succession commits during guest resume
   expect(active.effects).toContainEqual({ type: "frame-accepted", deviceId: second.deviceId, messageId: after.complete.requestId });
 });
 
+it("fences the first resume socket even when the second replay has the same handoff terminator", async () => {
+  const { state, second, frame, first, ids, clock, roomInstance } = await acceptedSuccessionForRecovery();
+  const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+  const connect = async (from: SecureRelayStateV4) => {
+    const device = actor(second.deviceId, ids(), "device");
+    const resumed = accepted(await reduceSecureRelayV4(from, device, {
+      kind: "resume", v: 4, suite: 1, roomInstance, requestId: ids(), deviceId: device.deviceId,
+    }, options()));
+    expect(effect(resumed.effects, "room-state-snapshot").hostDeviceId).toBe(first.deviceId);
+    const completion = { kind: "resume-complete", v: 4, suite: 1, roomInstance,
+      requestId: ids(), lastMessageId: effect(resumed.effects, "backlog-end").lastMessageId } as const;
+    return { device, completion, state: resumed.state };
+  };
+  const firstReplay = await connect(accepted(disconnectSecureRelayDeviceV4(state, second, options())).state);
+  const nextReplay = await connect(accepted(disconnectSecureRelayDeviceV4(firstReplay.state, firstReplay.device, options())).state);
+  expect(firstReplay.completion.lastMessageId).toBe(frame.envelope.messageId);
+  expect(nextReplay.completion.lastMessageId).toBe(firstReplay.completion.lastMessageId);
+  rejected(await reduceSecureRelayV4(nextReplay.state, firstReplay.device, firstReplay.completion, options()), "connection-mismatch");
+  const active = accepted(await reduceSecureRelayV4(nextReplay.state, nextReplay.device, nextReplay.completion, options()));
+  expect(active.effects).toContainEqual({ type: "frame-accepted", deviceId: second.deviceId, messageId: nextReplay.completion.requestId });
+  expect(active.state.members.find(m => m.deviceId === second.deviceId)).toMatchObject({ status: "active", backlog: [] });
+});
+
+it("replays a former-host retirement without releasing the next removal after a relay restart", async () => {
+  const { state, host, first, second, ids, clock, roomInstance } = await acceptedSuccessionForRecovery();
+  const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+  const lost = accepted(disconnectSecureRelayDeviceV4(state, second, options())).state;
+  clock.now = lost.members.find(m => m.deviceId === second.deviceId)!.disconnectExpiresAt!;
+  const expired = accepted(advanceSecureRelayV4(lost, options())).state;
+  const [former, next] = expired.pendingZombieRemovals;
+  expect([former.deviceId, next.deviceId]).toEqual([host.deviceId, second.deviceId]);
+  const order = await requestGrant(await ackAll(expired, ids, clock), first, ids, clock);
+  const commitMessageId = ids();
+  const removed = accepted(await reduceSecureRelayV4(order.state, first, {
+    kind: "relay", relayKind: "commit", grant: order.grant, retirementDeviceId: former.deviceId,
+    retirementAdmissionCommitMessageId: former.admissionCommitMessageId,
+    envelope: envelope(roomInstance, commitMessageId, "group", ids(8)),
+  }, options())).state;
+  const notice = { kind: "retire-member", v: 4, suite: 1, roomInstance,
+    requestId: ids(), deviceId: former.deviceId, commitMessageId } as const;
+  const finished = accepted(await reduceSecureRelayV4(await ackAll(removed, ids, clock), first, notice, options()));
+  const restored = importSecureRelayStateV4(exportSecureRelayStateV4(finished.state));
+  if (!restored) throw new Error("Retirement checkpoint must restore");
+  const duplicate = accepted(await reduceSecureRelayV4(restored, first, notice, options()));
+  expect(effect(duplicate.effects, "member-lifecycle")).toMatchObject({ deviceId: former.deviceId, status: "retired" });
+  expect(duplicate.state.pendingZombieRemovals).toEqual([next]);
+  rejected(await reduceSecureRelayV4(duplicate.state, first, {
+    ...notice, requestId: ids(), deviceId: next.deviceId,
+  }, options()), "invalid-reference");
+  const done = await removeCurrentZombie(duplicate.state, first, ids, clock);
+  expect(done.pendingZombieRemovals).toEqual([]);
+  expect(done.members.find(m => m.deviceId === next.deviceId)?.status).toBe("retired");
+});
+
 describe("M4 successor crash boundaries", () => {
   for (const boundary of ["result-unacknowledged", "removal-unstarted", "removal-completed"] as const) {
     it(`recovers exact authority and cleanup after a successor crash at ${boundary}`, async () => {

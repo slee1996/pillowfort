@@ -36,10 +36,13 @@ def main():
                   ("M2Admission", "KeyReuse"), ("M3Resume", "Snapshot"), ("M4Succession", "Target")]]
     profiles += [("mutation-Interlock", "Coordination", 1, 1, "Interlock", 2, 8)]
     coupled = "ResumeAcrossSuccession"
-    witness = "witness-RecoveredGuest"
+    witnesses = {"witness-RecoveredGuest": "NoRecoveredGuest", "witness-SecondRecovery": "NoSecondRecovery"}
     profiles += [(name, coupled, 1, 1, mutation, None, None) for name, mutation in
                  [(coupled, "None"), ("mutation-ResumeSnapshot", "Snapshot"),
-                  ("mutation-StaleEnd", "StaleEnd"), (witness, "None")]]
+                  ("mutation-StaleEnd", "StaleEnd"), ("witness-RecoveredGuest", "None")]]
+    profiles += [(name, "RepeatedResume", 1, 1, mutation, None, None) for name, mutation in
+                 [("RepeatedResume", "None"), ("mutation-OldCompletion", "OldCompletion"),
+                  ("mutation-OldAck", "OldAck"), ("witness-SecondRecovery", "None")]]
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:
@@ -47,7 +50,7 @@ def main():
     results = []
     for name, module, capacity, operations, mutant, stage, depth in profiles:
         config = output / (name + ".cfg")
-        invariants = "Safety NoRecoveredGuest" if name == witness else "Safety"
+        invariants = "Safety" + (" " + witnesses[name] if name in witnesses else "")
         config.write_text(f"INIT Init\nNEXT Next\nINVARIANTS {invariants}\nCONSTANTS\n"
                           f' Capacity = {capacity}\n MaxOps = {operations}\n Broken = "{mutant}"\n' +
                           (f" Stage = {stage}\n MaxDepth = {depth}\n" if stage is not None else ""))
@@ -58,7 +61,7 @@ def main():
             run = subprocess.run(command, cwd=output, capture_output=True, text=True, timeout=300)
         log = run.stdout + run.stderr
         (output / (name + ".log")).write_text(log)
-        expected = "NoRecoveredGuest" if name == witness else "Safety" if mutant != "None" else None
+        expected = witnesses.get(name, "Safety" if mutant != "None" else None)
         match = re.search(r"Invariant (\w+) is violated", log)
         violated = match[1] if match else None
         exhaustive = "Model checking completed. No error has been found." in log

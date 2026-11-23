@@ -120,7 +120,10 @@ The first-party host approval window is 180 seconds; relay admission expires at 
 | `backlog-end` | Snapshot reconciled; terminator matches the received replay boundary | End ID is final replay entry, or the owning resume request for an empty replay |
 | `resume-complete` | All preceding replay work persisted; exact terminator | Atomically activate and clear replay backlog, then emit completion ACK |
 | Active lifecycle repeated for an already admitted member | Verify roster/profile; with no matching admission barrier this is a no-op, including while an application is pending | This signal does not acknowledge or replace that application |
-| Completion ACK | Exact locally outstanding completion | Ordinary outbound work may resume |
+| Socket replaced before its completion ACK | Discard the old outstanding completion ID, not committed replay or device state. Process a fresh snapshot and terminator even if the end ID is unchanged. | An earlier socket cannot activate this connection |
+| Completion ACK | Matches the completion issued on this socket; a delayed earlier ACK cannot release sends | Ordinary outbound work may resume |
+
+Roster absence is not a receipt. A successor can see the former host absent from both rosters before the relay has cleared its removal marker. A pending Remove retains its original device/admission binding on retry. After the commit result, the successor retries its stored `retire-member` request and withholds new ordinary grants until `frame-accepted` names that request. Neither a snapshot nor a duplicate `retired` notice substitutes for it.
 
 **Replay does not send separate ordinary `delivery-ack` frames for each replayed entry.** The exact `resume-complete` terminator acknowledges that replay. Sending an independent prefix ACK first can change the relay's expected boundary; that is not the controller's protocol.
 
@@ -204,6 +207,8 @@ Standalone models explore their finite reachable graphs with up to two operation
 The runner also weakens seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
 
 `ResumeAcrossSuccession.tla` checks a narrower interaction beyond those staged runs: an ordinary guest reconnects across one accepted host change. The guest's signed replay evidence is distinct from the relay's host snapshot. At activation, the relay must still have the backlog end that the guest acknowledged. Two weakened configurations omit the evidence check or accept a superseded backlog end; a separate unmodified configuration must reach a guest ready under the new host after cleanup. This last trace demonstrates a possible recovery, not eventual recovery. [Focused reproduction commands](../verification/README.md).
+
+`RepeatedResume.tla` starts after handoff and permits two replacement sockets, identical nonempty backlog ends and delayed completions or ACKs. The safe witness reaches ordinary work after the second ACK despite loss of the first. Weakening the socket check or the ACK check produces distinct counterexamples; neither implies that stale traffic was accepted by the implementation. The browser test instead exposed a progress defect: the client retained its old completion ID and rejected a fresh terminator.
 
 | Plan property / failure | Concrete evidence | Limit |
 |---|---|---|

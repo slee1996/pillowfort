@@ -18,7 +18,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 await mkdir(output, { recursive: true });
@@ -363,6 +363,198 @@ async function guestResumeAfterSuccession(browser: Browser) {
   } finally { await closeRoom(room); }
 }
 
+async function awaitBoundary<T>(promise: Promise<T>, name: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([promise, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Missing browser boundary: ${name}`)), 20_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function reopen(room: RoomEvidence, index: number) {
+  const page = room.participants[index].page;
+  await page.goto(room.invitation);
+  await page.locator("#join-name").fill(room.names[index]);
+  await page.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
+}
+
+async function secondResume(browser: Browser) {
+  const withheld = Promise.withResolvers<() => void>();
+  let joined: string | undefined, oldAck: string | undefined;
+  const returning: string[] = [], completions: string[] = [];
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    if (index !== 2) return;
+    await page.routeWebSocket("**", client => {
+      const server = client.connectToServer();
+      let completion: string | undefined;
+      client.onMessage(raw => {
+        const f = JSON.parse(raw.toString());
+        if (f.kind === "resume-complete") { completion = f.requestId; completions.push(f.requestId); }
+        server.send(raw);
+      });
+      server.onMessage(raw => {
+        const f = JSON.parse(raw.toString());
+        if (f.type === "authenticated" && f.mode === "join") joined = f.deviceId;
+        if (f.type === "authenticated" && f.mode === "resume") returning.push(f.deviceId);
+        if (completion && f.type === "frame-accepted" && f.messageId === completion) {
+          if (returning.length === 1) {
+            // Relay accepted A. Its ACK is in flight when the connection drops.
+            oldAck = raw.toString();
+            client.close({ code: 1011, reason: "interrupted completion" });
+            server.close();
+            return;
+          }
+          if (returning.length === 2 && oldAck) {
+            client.send(oldAck); // Real older ACK, while B waits for its own.
+            withheld.resolve(() => client.send(raw));
+            return;
+          }
+        }
+        client.send(raw);
+      });
+    });
+  });
+  const [host, successor, guest] = room.participants;
+  try {
+    await host.page.goto("about:blank");
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    await guest.page.goto("about:blank");
+    await successor.page.locator("#btn-catch").click();
+    await successor.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 20_000 });
+    await reopen(room, 2);
+    const release = await awaitBoundary(withheld.promise, "second completion ACK");
+    // An observed, later encrypted message fences processing of the old ACK.
+    await deliver(successor.page, guest.page, "message after the delayed ACK");
+    const input = guest.page.getByRole("textbox", { name: "Message", exact: true });
+    await input.fill("must not send before the current ACK");
+    await input.press("Enter");
+    await guest.page.getByText("The secure room is reconnecting. Try again in a moment.", { exact: true }).first().waitFor();
+    release();
+    await deliver(successor.page, guest.page, "message after the current ACK");
+    await deliver(guest.page, successor.page, "sent after the current ACK");
+    if (!joined || returning.length !== 2 || returning.some(id => id !== joined) ||
+        completions.length !== 2 || completions[0] === completions[1] ||
+        (await text(successor.page)).includes("must not send before the current ACK")) {
+      throw new Error("Second resume replaced the device or released an old send");
+    }
+    return { fault: "second-resume", sameDeviceResumes: 2, staleAckRefusedSend: true, currentAckReleasedSend: true };
+  } finally { await closeRoom(room); }
+}
+
+async function formerHostRemoval(browser: Browser) {
+  const beforeRemove = Promise.withResolvers<void>(), beforeResult = Promise.withResolvers<void>();
+  const peerRemove = Promise.withResolvers<() => void>(), allowPeerReplay = Promise.withResolvers<void>();
+  const newPolicy = Promise.withResolvers<void>(), peerReady = Promise.withResolvers<void>();
+  let hostId: string | undefined, joined: string | undefined, binding: string | undefined;
+  let removal: string | undefined, policy: string | undefined, closes = 0, reloads = 0;
+  const restored: string[] = [], replayedMarkers: string[] = [];
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    if (index === 0) {
+      page.on("websocket", s => s.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (f.type === "authenticated" && f.mode === "setup") hostId = f.deviceId;
+      }));
+      return;
+    }
+    await page.routeWebSocket("**", client => {
+      const server = client.connectToServer();
+      let paused = false;
+      let peerCompletion: string | undefined;
+      client.onMessage(raw => {
+        if (paused) return;
+        const f = JSON.parse(raw.toString());
+        if (index === 2 && f.kind === "resume-complete") peerCompletion = f.requestId;
+        if (index === 1 && f.kind === "relay") {
+          if (f.relayKind === "commit" && binding && f.retirementDeviceId === hostId &&
+              f.retirementAdmissionCommitMessageId === binding) removal = f.envelope.messageId;
+          if (f.authorityEvent?.content.type === "host-succession-policy") policy = f.envelope.messageId;
+        }
+        server.send(raw);
+      });
+      server.onMessage(raw => {
+        if (paused) return;
+        const f = JSON.parse(raw.toString());
+        if (index === 2) {
+          if (closes && f.kind === "secure-auth-challenge") {
+            void allowPeerReplay.promise.then(() => client.send(raw));
+            return;
+          }
+          if (!closes && removal && f.type === "relay" && f.frame?.envelope.messageId === removal) {
+            paused = true; // No later packet may overtake this held Remove.
+            peerRemove.resolve(() => {
+              closes++;
+              client.send(raw);
+              client.close({ code: 1011, reason: "close directly after Remove" });
+              server.close();
+            });
+            return;
+          }
+          if (peerCompletion && f.type === "frame-accepted" && f.messageId === peerCompletion) peerReady.resolve();
+        } else {
+          if (f.type === "authenticated" && f.mode === "join") joined = f.deviceId;
+          if (f.type === "authenticated" && f.mode === "resume") restored.push(f.deviceId);
+          if (hostId && f.type === "zombie-removal-required" && f.deviceId === hostId) {
+            binding ??= f.admissionCommitMessageId;
+            replayedMarkers.push(f.admissionCommitMessageId);
+          }
+          if (!reloads && binding && f.type === "order-granted") {
+            paused = true;
+            beforeRemove.resolve();
+            return; // Marker received; grant never reached the local MLS engine.
+          }
+          if (reloads === 1 && removal && f.type === "frame-accepted" && f.messageId === removal) {
+            paused = true;
+            beforeResult.resolve();
+            return; // Both sides stored the Remove; sender has not observed its result.
+          }
+          if (reloads === 2 && policy && f.type === "application-result" && f.result === "accepted" && f.messageId === policy) {
+            newPolicy.resolve();
+          }
+        }
+        client.send(raw);
+      });
+    });
+  });
+  const [host, successor, peer] = room.participants;
+  try {
+    await host.page.goto("about:blank");
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    await successor.page.locator("#btn-catch").click();
+    await awaitBoundary(beforeRemove.promise, "marker before Remove grant");
+    if (removal) throw new Error("Remove preceded the first interruption");
+    for (const boundary of [beforeRemove, beforeResult]) {
+      await awaitBoundary(boundary.promise, "successor reload checkpoint");
+      await successor.page.goto("about:blank");
+      reloads++;
+      await reopen(room, 1);
+    }
+    const sendThenClose = await awaitBoundary(peerRemove.promise, "former-host MLS Remove at peer");
+    await peer.page.getByText("Buddies (3)", { exact: true }).waitFor();
+    sendThenClose();
+    // The roster must change without a replacement socket supplying any replay.
+    await peer.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 15_000 });
+    allowPeerReplay.resolve();
+    await awaitBoundary(newPolicy.promise, "successor policy after exact cleanup");
+    await awaitBoundary(peerReady.promise, "peer completion after close");
+    await deliver(successor.page, peer.page, "after former-host removal");
+    await deliver(peer.page, successor.page, "peer retained the removal");
+    if (!joined || restored.length !== 2 || restored.some(id => id !== joined) ||
+        !binding || replayedMarkers.length < 2 || replayedMarkers.some(id => id !== binding)) {
+      throw new Error("Recovery changed successor identity or removal binding");
+    }
+    return { fault: "former-host-removal", successorReloads: reloads, sameDevice: true, exactMarkerReplayed: true,
+      withheldAcceptedRemoveResult: true, rosterChangedBeforePeerReplay: true, successorPolicyAccepted: true, deliveredBothDirections: true };
+  } catch (error) {
+    // Keep only wire categories and error codes, never invitations, keys, or payloads.
+    report.removalBoundary = { reloads, closes, resumes: restored.length, markers: replayedMarkers.length,
+      policySent: !!policy, participants: await Promise.all([successor, peer].map(({ page }) =>
+        page.evaluate(() => (globalThis as any).__pillowfortEvidenceFrames.map((f: any) =>
+          [f.direction, f.type ?? f.kind, f.relayKind, f.code].filter(Boolean).join(":"))))) };
+    throw error;
+  } finally { allowPeerReplay.resolve(); await closeRoom(room); }
+}
+
 async function peerStorageFailure(browser: Browser) {
   const room = await setupRoom(browser, 3);
   const [host, sender, failingPeer] = room.participants;
@@ -427,6 +619,8 @@ try {
       .map(fault => faultScenario(browser!, fault)));
     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
     if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
+    if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
+    if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;

@@ -640,6 +640,8 @@ export class SecureRoomController {
     this.challengeHandled = false;
     this.authenticated = false;
     this.authenticatedMode = null;
+    // A replacement socket needs its own completion, even when its replay ends at the same message.
+    this.resumeCompleteRequestId = null;
     this.sentDurableControls.clear();
     this.transientControlIds.clear();
     let socket: WebSocket;
@@ -1954,6 +1956,14 @@ export class SecureRoomController {
       this.maybeSchedulePostCompromiseUpdate(true);
       return;
     }
+    if (this.sentDurableControls.has(messageId) && engine.pendingRelayControls.some(control =>
+      control.kind === "retire-member" && control.requestId === messageId)) {
+      await engine.completeRelayControl({ kind: "retire-member-accepted", requestId: messageId });
+      this.sentDurableControls.delete(messageId);
+      await this.runAutomations();
+      this.pumpGrantQueue();
+      return;
+    }
     if (this.transientControlIds.delete(messageId)) return;
 
     const before = engine.pendingOutbox;
@@ -2240,18 +2250,11 @@ export class SecureRoomController {
     for (;;) {
       const retirement = this.currentRetirementBarrier();
       if (!retirement || relayMembers.has(retirement.deviceId) || rosterIds.has(retirement.deviceId)) break;
-      engine.resolveRetirementBarrier(retirement);
-      this.consumeRetirementBarrier(retirement);
+      if (!this.reconcileRetiredTarget(retirement)) break;
     }
-    for (const control of [...engine.pendingRelayControls]) {
-      if (control.kind !== "retire-member" || relayMembers.has(control.deviceId) || rosterIds.has(control.deviceId)) continue;
-      if (engine.pendingOutbox.some((entry) => entry.messageId === control.commitMessageId)) {
-        await engine.acknowledgeOutbound(control.commitMessageId);
-        this.releaseMessageIntent(control.commitMessageId);
-      }
-      await engine.completeRelayControl({ kind: "member-lifecycle", deviceId: control.deviceId, status: "retired" });
-      this.sentDurableControls.delete(control.requestId);
-    }
+    // Absence proves neither acceptance of an outstanding Remove nor receipt of
+    // its retire-member control: succession fences the old host before either.
+    // After replay, retry the durable work until its exact request is accepted.
 
     this.roomStateSnapshotReceived = true;
     this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
@@ -2411,6 +2414,15 @@ export class SecureRoomController {
     );
   }
 
+  private reconcileRetiredTarget(barrier: SecureRoomRetirementBarrierV4): boolean {
+    const engine = this.requireEngine();
+    // A locally committed Remove still needs its original public binding on retry.
+    if (engine.pendingOutbox.some(entry => entry.kind === "commit" && this.retirementBarrierForCommit(entry.messageId))) return false;
+    engine.resolveRetirementBarrier(barrier);
+    this.consumeRetirementBarrier(barrier);
+    return true;
+  }
+
   private retirementBarrierForCommit(messageId: string): SecureRoomRetirementBarrierV4 | null {
     const current = this.currentRetirementBarrier();
     if (!current) return null;
@@ -2487,14 +2499,7 @@ export class SecureRoomController {
     if (status === "retired") {
       const retirement = this.currentRetirementBarrier();
       if (retirement?.deviceId === deviceId) {
-        engine.resolveRetirementBarrier(retirement);
-        this.consumeRetirementBarrier(retirement);
-      }
-      const control = engine.pendingRelayControls.find((candidate) =>
-        candidate.kind === "retire-member" && candidate.deviceId === deviceId);
-      if (control?.kind === "retire-member") {
-        await engine.completeRelayControl({ kind: "member-lifecycle", deviceId, status });
-        this.sentDurableControls.delete(control.requestId);
+        this.reconcileRetiredTarget(retirement);
       }
     }
     if (admissionResolved) {
@@ -2556,7 +2561,9 @@ export class SecureRoomController {
   }
 
   private hasBlockingOutbox(): boolean {
-    const pendingOutbox = this.requireEngine().pendingOutbox;
+    const engine = this.requireEngine();
+    if (engine.hasPendingRetirement) return true;
+    const pendingOutbox = engine.pendingOutbox;
     return pendingOutbox.some((entry) => {
       if (entry.kind === "application" || entry.kind === "commit") return true;
       if (entry.welcomeMessageId === null) return !entry.commitAcknowledged;
