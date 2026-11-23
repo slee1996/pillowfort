@@ -139,5 +139,14 @@
     "releaseSource": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
     "appVersion": "6c27be97-00d0-4e2b-b69c-4d596f50989e",
     "hostedVersion": "5536563f-1c0b-402b-908e-780ae4200345"
+  },
+  "edition13": {
+    "record": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json",
+    "runtimePr": "https://github.com/slee1996/pillowfort/pull/29",
+    "releaseSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+    "appVersion": "9c5afd21-3dc5-465d-942a-a05bcbe9436d",
+    "hostedVersion": "5dcddfba-ec56-428e-86c1-38516e404261",
+    "publicAssetSha256Verified": true,
+    "productionFaultInjection": false
   }
 }

@@ -1,6 +1,6 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
+This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. Separate inductive proofs cover the four abstract safety machines, not all implementation behavior or the cryptography.
 
 ## A. Profile and interoperability
 
@@ -265,16 +265,18 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 
 ### H.0 Current release qualification
 
-The [edition 12 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) distinguishes the release candidate `cbd7977df9df29bb6e80baf34a3f32b9f4dc4708` from the previously deployed browser used in the paired comparison. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
+The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json) pins runtime `ccc195d8` and the separately checked models. The [paired detector trials](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json) retain their original measurements and revisions. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
 
 ```sh
 for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage; do
   node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
 done
-for scenario in peer-storage full-room lost-guest-keys; do
+for scenario in second-resume succession-during-leave peer-storage full-room lost-guest-keys; do
   bun scripts/protocol-browser-evidence.ts --mode faults --fault "$scenario" --output "$OUT/$scenario" || exit 1
 done
 python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"
+python3 scripts/check-protocol-proofs.py --tlapm /path/to/tlapm --output "$OUT/induction"
+node scripts/check-protocol-guards.mjs "$OUT/guards" /path/to/z3
 ```
 
 The idle cuts evict a local Worker immediately after deletion or after its first of two notifications. The lost-keys case erases a local guest database, then uses the real admission flow. No production credential is needed.

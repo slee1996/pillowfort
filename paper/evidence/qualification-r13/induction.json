@@ -1,0 +1,67 @@
+{
+  "proofManager": "961e909",
+  "strict": true,
+  "reusedFingerprints": false,
+  "modules": [
+    {
+      "module": "M1Delivery",
+      "obligations": 87,
+      "source": {
+        "verification/M1Delivery.tla": "751725a371c62849ac7a8caa2f5e8d6af429bb3f100a0ad57e5ee57dc54f1e28",
+        "verification/M1DeliveryProof.tla": "77ade50c38ec9b4b6aabc90834f545639db0214a440fe05a806d3406d6909e86"
+      }
+    },
+    {
+      "module": "M2Admission",
+      "obligations": 54,
+      "source": {
+        "verification/M2Admission.tla": "f5f2ce3fc5523a1b54d5e088064bc91098cc06b9ba800c27f014a0e6d92e7d86",
+        "verification/M2AdmissionProof.tla": "9675a33f07f37bfa68d142709cb27b0848b0e370ac9f753a2f910979e192ea7f"
+      }
+    },
+    {
+      "module": "M3Resume",
+      "obligations": 45,
+      "source": {
+        "verification/M3Resume.tla": "42947fbaf958f096e58ba80b88b3bdd109916bfd9471d7dea3fb5a293c3f5b52",
+        "verification/M3ResumeProof.tla": "9c293cbc3651910fa59bb6bd34a8fffe8a5acca336665a8e8f1fbf1b7988af9f"
+      }
+    },
+    {
+      "module": "M4Succession",
+      "obligations": 222,
+      "source": {
+        "verification/M4Succession.tla": "1ceb69b8bb610acae8e15d8ea706d548fb9f98944d1797eb39a55b043c77b9ae",
+        "verification/M4SuccessionProof.tla": "7ad090dafa26b05905740ec2cf469f0926d87e98506c59a147d09c3af604112e"
+      }
+    },
+    {
+      "module": "Coordination",
+      "obligations": 78,
+      "source": {
+        "verification/Coordination.tla": "070d2a66b912205e9ca41ec068601342a16ee613c17fc171fde958966df0013d",
+        "verification/CoordinationProof.tla": "be7aa5ac283bdbe3e30a9dd621f20e41a2a18aeac7c85cd65721f490069adc9e"
+      }
+    }
+  ],
+  "theorem": "Init /\\ [][Next]_vars => []Safety for the intact modeled transitions, for every natural Capacity and MaxOps.",
+  "scope": "Arbitrary trace length and parameter sizes, not arbitrary new identities or sockets. The models retain three succession identities, their abstract writes and their specified replay phases. Safety, not liveness or whole-program refinement.",
+  "solver": "Z3 4.13.3 (native macOS arm64); TLAPS propositional temporal logic backend for the stuttering theorem.",
+  "solverArchiveOrigin": "https://github.com/tlaplus/tlapm/releases/tag/1.6.0-pre",
+  "proofManagerArchiveSha256": {
+    "darwinArm64": "1e8cc2fa6be352528d52611e1b77ad004e6ccd7f1264b119df17599179601e26",
+    "linuxX86_64": "79c3d888352e96afd5e00aea623f5ce9dce2ee6d7bafa82ea8d2bc73d936211a"
+  },
+  "verificationSource": "f5404890bfc142fdb513d6b952595c49f063a6e4",
+  "linuxReproduction": {
+    "source": "f5404890bfc142fdb513d6b952595c49f063a6e4",
+    "run": "https://github.com/slee1996/pillowfort/actions/runs/45268776729",
+    "job": "https://github.com/slee1996/pillowfort/actions/runs/45268776729/job/138022672087",
+    "conclusion": "success",
+    "runner": "GitHub-hosted ubuntu-26.04 x86_64",
+    "tlapmAssetId": 772760828,
+    "tlapmArchiveSha256": "79c3d888352e96afd5e00aea623f5ce9dce2ee6d7bafa82ea8d2bc73d936211a",
+    "z3WheelSha256": "794843e4946ade1561e40a75ffc1163b45d36b493fd6cc269ad1d6a65bddb8e5",
+    "agreement": "Downloaded CI artifacts matched the macOS run on each guard verdict, SMT formula digest, parsed source digest and all five module counts and source digests."
+  }
+}

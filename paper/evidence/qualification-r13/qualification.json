@@ -1,0 +1,250 @@
+{
+  "edition": 13,
+  "protocol": "v4 / pf-v4-cs1",
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "runtimePr": "https://github.com/slee1996/pillowfort/pull/29",
+  "runtimeMerge": "07d9040ccb8329d56c20a2a2663924265cc2704f",
+  "verificationSource": "f5404890bfc142fdb513d6b952595c49f063a6e4",
+  "verificationPr": "https://github.com/slee1996/pillowfort/pull/30",
+  "evidenceTag": "protocol-v4-cs1-evidence-2026-11-23-r13",
+  "previous": {
+    "tag": "protocol-v4-cs1-evidence-2026-11-23-r12",
+    "qualification": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json"
+  },
+  "sourceArchives": [
+    {
+      "file": "sources/runtime-ccc195d8c0.tar.gz",
+      "sha256": "2ce38e0d3ae807124d136a1b1fe8482b7b34464f5231f7b201b88827bd5ea482",
+      "revision": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+      "contents": "Complete tracked runtime and test tree, omitting paper/."
+    },
+    {
+      "file": "sources/method-f5404890bf.tar.gz",
+      "sha256": "3a5937327e2a0126c76e9190cd11d7a5db3e3b8772dbdc3583022e0b0d293726",
+      "revision": "f5404890bfc142fdb513d6b952595c49f063a6e4",
+      "contents": "Updated verification/ tree, two new proof runners and the pinned CI recipe. Extract over the runtime tree as shown below."
+    }
+  ],
+  "measurementRevisions": {
+    "currentRuntime": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+    "redBeforeRepair": "1ea3a4fed6783d273117811059922842512939f8",
+    "inductionAndGuardWorkflow": "f5404890bfc142fdb513d6b952595c49f063a6e4",
+    "detectorTrials": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json"
+  },
+  "gates": {
+    "runtimeRelease": {
+      "applicationGateTestsPassed": 594,
+      "applicationGateTestsFailed": 0,
+      "hostedTestsPassed": 14,
+      "hostedTestsFailed": 0,
+      "checks": [
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010786367",
+          "name": "check",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010785260",
+          "name": "protocol-models",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010785852",
+          "name": "hosted-mcp",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010786125",
+          "name": "dependency-audit",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010733058",
+          "name": "check",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010732598",
+          "name": "protocol-models",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010733150",
+          "name": "hosted-mcp",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        },
+        {
+          "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010732822",
+          "name": "dependency-audit",
+          "state": "SUCCESS",
+          "workflow": "Release check"
+        }
+      ],
+      "otherModes": [
+        "bounded TLC configurations including mutations and witnesses",
+        "native RFC 9180 suite",
+        "browser, workerd, game, release and dependency gates; see linked CI steps"
+      ]
+    },
+    "newBrowserFaults": [
+      {
+        "fault": "second-resume",
+        "sameDeviceResumes": 2,
+        "staleAckRefusedSend": true,
+        "draftRetainedBeforeCurrentAck": true,
+        "currentAckReleasedSend": true,
+        "peerCopiesAfterExplicitResubmission": 1
+      },
+      {
+        "fault": "succession-during-leave",
+        "removalUnsentAtHostLoss": true,
+        "signedChoices": [
+          "1:reject",
+          "2:accept"
+        ],
+        "survivingMembers": 2,
+        "ordinaryChatBothDirections": true
+      }
+    ],
+    "crossBrowser": [
+      {
+        "host": "chromium",
+        "guest": "firefox",
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host admits from a fresh member-exported link",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "firefox",
+        "guest": "webkit",
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "webkit",
+        "guest": "chromium",
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      }
+    ],
+    "induction": {
+      "strict": true,
+      "reusedFingerprints": false,
+      "obligations": 486,
+      "modules": {
+        "M1Delivery": 87,
+        "M2Admission": 54,
+        "M3Resume": 45,
+        "M4Succession": 222,
+        "Coordination": 78
+      },
+      "theorem": "Init /\\ [][Next]_vars => []Safety for the intact modeled transitions, for every natural Capacity and MaxOps.",
+      "rawLogsInArchive": "evidence/qualification-r13/logs/",
+      "secondEnvironment": "https://github.com/slee1996/pillowfort/actions/runs/45268776729"
+    },
+    "sourceDecisions": {
+      "equivalences": 11,
+      "positiveAndNegativeWitnesses": 22,
+      "smtFilesInArchive": "evidence/qualification-r13/guards/"
+    },
+    "deployment": {
+      "bothWorkersAt100Percent": true,
+      "publicAssetsCompared": 3,
+      "privateBrowserMilestones": 10,
+      "hostedMilestones": 14,
+      "productionFaultInjection": false
+    }
+  },
+  "records": {
+    "deployment.json": "82971b983d2f377a7a2585e49e7a7d3ffd700202cc777b8edbcf77fd8cf49d1c",
+    "guards.json": "cd5b437067d3be5cb20625b1e96d4446afc91d9f3d66a16eb40931b4c40a5e6c",
+    "induction.json": "75da46d48a82214c928235644e8b23efa1e91ba4ef8762405ba37bd3b3456a9e",
+    "participants.json": "022c4e19de147b92af00d057509cb1d7de4c4987bd7ca4b318cd68f114ca1c83"
+  },
+  "scopeAndRemainingLimits": [
+    "The finite and inductive results concern modeled transitions, abstract cryptography and atomic durable writes. Induction removes trace-length and natural capacity/operation bounds, not the three succession identities or the specified socket/replay state shapes. No whole-program TypeScript refinement or unconditional liveness theorem.",
+    "The eleven TypeScript guard equivalences are for parsed inputs under the stated primitive assumptions. They do not prove that every caller validates its inputs, that all mutation sites use those guards, or that the primitives are secure.",
+    "Two new isolated browser failures have demonstrated causes and fixes. The earlier uninstrumented production timeout cannot retrospectively be attributed to either. Ordinary private-room actions were exercised in production; no production fault or capacity experiment.",
+    "The 24 edition-12 trials test specified interruptions on one machine and are not a population false-offer rate, WAN benchmark, physical laptop sleep/wake measurement or promise about a particular idle agent harness. A malicious relay can delay, omit or initiate an unnecessary offer; it cannot produce a member’s consent.",
+    "No independent security audit, crash model of all browser/OS/storage implementations, or proof about compromised endpoints, erasure or actual human behavior."
+  ],
+  "reproduce": {
+    "archive": "From an empty directory: extract each listed source archive there in the order above using tar -xzf \"$archive\" --strip-components=1. The second archive only overlays verification assets. Run the following commands from that directory. Use separate output directories for trials.",
+    "install": [
+      "npm ci",
+      "npm --prefix client ci",
+      "npm --prefix hosted-mcp ci",
+      "npx playwright install chromium firefox webkit",
+      "NODE_ENV=production npm run build"
+    ],
+    "runtime": [
+      "PILLOWFORT_RELAY_CONFORMANCE_REPORT=\"$OUT/relay.json\" npm run check",
+      "npm --prefix hosted-mcp run check",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault second-resume --output \"$OUT/second-resume\"",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault succession-during-leave --output \"$OUT/succession-during-leave\"",
+      "bun verification/app/browsers.ts \"$OUT/browser.json\" all retoss"
+    ],
+    "methods": [
+      "Use the exact TLAPM release and Z3 4.13.3 checksums in .github/workflows/protocol-induction.yml.",
+      "python3 scripts/check-protocol-proofs.py --tlapm \"$TLAPM\" --output \"$OUT/induction\"",
+      "node scripts/check-protocol-guards.mjs \"$OUT/guards\" \"$Z3\"",
+      "python3 scripts/check-protocol-models.py --jar \"$TLA_JAR\" --output \"$OUT/models\""
+    ],
+    "timingStudy": "Use the edition-12 source and browser assets identified in evidence/qualification-r12/qualification.json, not the current browser. Read its trial definitions and reporting clock before comparing times.",
+    "publicServices": "Live evidence is in deployment.json; laboratory checks require no production credentials. Do not inject faults into public rooms."
+  },
+  "pdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 12,
+      "pageNumbers": true,
+      "publicLinks": 61
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 14,
+      "pageNumbers": true,
+      "publicLinks": 13
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 8,
+      "pageNumbers": true,
+      "publicLinks": 14
+    }
+  }
+}
