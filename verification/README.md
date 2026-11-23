@@ -27,6 +27,17 @@ The runner checks the JAR SHA-256 before execution. It writes source copies, exa
 
 The runner enumerates all normal, mutant and witness profiles and rejects an unexpected result in any of them. `--case composed-full-finite` selects the full finite product. Disabled TLC deadlock checking is not a deadlock-freedom result. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
 
+### Inductive safety and production decisions
+
+The four `*Proof.tla` component modules establish their invariants by induction on the actual M1–M4 model actions. `CoordinationProof.tla` projects each product step onto a component action or stutter and proves the send interlock. `Capacity` and `MaxOps` may be any natural numbers; no trace length is fixed. The same three succession identities, abstract persistence and modeled socket roles remain. No liveness or whole-program refinement theorem follows.
+
+Use TLAPM [`961e909`](https://github.com/tlaplus/tlapm/tree/961e909fa3aca1fba412ee0908c5848b808e4b24) with native Z3 4.13.3. The [verification workflow](../.github/workflows/protocol-induction.yml) pins their Linux binaries by digest. The checker verifies **all five** modules without reusing fingerprints; proving only the product would assume its imported component theorems. `node scripts/check-protocol-guards.mjs /tmp/pf-guards` separately reads the shipped TypeScript expressions and requires both satisfiable outcomes and unsatisfiable disagreement with the stated decision. It abstracts signature and membership predicates, not their implementation. It fails on an unknown expression.
+
+```sh
+python3 scripts/check-protocol-proofs.py --tlapm /path/to/tlapm/bin/tlapm --output /tmp/pf-induction
+node scripts/check-protocol-guards.mjs /tmp/pf-guards /path/to/z3
+```
+
 ### Implementation conformance and the host-loss tradeoff
 
 `PILLOWFORT_RELAY_CONFORMANCE_REPORT=/tmp/relay.json bun test ./test/secure-relay-v4.test.ts` applies independent pre/postconditions to every transition exercised by the relay suite, not an alternative implementation. All wire families plus create, disconnect and clock advancement must be represented. It checks retained outcomes, grants, immutable bindings, exact admission and resume, the two transfer paths, replayed historical removals and exact FIFO head completion. The output contains counts, never credentials. Coverage of every family is not coverage of every possible input or schedule.
@@ -74,7 +85,7 @@ The offer test evicts the production Durable Object between commit and dispatch 
 
 ## Bounds and exclusions
 
-Standalone models use at most two operation/KeyPackage tokens, backlog capacities up to two and three succession identities. Time is abstracted into relevant deadline regions. The composition checks bounded prefixes; it is not a refinement proof of the TypeScript implementation. Cryptographic correctness, malicious endpoint equivocation, full host/epoch view agreement, all historical-marker identities, repeated arbitrary reconnects, deadlock freedom, fairness, unbounded liveness and physical storage durability remain outside this analysis. The coverage matrix marks those exclusions rather than treating every property in the broader plan as proved.
+Standalone models use at most two operation/KeyPackage tokens, backlog capacities up to two and three succession identities. Time is abstracted into relevant deadline regions. TLC checks bounded prefixes and one complete finite product. The induction covers all trace lengths at arbitrary natural operation and capacity bounds for those same component relations; it is not a refinement proof of the TypeScript implementation. Cryptographic correctness, malicious endpoint equivocation, full host/epoch view agreement, all historical-marker identities, repeated arbitrary reconnects, deadlock freedom, fairness, unbounded liveness and physical storage durability remain outside this analysis. The coverage matrix marks those exclusions rather than treating every property in the broader plan as proved.
 
 The `guest-backpressure` cut intercepts one ordinary guest ACK on loopback, not a flood. It emulates the relay’s limit response and close, waits for authenticated recovery, and checks that the exact original device can exchange fresh chat without displaying the replayed delivery twice. It is never enabled in production.
 

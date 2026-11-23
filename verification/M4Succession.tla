@@ -14,10 +14,11 @@ Available == ~s.retired /\ s.host \in s.connected /\ ~s.removal /\ s.offered = 0
 EligibleAt(x) == IF x.policyHost = x.host THEN (x.policy \cap x.connected) \ x.attempted ELSE {}
 \* Normalize inside the committing transition; there is no schedulable gap in
 \* which the old host could resume between loss, fencing, and a prompt offer.
+First(eligible) == CHOOSE v \in eligible : \A y \in eligible : v <= y
 Select(x) == LET eligible == EligibleAt(x) IN
              IF x.offered # 0 THEN x
              ELSE IF eligible = {} THEN [x EXCEPT !.retired = TRUE, !.connected = {}]
-             ELSE LET d == CHOOSE v \in eligible : \A y \in eligible : v <= y IN
+             ELSE LET d == First(eligible) IN
                   [x EXCEPT !.offered = d, !.attempted = @ \cup {d},
                             !.choice = "none", !.signedBy = 0, !.storedChoice = FALSE]
 AtLoss(x) == IF x.host \notin x.connected /\ x.host \notin x.fenced /\ EligibleAt(x) # {}
@@ -37,16 +38,17 @@ Choose(c, d) == /\ ~s.retired /\ s.offered # 0 /\ s.choice = "none"
                 /\ (d = s.offered \/ Broken = "Target")
                 /\ d \in s.connected
                 /\ s' = [s EXCEPT !.choice = c, !.signedBy = d, !.storedChoice = TRUE]
+AfterConsent(x) == [x EXCEPT !.host = x.signedBy, !.consent = x.consent \cup {x.signedBy},
+                                       !.badTarget = x.badTarget \/ (x.signedBy # x.offered),
+                                       !.policyHost = 0, !.policy = {}, !.offered = 0,
+                                       !.choice = "none", !.removal = TRUE,
+                                       !.removeStored = FALSE, !.removeAcked = FALSE,
+                                       !.grace = 0, !.switches = x.switches + 1]
 CommitAcceptance == /\ ~s.retired /\ s.choice = "accept" /\ s.storedChoice
                     /\ s.offered # 0 /\ s.switches < MaxOps
                     /\ (s.signedBy = s.offered \/ Broken = "Target")
                     /\ s.signedBy \in s.connected
-                    /\ s' = [s EXCEPT !.host = s.signedBy, !.consent = @ \cup {s.signedBy},
-                                       !.badTarget = @ \/ (s.signedBy # s.offered),
-                                       !.policyHost = 0, !.policy = {}, !.offered = 0,
-                                       !.choice = "none", !.removal = TRUE,
-                                       !.removeStored = FALSE, !.removeAcked = FALSE,
-                                       !.grace = 0, !.switches = @ + 1]
+                    /\ s' = AfterConsent(s)
 Refuse == /\ ~s.retired /\ s.offered # 0 /\ s.choice = "reject"
           /\ s' = Select([s EXCEPT !.offered = 0, !.choice = "none"])
 ExpireOffer == /\ ~s.retired /\ s.offered # 0
