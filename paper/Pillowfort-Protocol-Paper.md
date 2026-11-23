@@ -1,16 +1,18 @@
 # Pillowfort: An MLS-Based Protocol for Ephemeral Rooms
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 4 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 5 · 22 November 2026</div>
 
 ## Abstract {.abstract-heading}
 
-Joining a Pillowfort room does not oblige a participant to host it. If the host disconnects, its signed policy lets the relay offer the role, not assign it. Authority changes only when the nominated device signs an acceptance and the relay commits the transfer. If every eligible member declines, the room closes. If a successor disappears before the relay accepts that successor’s own policy, the room closes after the disconnect grace period rather than reuse the former host’s delegation. This choice gives consent priority over room availability. We describe how temporary rooms for people and software agents enforce it over Messaging Layer Security (MLS), and test how members recover when a handoff is interrupted.
+Pillowfort is a protocol for temporary, end-to-end encrypted rooms where people and software agents can chat, draw, and play games. A relay server carries encrypted messages between devices. One participant’s device serves as host: it approves requests to join and automatically checks actions such as game moves against the room’s rules. When the host disconnects mid-game, even players who remain online must wait for a host to validate the next move.
+
+If the host does not return, the relay may offer the role to a member named in the host’s signed policy. Taking over is voluntary: it requires that member’s signed acceptance. If no eligible member accepts, the room closes. A new host sets its own policy for future offers. If it is lost before that policy takes effect, the room closes rather than reuse the previous host’s policy. We describe how Pillowfort enforces these rules over Messaging Layer Security (MLS) and test recovery from interrupted handoffs.
 
 **Keywords:** group messaging; MLS; authenticated state machines; crash recovery; admission control.
 
 ## 1. Scope and design objectives
 
-MLS protects group traffic, but does not decide which device may admit a member, authorize a room action, or coordinate the next operation after a failure [1,2]. Pillowfort assigns those decisions to an authenticated room state machine.
+A move can come from an authenticated player and still be out of turn. Messaging Layer Security (MLS) protects group traffic [1,2]; it does not decide whether a move is legal. Pillowfort’s room state machine makes that decision and distinguishes identity from authority in two other cases: admitting a new device and choosing a new host.
 
 The protocol targets small, temporary rooms. The relay orders operations and decides when disconnect deadlines have passed. Peers verify signed authority; they cannot use a signature to establish that a host was actually offline. The protocol neither elects a host by quorum nor supplies an externally witnessed transcript.
 
@@ -169,7 +171,7 @@ These mechanisms do not provide an offline inbox, exactly-once agent actions, or
 
 : **Table 2.** Authority and recovery claims. In the shutdown row, the revision is the corrected production build; the earlier failure is a separate observation.
 
-At `1ba68f23`, the five protocol suites passed 90 tests (768 assertions) and the real-MLS engine suite passed 26 (310 assertions). TLC found no invariant violation in 11 finite configurations; all 11 deliberately weakened variants produced counterexamples. Two traces reached successful recovery with the guards intact. The largest composition explored 1,202,973 states at a 16-step bound. These checks do not establish implementation refinement, unbounded progress, or cryptographic security. The [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Verification-Matrix.md) gives the property-level results.
+At `1ba68f23`, the five protocol suites passed 90 tests (768 assertions) and the real-MLS engine suite passed 26 (310 assertions). TLC found no invariant violation in 11 finite configurations; all 11 deliberately weakened variants produced counterexamples. Two traces reached successful recovery with the guards intact. The largest composition explored 1,202,973 states at a 16-step bound. These checks do not establish implementation refinement, unbounded progress, or cryptographic security. The [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md) gives the property-level results.
 
 ### 10.2 Light-load latency
 
@@ -202,8 +204,8 @@ Pillowfort composes MLS with explicit admission, context-bound ordering, persist
 8. Pillowfort. *Agent Security and Custody*. [Pinned source](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/agents/security.md).
 9. Model Context Protocol. *Subscriptions*, protocol revision 2026-07-28. [Specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions.md).
 10. Model Context Protocol. *Tasks Extension*. [Overview](https://modelcontextprotocol.io/extensions/tasks/overview.md).
-11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Technical-Appendix.pdf).
+11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Technical-Appendix.pdf).
 12. Matrix. *Megolm Group Ratchet*, specification v1.19. [Specification](https://spec.matrix.org/v1.19/olm-megolm/megolm/).
 13. Signal. *The Signal Private Group System*. [Design](https://signal.org/blog/signal-private-group-system/).
 
-**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).
+**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).

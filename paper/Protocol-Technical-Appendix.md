@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 4 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 5 · 22 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Tested implementation:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
+**Tested implementation:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
 
 ## A. Profile and interoperability
 

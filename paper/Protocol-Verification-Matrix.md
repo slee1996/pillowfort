@@ -1,4 +1,4 @@
-# Protocol v4-CS1 verification matrix — evidence edition 4
+# Protocol v4-CS1 verification matrix — evidence edition 5
 
 Current implementation: [`1ba68f236163`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). This matrix maps the plan to evidence, not complete verification. The manifest identifies each execution and its revision. Earlier latency, browser faults and the production shutdown check retain their original attribution.
 
