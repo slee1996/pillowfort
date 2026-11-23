@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Formal State Machine Analysis — Evidence edition 7</title>
+  <title>Pillowfort: Bounded State-Machine Analysis — Evidence edition
+8</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -27,15 +28,16 @@
 <h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
 State-Machine Analysis</h1>
 <p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 7 · 22 November 2026</em></p>
-<p><strong>Status:</strong> TLC 2.19 checked eleven finite safety
-configurations of the models at <code>1ba68f236163</code>. Eleven
-deliberate guard weakenings produced invariant counterexamples. Two
-separate probes, with the safeguards intact, reached successful guest
-recovery. These are bounded coordination results, not a cryptographic
-proof, implementation refinement, deadlock-freedom result, or guarantee
-of eventual progress. The companion description is <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-Paper.pdf">Pillowfort:
+edition 8 · 22 November 2026</em></p>
+<p><strong>Status:</strong> TLC 2.19 checked 12 finite safety
+configurations at <a
+href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a>.
+All 15 deliberately weakened variants violated their expected invariant.
+Six unweakened probes reached their recovery or race outcome. These
+results are not a cryptographic proof, TypeScript refinement,
+deadlock-freedom result, or guarantee of eventual progress. The
+companion description is <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-Paper.pdf">Pillowfort:
 An MLS-Based Protocol for Ephemeral Rooms</a>.</p>
 <h2 id="executed-analysis">Executed analysis</h2>
 <table>
@@ -64,18 +66,23 @@ An MLS-Based Protocol for Ephemeral Rooms</a>.</p>
 </tr>
 <tr>
 <td>M4 succession</td>
-<td style="text-align: right;">991</td>
-<td style="text-align: right;">362</td>
+<td style="text-align: right;">499</td>
+<td style="text-align: right;">201</td>
 </tr>
 <tr>
 <td>Guest resume during handoff</td>
-<td style="text-align: right;">627</td>
-<td style="text-align: right;">268</td>
+<td style="text-align: right;">492</td>
+<td style="text-align: right;">214</td>
 </tr>
 <tr>
 <td>Two guest replacement sockets after handoff</td>
 <td style="text-align: right;">41</td>
 <td style="text-align: right;">38</td>
+</tr>
+<tr>
+<td>Racing resumes and replay of an undelivered offer</td>
+<td style="text-align: right;">601</td>
+<td style="text-align: right;">370</td>
 </tr>
 <tr>
 <td>Composed M1, 12 steps</td>
@@ -94,13 +101,13 @@ An MLS-Based Protocol for Ephemeral Rooms</a>.</p>
 </tr>
 <tr>
 <td>Composed M1–M4, 12 steps</td>
-<td style="text-align: right;">530,008</td>
-<td style="text-align: right;">172,897</td>
+<td style="text-align: right;">1,027,767</td>
+<td style="text-align: right;">362,690</td>
 </tr>
 <tr>
 <td>Composed M1–M4, backlog 2, 16 steps</td>
-<td style="text-align: right;">3,968,326</td>
-<td style="text-align: right;">1,202,973</td>
+<td style="text-align: right;">7,225,413</td>
+<td style="text-align: right;">2,292,582</td>
 </tr>
 </tbody>
 </table>
@@ -115,20 +122,23 @@ snapshot reconciliation and admission interlocks. The handoff model adds
 two: accepting a snapshot without signed authority, and accepting an
 obsolete backlog end. The two-socket model adds two more: accepting a
 completion from the old socket and releasing the guest on the old ACK.
-Each produced the expected counterexample.</p>
-<p>The two positive traces address a different question: can the
-unmodified model actually recover? One reaches a guest ready under the
-successor after removal; the other reaches a ready second connection
-with the first ACK still in flight. Neither trace establishes that every
-execution terminates. The largest composition excludes these focused
-models; its state count is not a product of theirs.</p>
+Four further mutations delay the first offer, accept a stale socket
+close, nominate a guest before it completes replay, or renew the
+deadline during restart. Each produced its expected counterexample.</p>
+<p>Reachability probes answer a different question: can the unmodified
+model make progress? Two traces recover a guest under a successor or on
+its second connection. Four more reach host-first recovery despite a
+stale close, guest-first nomination without promotion, acceptance after
+replay, and refusal followed by another candidate’s acceptance. None
+establishes that all executions terminate. Focused models are not
+multiplied into the composed state count.</p>
 <p>Exact models, configurations, tool identity, commands and traces are
-in <code>evidence/models/</code> in the <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">public
+in <code>evidence/qualification-r8/models/</code> in the <a
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">public
 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the
@@ -405,13 +415,16 @@ membership alone is insufficient. Unavailable candidates are skipped.
 Refusal or expiry advances to the next eligible, unattempted candidate.
 Every member may refuse; universal refusal collapses the fort. Delivery
 acknowledgment is not acceptance.</p>
-<p>The <a
-href="https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad">immediate-offer
-relay</a> uses the 120-second recovery window only if nobody can receive
-an offer. A guest finishing authenticated resume during that window
-triggers an offer if the host is still absent. The TLC counts above
-describe the earlier model: its separate grace, fence and offer actions
-are not evidence of a timing bound.</p>
+<p><a
+href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a>
+retains the 120-second recovery window only while no candidate is
+eligible. <code>M4Succession</code> now fences and persists the first
+offer atomically when the owner disappears or an eligible guest
+completes replay first. <code>ReconnectRace</code> distinguishes the old
+socket from its replacement, guest replay from activation, and stored
+offers from delivery and choice. The deadline belongs to the stored
+offer, not to the restarted instance. The model has no real-time failure
+detector.</p>
 <p><strong>Actions:</strong> publish/replace signed policy; offer a
 manual target; disconnect/resume host; expire unclaimed recovery; fence
 the absent identity; select the earliest eligible candidate;

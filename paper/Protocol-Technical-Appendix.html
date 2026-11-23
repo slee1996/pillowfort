@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Protocol Technical Appendix — Evidence edition 7</title>
+  <title>Pillowfort v4-CS1: Wire Contract and Failure Semantics —
+Evidence edition 8</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -92,7 +93,7 @@
 id="pillowfort-v4-cs1-wire-contract-and-failure-semantics">Pillowfort
 v4-CS1: Wire Contract and Failure Semantics</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 7 · 22 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 8 · 22 November 2026
 </div>
 <p>This appendix specifies the consent-based succession profile of
 protocol v4. It separates required wire checks, endpoint persistence,
@@ -101,16 +102,14 @@ exact source, executable M1–M4 models, configurations, counterexamples
 for deliberately weakened models, implementation tests, and browser
 measurements. None is an independent security audit or an unbounded
 proof.</p>
-<p><strong>Immediate-offer relay:</strong> <a
-href="https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad"><code>0df3215d9813</code></a>.
-<strong>Earlier recovery and model evidence:</strong> <a
-href="https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b"><code>1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b</code></a>.
+<p><strong>Tested implementation and models:</strong> <a
+href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a>.
 The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>, <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>, and <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
 evidence bundle</a> identify the checked scope. Retained light-load
 latency and browser-fault records identify their earlier measured
 revision separately.</p>
@@ -677,6 +676,15 @@ device</td>
 delivery</td>
 </tr>
 <tr>
+<td>Restart after offer commit, before dispatch</td>
+<td>Original capability unexpired; its delivery still unacknowledged on
+the owning connection</td>
+<td>Persist a one-shot delivery check with the offer. At four seconds, a
+still-unacknowledged owner is asked to reconnect; authenticated replay
+delivers the whole prefix with the original deadline. A healthy delivery
+does not wait four seconds</td>
+</tr>
+<tr>
 <td>Authorization delivered</td>
 <td>Exact policy/capability/offer binding</td>
 <td>Candidate stores before delivery ACK; show catch-or-duck choice, not
@@ -1025,14 +1033,47 @@ no-recipient recovery window. The browser check closes the host,
 observes the first offer, declines it, accepts the next offer, and
 exchanges encrypted chat. Its duration is one observation, not a
 deadline for detecting a broken connection. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json">local
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/local/browser-results.json">local
 result</a> and the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json">production
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/production/browser-results.json">production
 result</a> record the environment and signed choices. To reconstruct
 this revision offline, unpack the baseline source archive and run
 <code>git apply</code> with
 <code>sources/prompt-succession-0df3215d9813.patch</code> from the
 bundle.</p>
+<h3
+id="h.4-current-qualification-reconnect-eviction-and-silent-transport-failure">H.4
+Current qualification: reconnect, eviction and silent transport
+failure</h3>
+<p>Check out <code>f03fa147f79847dda5dac5b0a8ed37c8d040cee5</code>.
+Install the three locked workspaces (<code>npm ci</code>,
+<code>npm --prefix client ci</code>,
+<code>npm --prefix hosted-mcp ci</code>) and the pinned Playwright
+Chromium. Use the SHA-checked TLC JAR from H.1. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json">qualification
+record</a> links the logs, environment and limits.</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run check</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> <span class="at">--prefix</span> hosted-mcp run check</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> scripts/check-protocol-models.py <span class="at">--jar</span> /tmp/tla2tools-1.7.4.jar <span class="at">--output</span> /tmp/pf-models</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--output</span> /tmp/pf-browsers</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent</span></code></pre></div>
+<p>The eviction fixture interrupts the first effect dispatch
+<strong>after</strong> the production room transaction. Miniflare evicts
+the real local Durable Object with both guest sockets hibernated; a
+different instance handles the durable alarm. The restored offer retains
+the original policy, candidate, authorization, and absolute deadline.
+Replayed receipts may repeat, but a repeated signed acceptance neither
+republishes the action nor adds a removal. The separate planned-transfer
+run keeps the former host admitted and then exercises loss of the
+<em>next</em> host under its own policy.</p>
+<p>The silent-path fixture discards bytes in both directions without
+forwarding a WebSocket close, FIN, or reset at onset. Its two TCP legs
+acknowledge locally: this is application-path isolation, not an IP-level
+outage on a carrier network. A forced close after the observation window
+is a separate positive control. No destructive failure was induced in
+production.</p>
 <h2 id="i.-related-designs">I. Related designs</h2>
 <table>
 <colgroup>

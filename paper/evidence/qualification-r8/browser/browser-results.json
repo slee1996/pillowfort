@@ -1,0 +1,88 @@
+{
+  "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "planned-then-unplanned",
+      "formerHostRemainedAdmitted": true,
+      "manualAcceptancePreviewed": true,
+      "freshPolicyBoundToOffer": true,
+      "signedChoices": [
+        "0:reject",
+        "1:accept"
+      ],
+      "deliveredBothDirections": true
+    },
+    {
+      "fault": "acceptance-result-unreceived",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    {
+      "fault": "removal-before-policy",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    {
+      "fault": "permanent-no-policy",
+      "boundaryReached": true,
+      "outcome": "room-retired-after-successor-grace",
+      "noOldPolicyReused": true
+    },
+    {
+      "fault": "peer-membership-storage-failure",
+      "outcome": "affected-peer-failed-closed-other-members-continued",
+      "scope": "A real IndexedDB write failure during delivery of an Add commit; not proof of automatic repair of arbitrary epoch disagreement."
+    },
+    {
+      "fault": "guest-resume-after-succession",
+      "restoredSameDevice": true,
+      "replay": [
+        "signed acceptance",
+        "snapshot",
+        "terminator",
+        "exact completion",
+        "completion ACK"
+      ],
+      "deliveredBothDirections": true
+    },
+    {
+      "fault": "second-resume",
+      "sameDeviceResumes": 2,
+      "staleAckRefusedSend": true,
+      "currentAckReleasedSend": true
+    },
+    {
+      "fault": "former-host-removal",
+      "successorReloads": 2,
+      "sameDevice": true,
+      "exactMarkerReplayed": true,
+      "withheldAcceptedRemoveResult": true,
+      "rosterChangedBeforePeerReplay": true,
+      "successorPolicyAccepted": true,
+      "deliveredBothDirections": true
+    },
+    {
+      "fault": "prompt-host-succession",
+      "closeToFirstVisibleOfferMs": 28,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "deliveredBothDirections": true
+    }
+  ],
+  "passed": true
+}

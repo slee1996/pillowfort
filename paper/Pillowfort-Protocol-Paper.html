@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pillowfort Protocol Paper — Evidence edition 7</title>
+  <title>Pillowfort: An MLS-Based Protocol for Ephemeral Rooms —
+Evidence edition 8</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -28,7 +29,7 @@
 id="pillowfort-an-mls-based-protocol-for-ephemeral-rooms">Pillowfort: An
 MLS-Based Protocol for Ephemeral Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 7 · 22 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 8 · 22 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
 <p>Pillowfort is a protocol for temporary, end-to-end encrypted rooms
@@ -346,8 +347,8 @@ accepts, the room closes.</p>
 ability to reconnect for up to 120 seconds. If an authorized guest
 finishes reconnecting first, the relay makes the offer then; if Ada
 reconnects first, she keeps the role. Once an offer has started, even a
-brief interruption can cost Ada the role. There is no guarantee on how
-quickly a silent network failure will be detected.</p>
+brief interruption can cost Ada the role. This rule starts at observed
+disconnection, not at the first lost packet.</p>
 <figure id="fig-succession">
 <img src="assets/fig-06-automatic-succession.svg" alt="Consent-based succession: the relay offers the pillow in signed admission order; each candidate explicitly accepts or declines. Acceptance transfers authority; refusal advances to the next candidate. If all refuse, the fort collapses.">
 <figcaption>
@@ -358,14 +359,16 @@ timeout advances the offer, never the authority. Only the accepting path
 leads to removal of the former host and resumption of ordinary traffic.
 </figcaption>
 </figure>
-<p>A delivery acknowledgment means only that the recipient saved the
-offer. The recipient chooses whether to accept or decline, signs a
-<code>host-succession</code> response bound to the policy and offer, and
-encrypts it with MLS. A signed copy alongside the ciphertext lets the
-relay check the credential, candidate, connection, grant, order, and
-expiry. Peers authenticate the MLS sender and the decrypted response.
-This response may cross a pending membership barrier to restore a host.
-Ordinary traffic may not.</p>
+<p>If the relay restarts before sending the offer, the candidate can
+replay it on the same device. Replay preserves both the authorization
+and its original deadline. A delivery acknowledgment means only that the
+recipient saved the offer. The recipient chooses whether to accept or
+decline, signs a <code>host-succession</code> response bound to the
+policy and offer, and encrypts it with MLS. A signed copy alongside the
+ciphertext lets the relay check the credential, candidate, connection,
+grant, order, and expiry. Peers authenticate the MLS sender and the
+decrypted response. This response may cross a pending membership barrier
+to restore a host. Ordinary traffic may not.</p>
 <p>If Chen accepts, the relay records Chen as host and consumes the
 authorization before delivering the result. A later delivery overflow
 cannot undo the transfer. Unlike a planned handoff, succession retires
@@ -487,7 +490,7 @@ promotion.</td>
 <td style="text-align: left;">The <a
 href="https://github.com/slee1996/pillowfort/blob/0df3215d98139861831c6e3f68eb0b0997c584ad/test/secure-relay-v4.test.ts">relay</a>
 issued the offer without advancing the clock. In <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json">one
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/production/browser-results.json">one
 production room</a>, the first guest saw it 181 ms after host tab
 closure began, declined, and exchanged encrypted chat after the second
 guest accepted.</td>
@@ -495,6 +498,19 @@ guest accepted.</td>
 href="https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad"><code>0df3215d</code></a></td>
 <td style="text-align: left;">One clean browser close, not a latency
 bound or a measure of silent-failure detection.</td>
+</tr>
+<tr>
+<td style="text-align: left;">A stored offer survives loss of its first
+delivery.</td>
+<td style="text-align: left;"><a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/restart/browser-results.json">Three
+browsers and a local Worker</a>: the relay instance was evicted before
+dispatch. The same device recovered the same authorization and deadline,
+declined, and exchanged encrypted chat after its peer accepted.</td>
+<td style="text-align: left;"><a
+href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a></td>
+<td style="text-align: left;">One interruption with durable storage
+intact, not recovery after permanent loss.</td>
 </tr>
 <tr>
 <td style="text-align: left;">The former host’s policy cannot authorize
@@ -538,16 +554,22 @@ person operating it.</td>
 </tr>
 </tbody>
 </table>
-<p>At <code>1ba68f23</code>, the five protocol suites passed 90 tests
-(768 assertions) and the real-MLS engine suite passed 26 (310
-assertions). TLC found no invariant violation in 11 finite
-configurations; all 11 deliberately weakened variants produced
-counterexamples. Two traces reached successful recovery with the guards
-intact. The largest composition explored 1,202,973 states at a 16-step
-bound. These checks do not establish implementation refinement,
-unbounded progress, or cryptographic security. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md">verification
-matrix</a> gives the property-level results.</p>
+<p>At <a
+href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a>,
+the application gate passed 583 tests and the hosted adapter passed 14.
+TLC found no safety violation in 12 finite configurations; all 15
+deliberate guard weakenings failed as expected. Six unweakened traces
+reached their target states. The largest 16-step composition explored
+2,292,582 distinct abstract states. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md">property
+matrix</a> distinguishes these results from an implementation proof or
+an independent audit.</p>
+<p>Detection and delivery are different measurements. In an <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/silent/browser-results.json">isolated
+silent-path run</a>, the relay observed no host disconnect during 150
+seconds of dropped WebSocket traffic. After a forced transport close,
+its callback ran in 11 ms and the offer was visible 17 ms later. Neither
+interval is a network failure-detection bound.</p>
 <h3 id="light-load-latency">10.2 Light-load latency</h3>
 <table>
 <caption><strong>Table 3. Local, light-load chat latency.</strong> Each
@@ -650,7 +672,7 @@ href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/su
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
 <li>Pillowfort. <em>Protocol v4-CS1: Wire Contract and Failure
 Semantics</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Technical-Appendix.pdf">Technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Technical-Appendix.pdf">Technical
 appendix</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
@@ -658,11 +680,11 @@ href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
 href="https://signal.org/blog/signal-private-group-system/">Design</a>.</li>
 </ol>
 <p><strong>Companion artifacts:</strong> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>; <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>; <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
 evidence bundle</a>.</p>
 </body>
 </html>

@@ -1,0 +1,38 @@
+{
+  "codeCommit": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+  "mergeCommit": "db501e0d352c2354de4be937f77a32d96f2b862e",
+  "pullRequest": "https://github.com/slee1996/pillowfort/pull/16",
+  "serviceVersion": "f03fa14",
+  "workers": {
+    "app": {
+      "worker": "pillowfort",
+      "created_on": "2026-11-23T05:56:00.632558Z",
+      "versions": [
+        {
+          "version_id": "130f6019-669a-4b7e-b9a2-8f60de4b754e",
+          "percentage": 100
+        }
+      ],
+      "replacedVersion": "6b669622-6ec9-425b-818c-adfdc50d2b60"
+    },
+    "hosted": {
+      "worker": "pillowfort-mcp",
+      "created_on": "2026-11-23T05:56:08.589442Z",
+      "versions": [
+        {
+          "version_id": "6e2d4c8d-ed96-48f8-91ce-7ab216cc0e48",
+          "percentage": 100
+        }
+      ],
+      "replacedVersion": "e834efa8-be6e-4dda-a858-dfd6e9c05331"
+    }
+  },
+  "browserAsset": {
+    "file": "/assets/index-BWFJNoC2.js",
+    "sha256": "515dd3339f39932c2dd96ecafd8b6e2fc6bb92cd2d157afb55a58756852e4d2a",
+    "matchedLocalBuild": true
+  },
+  "browser": "production/browser-results.json",
+  "hosted": "production/hosted-results.json",
+  "scope": "Normal use of two verification-owned rooms in production. No eviction, network cuts or changes to third-party rooms. Browser time is a single explicit close-to-visible-offer observation, not a network failure bound."
+}

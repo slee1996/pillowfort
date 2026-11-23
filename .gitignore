@@ -38,5 +38,7 @@ test-results/
 
 # Logs and caches
 *.log
+!paper/evidence/qualification-r8/*-gate.log
+!paper/evidence/qualification-r8/models/*.log
 .cache/
 .vite/

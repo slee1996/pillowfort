@@ -1,8 +1,8 @@
 # Pillowfort: Bounded State-Machine Analysis
 
-*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 7 · 22 November 2026*
+*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 8 · 22 November 2026*
 
-**Status:** TLC 2.19 checked eleven finite safety configurations of the models at `1ba68f236163`. Eleven deliberate guard weakenings produced invariant counterexamples. Two separate probes, with the safeguards intact, reached successful guest recovery. These are bounded coordination results, not a cryptographic proof, implementation refinement, deadlock-freedom result, or guarantee of eventual progress. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-Paper.pdf).
+**Status:** TLC 2.19 checked 12 finite safety configurations at [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). All 15 deliberately weakened variants violated their expected invariant. Six unweakened probes reached their recovery or race outcome. These results are not a cryptographic proof, TypeScript refinement, deadlock-freedom result, or guarantee of eventual progress. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-Paper.pdf).
 
 ## Executed analysis
 
@@ -11,22 +11,23 @@
 | M1 delivery | 1,186 | 338 |
 | M2 admission | 267 | 122 |
 | M3 resume | 24 | 16 |
-| M4 succession | 991 | 362 |
-| Guest resume during handoff | 627 | 268 |
+| M4 succession | 499 | 201 |
+| Guest resume during handoff | 492 | 214 |
 | Two guest replacement sockets after handoff | 41 | 38 |
+| Racing resumes and replay of an undelivered offer | 601 | 370 |
 | Composed M1, 12 steps | 15,297 | 670 |
 | Composed M1+M2, 12 steps | 39,141 | 3,976 |
 | Composed M1+M2+M3, 12 steps | 40,268 | 19,336 |
-| Composed M1–M4, 12 steps | 530,008 | 172,897 |
-| Composed M1–M4, backlog 2, 16 steps | 3,968,326 | 1,202,973 |
+| Composed M1–M4, 12 steps | 1,027,767 | 362,690 |
+| Composed M1–M4, backlog 2, 16 steps | 7,225,413 | 2,292,582 |
 
 Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. Composition uses one operation token and the stated depth bound. Counts are per configuration; they must not be interpreted as disjoint implementation states.
 
-The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Each produced the expected counterexample.
+The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Four further mutations delay the first offer, accept a stale socket close, nominate a guest before it completes replay, or renew the deadline during restart. Each produced its expected counterexample.
 
-The two positive traces address a different question: can the unmodified model actually recover? One reaches a guest ready under the successor after removal; the other reaches a ready second connection with the first ACK still in flight. Neither trace establishes that every execution terminates. The largest composition excludes these focused models; its state count is not a product of theirs.
+Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
 
-Exact models, configurations, tool identity, commands and traces are in `evidence/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact models, configurations, tool identity, commands and traces are in `evidence/qualification-r8/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
 Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 
@@ -135,7 +136,7 @@ An empty backlog follows the same protocol, using its owning resume request as t
 
 Use authenticated admission order. Reconnection does not change it. Only a current host-signed policy authorizes succession offers; room membership alone is insufficient. Unavailable candidates are skipped. Refusal or expiry advances to the next eligible, unattempted candidate. Every member may refuse; universal refusal collapses the fort. Delivery acknowledgment is not acceptance.
 
-The [immediate-offer relay](https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad) uses the 120-second recovery window only if nobody can receive an offer. A guest finishing authenticated resume during that window triggers an offer if the host is still absent. The TLC counts above describe the earlier model: its separate grace, fence and offer actions are not evidence of a timing bound.
+[`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5) retains the 120-second recovery window only while no candidate is eligible. `M4Succession` now fences and persists the first offer atomically when the owner disappears or an eligible guest completes replay first. `ReconnectRace` distinguishes the old socket from its replacement, guest replay from activation, and stored offers from delivery and choice. The deadline belongs to the stored offer, not to the restarted instance. The model has no real-time failure detector.
 
 **Actions:** publish/replace signed policy; offer a manual target; disconnect/resume host; expire unclaimed recovery; fence the absent identity; select the earliest eligible candidate; retain/deliver/store a 30-second authorization and ACK its delivery; explicitly accept or decline; sign and verify the exact response; commit authority only on acceptance; advance the offer on refusal; retire on exhaustion; deliver outcomes; overflow another member's backlog; complete exact MLS removal; replay a marker; deliver retirement lifecycle; publish a successor policy.
 

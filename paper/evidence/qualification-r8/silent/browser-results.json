@@ -1,0 +1,34 @@
+{
+  "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "silent-host-loss",
+      "observationWindowMs": 150000,
+      "actualSilentObservationMs": 150004,
+      "lossToRelayDetectionMs": null,
+      "rightCensored": true,
+      "forcedCloseToRelayDetectionMs": 11,
+      "relayDetectionToObservedVisibleOfferMs": 17,
+      "transport": "Two loopback TCP legs ACK locally; dropped WebSocket bytes, no forwarded FIN/RST at onset. Not packet-level WAN loss.",
+      "maxConsecutiveCancellations": 0,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    }
+  ],
+  "passed": true
+}

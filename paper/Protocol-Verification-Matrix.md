@@ -1,6 +1,6 @@
-# Protocol v4-CS1 verification matrix — evidence edition 7
+# Protocol v4-CS1 verification matrix — evidence edition 8
 
-Immediate-offer relay: [`0df3215d9813`](https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad). Earlier model and recovery revision: [`1ba68f236163`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). This matrix maps the plan to evidence, not complete verification. The manifest identifies each execution and its revision. Earlier latency, browser faults and the production shutdown check retain their original attribution.
+Current source: [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). [Qualification records](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) cover the bounded models, implementation gates and local browser/Worker faults. Rows below distinguish executable evidence from assumptions. Both deployed Workers passed [live checks](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/deployment.json). Earlier measurements retain their original attribution.
 
 | Plan obligation | Model coverage | Concrete implementation evidence | Explicit exclusion |
 |---|---|---|---|
@@ -24,12 +24,24 @@ Immediate-offer relay: [`0df3215d9813`](https://github.com/slee1996/pillowfort/t
 | M4.3 Persisted switch | M4 separate authority commit/removal actions | Relay recipient-overflow regression; lost-result crash-boundary test | Runtime storage implementation not refined to TLA+ |
 | M4.4 Mode-specific removal | M4 exact abstract removal steps | Engine signed leave/Remove tests and relay former-host removal lifecycle | Model omits MLS tree internals |
 | M4.5 Reconcile views | Focused M3×M4 safety check and reachable completed guest resume under the successor | `guest-resume-after-succession` checks same-device replay and encrypted delivery in both directions; separate successor crash regressions cover the candidate | One handoff; authority is checked at activation, not simultaneously at every peer |
-| M4.6 Join-order priority | M4 earliest eligible unattempted member | Relay regressions: first offer on socket loss or eligible resume completion; skip disconnected members; expiry and refusal advance the offer | A dishonest relay can lie about eligibility/connectivity |
+| M4.6 Join-order priority | M4 atomically fences and selects the earliest eligible unattempted member; DelayedOffer and EarlyCandidate mutants fail | Both host/guest reconnect orders, late non-owning close, target/deadline replay and refusal-to-next-member encrypted delivery | A dishonest relay can lie about eligibility/connectivity |
 | M4.7 Tenure binding | M4 invalidates policy on switch, refreshes only under current host | Prior-policy reducer rejection; three permanent-successor-loss cases retire without old delegation | No automatic second handoff before a new policy is accepted |
 | M4.8 Barrier completion | Abstract remove-store/ACK/completion ordering only | Two queued targets: duplicate former-host retirement after relay restart cannot release the next target; engine retirement control/replayed marker tests | Concrete duplicate lifecycle signals are not exhaustively modeled |
 | Composition | Staged M1→M1+M2→M1+M2+M3→M1–M4 send guards; Interlock mutant must fail | Existing admission/removal/host-transfer barriers and full project gate | 12/16-step bounded prefixes; no refinement, deadlock-freedom or liveness proof |
 | Peer membership/storage disagreement | Not represented as malicious MLS divergence in TLC | Browser storage-failure experiment and real MLS engine validation/rollback tests | Failure isolation, not automatic epoch merging |
 | Explicit room retirement | Concrete snapshot serialization and notification are not modeled by TLC | `persists explicit retirement after a signed succession policy was installed`: state export/import, cleared delegation, retired members, exact close-control replay; successful production terminal-screen execution | Not a TLC-discovered defect, physical-storage proof, or exhaustive terminal failure schedule |
+
+## New cross-phase checks
+
+| Boundary | Evidence at f03fa147 | Limit |
+|---|---|---|
+| Everyone disconnected | Actual reducer: host authenticated before the guest finished replay retains ownership despite a stale close. Guest-first completion fences the absent host and stores the offer; no host switch. Four new model witnesses make these and post-restart choices reachable. | A single honest relay serializes both operations. |
+| Admission interrupted by host loss | All four stages following Add through pending activation preserve the joining device’s exact removal marker after export/import. An admitted member, never the candidate for admission, gets the offer. | Reducer tests use opaque payloads; browser membership/storage tests exercise MLS separately. |
+| Persisted offer, no outgoing frames | [Local workerd eviction](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/restart/browser-results.json) with hibernated guest sockets: original target, authorization, policy and deadline; explicit refusal, second acceptance and two-way encrypted delivery. At expiry −1/0/+1 ms, signed-response regressions distinguish an accepted retry receipt from a second publication. | One real Worker fault schedule; not full storage failure. |
+| Manual transfer then automatic succession | The former host stays admitted. A subsequent disconnect uses the new host’s signed policy, and a refusal does not prevent later encrypted chat. | Three browsers and two changes of authority, not unbounded chains. |
+| Silent host path | [Held open for 150 seconds](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/silent/browser-results.json), no spontaneous detection. Separate forced-close control; report detection and offer visibility independently. | Loopback WebSocket path; TCP ACKs continue. No production fault-detection bound. |
+
+Two observable progress failures were corrected: a committed offer could expire unseen, and a declining client could spend its order budget retrying before the next member chose. The Worker now schedules a single check, not repeated offers; the client parks blocked work until new relay progress. Neither correction weakens consent or extends the authorization.
 
 ## Named successor crash regressions
 
@@ -54,6 +66,10 @@ These relay tests intentionally use opaque payload bytes and real Ed25519 signat
 | KeyReuse | Request → authorize → Add → expire → Remove → request same key | Expected model sensitivity result |
 | Snapshot | Disconnect → replay/persist → accept unauthenticated host snapshot | Expected model sensitivity result |
 | Target | Host loss → offer candidate 2 → candidate 3 accepts candidate 2's capability | Expected model sensitivity result |
+| DelayedOffer | Relay holds an eligible candidate after observing host loss rather than creating the offer in the same transition | Expected M4 sensitivity result |
+| StaleClose | Superseded host socket closes and invalidates the authenticated return | Expected reconnect-race sensitivity result |
+| RenewOffer | Same-device return extends the original offer deadline | Expected reconnect-race sensitivity result |
+| EarlyCandidate | An eligible earlier candidate is bypassed without a refusal or expiry | Expected reconnect-race sensitivity result |
 | Interlock | Start an operation while admission is pending, then send | Expected composition sensitivity result |
 | ResumeSnapshot | Accept the new host snapshot without applying the signed acceptance in the guest's replay | Expected focused-model sensitivity result |
 | OldCompletion | Same nonempty backlog end on two sockets; a delayed completion activates the wrong incarnation | Expected focused-model sensitivity result |

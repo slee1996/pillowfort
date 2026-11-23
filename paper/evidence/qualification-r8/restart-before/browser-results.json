@@ -1,0 +1,17 @@
+{
+  "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [],
+  "passed": false,
+  "error": "TimeoutError: waitFor: Timeout 17000ms exceeded.\nCall log:\n  - waiting for locator('#host-offer-overlay') to be visible\n"
+}

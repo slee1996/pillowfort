@@ -1,0 +1,6 @@
+{
+  "cutAfterCommit": true,
+  "socketsHibernated": true,
+  "newInstanceWokeWithPendingOffer": true,
+  "evictionError": null
+}
