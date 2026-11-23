@@ -660,10 +660,9 @@ properties:
     after 276 admitted KeyPackages. An authorized participant can consume this
     finite room-lifetime availability through valid admissions; recreation is
     the recovery path.
-13. **Dependency maintenance.** The pinned dependency graph currently contains
-    transitive `instant 0.1.13`, covered by RUSTSEC-2024-0384 (unmaintained, with
-    no patched release). It is monitored and should be removed through a safe
-    upstream dependency update when available.
+13. **Dependency maintenance.** The pinned timer fork no longer depends on
+    `instant`. The lockfile, provider vectors and reproducible browser artifacts
+    can detect dependency drift; they cannot establish that dependencies are defect-free.
 14. **No absolute proof.** Tests, source pinning, threat analysis, and review
     reduce known risk. They cannot prove the absence of implementation,
     compiler, runtime, cryptographic-library, or deployment defects.

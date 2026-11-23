@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page, type WebSocket as BrowserSocket } from "playwright";
+import { prematureSuccession } from "./premature-succession";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, connect, type Socket } from "node:net";
 import { resolve } from "node:path";
@@ -20,7 +21,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -41,6 +42,7 @@ type FixtureReceipt = { detectedAt: number } | { offer: NonNullable<SecureRelayS
 const fixtureReceipt = staged ? new Promise<FixtureReceipt>(resolve => {
   process.once("message", message => resolve(message as FixtureReceipt));
 }) : null;
+if (selectedFault === "premature-succession" && !staged) throw Error("Use the private workerd runner for transient-path trials");
 const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "idle-retirement", "idle-retirement-prefix"] as const;
 type WorkerCut = typeof workerCuts[number];
 const workerCut = workerCuts.find(cut => cut === selectedFault);
@@ -127,9 +129,9 @@ async function newParticipant(browser: Browser): Promise<Participant> {
   return { context, page };
 }
 async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin, interAdmissionMs = 250,
-  names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`)): Promise<RoomEvidence> {
+  names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`), hostBrowser = browser): Promise<RoomEvidence> {
   const participants: Participant[] = [];
-  const host = await newParticipant(browser);
+  const host = await newParticipant(hostBrowser);
   participants.push(host);
   await configure?.(host, 0);
   await host.page.goto(hostOrigin);
@@ -546,6 +548,43 @@ async function hostPath(destination: string, direction: "both" | "uplink" | "dow
   return { origin: `http://127.0.0.1:${address.port}`, block() { blocked = true; },
     closePaths() { for (const socket of sockets) socket.destroy(); },
     stop() { this.closePaths(); sink.close(); } };
+}
+
+async function retirementStorage(browser: Browser) {
+  if (live || !staged) throw Error("Storage qualification requires a private local Worker");
+  const room = await setupRoom(browser, 2);
+  try {
+    const [host, guest] = room.participants.map(p => p.page);
+    const pointer = "pillowfort:secure-room-recovery:v1";
+    const countRecords = () => guest.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((ok, fail) => { const q = indexedDB.open("pillowfort-crypto-state-v1"); q.onsuccess = () => ok(q.result); q.onerror = () => fail(q.error); });
+      try { return await new Promise<number>((ok, fail) => { const q = db.transaction("opaque-crypto-state").objectStore("opaque-crypto-state").count(); q.onsuccess = () => ok(q.result); q.onerror = () => fail(q.error); }); }
+      finally { db.close(); }
+    });
+    await deliver(guest, host, "before terminal erasure");
+    if (await countRecords() !== 1) throw Error("Expected exactly one established guest record");
+    await guest.evaluate(() => {
+      const remove = IDBObjectStore.prototype.delete;
+      IDBObjectStore.prototype.delete = function(key) {
+        if (this.name === "opaque-crypto-state") { IDBObjectStore.prototype.delete = remove; this.transaction.abort(); }
+        return remove.call(this, key);
+      };
+    });
+    await host.locator("#btn-room-menu").click(); await host.locator("#btn-knock-down").click(); await host.locator("#btn-confirm-room-exit").click();
+    await host.getByRole("heading", {name:"Fort has been knocked down."}).waitFor();
+    await guest.getByRole("button", {name:"Retry join"}).waitFor();
+    const readPointer = () => guest.evaluate(key => { const value = sessionStorage.getItem(key); return value && JSON.parse(value).roomInstance; }, pointer);
+    const retained = await readPointer();
+    if (!retained || await countRecords() !== 1 || await guest.locator("#msg-input").isVisible()) throw Error("Guest lost its exact recovery state or remained writable");
+    await guest.reload(); await guest.getByRole("button", {name:"Retry join"}).waitFor();
+    if (await readPointer() !== retained) throw Error("Reload changed the recovery identity");
+    const password = new URLSearchParams(new URL(room.invitation).hash.slice(1)).get("invite")!;
+    await guest.locator("#join-password").fill(password); await guest.getByRole("button", {name:"Retry join"}).click();
+    await guest.waitForFunction(key => !sessionStorage.getItem(key), pointer, {timeout:15000});
+    if (await countRecords() !== 0 || await guest.locator("#msg-input").isVisible()) throw Error("Retry failed to finish terminal cleanup");
+    return { fault:"terminal-storage", hostReceivedTerminalNotice:true, failedDeleteRetainedOriginalRecordAndPointer:true,
+      composerUnavailable:true, sameInstanceAfterReload:true, explicitRetryErasedRecordAndClearedPointer:true };
+  } finally { await closeRoom(room); }
 }
 
 async function idleRetirement(browser: Browser, fault: "idle-retirement" | "idle-retirement-prefix" | "natural-idle") {
@@ -1089,6 +1128,9 @@ try {
     if (selectedFault === "healthy-host") results.push(await healthyHost(browser!));
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
+    if (selectedFault === "terminal-storage") results.push(await retirementStorage(browser!));
+    if (selectedFault === "premature-succession") results.push(await prematureSuccession(origin, (host, configure, gateway) =>
+      setupRoom(browser!, 3, configure, gateway, 250, undefined, host), closeRoom, deliver));
     if (selectedFault === "natural-idle") results.push(await idleRetirement(browser!, selectedFault));
     if (workerCut === "idle-retirement" || workerCut === "idle-retirement-prefix") results.push(await idleRetirement(browser!, workerCut));
     else if (workerCut) results.push(await workerdHandoff(browser!, workerCut));

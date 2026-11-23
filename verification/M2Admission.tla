@@ -10,7 +10,7 @@ Init == s = [phase |-> "none", key |-> 0, used |-> {}, authorized |-> FALSE,
 Quiescent == s.phase \in {"none", "active", "retired"} /\ ~s.removal
 Request(k) == /\ ~s.removal /\ s.phase \in {"none", "retired"} /\ k \in 1..MaxOps
               /\ (k \notin s.used \/ Broken = "KeyReuse")
-              /\ s' = [s EXCEPT !.phase = "pending", !.key = k,
+              /\ s' = [s EXCEPT !.phase = "pending", !.key = k, !.used = @ \cup {k},
                                  !.reused = @ \/ (k \in s.used),
                                  !.authorized = FALSE, !.addStored = FALSE,
                                  !.welcome = FALSE, !.proof = FALSE,
@@ -18,7 +18,7 @@ Request(k) == /\ ~s.removal /\ s.phase \in {"none", "retired"} /\ k \in 1..MaxOp
 Authorize == /\ ~s.down /\ s.phase = "pending"
              /\ s' = [s EXCEPT !.authorized = TRUE, !.phase = "authorized"]
 StoreAdd == /\ ~s.down /\ s.phase = "authorized"
-            /\ s' = [s EXCEPT !.addStored = TRUE, !.used = @ \cup {s.key}, !.phase = "add"]
+            /\ s' = [s EXCEPT !.addStored = TRUE, !.phase = "add"]
 Welcome == /\ ~s.down /\ s.phase = "add"
            /\ s' = [s EXCEPT !.welcome = TRUE, !.phase = "welcome"]
 Bootstrap == /\ ~s.down /\ s.phase = "welcome"

@@ -2,7 +2,7 @@
   "schema": 1,
   "rustToolchain": "1.94.1",
   "wasmBindgen": "0.2.120",
-  "sourceSha256": "d24f438e84da6ec0129a450c6cabeefe857bdf9e5ed26fd16555642e5e56e068",
+  "sourceSha256": "998110e761c572a370cf2bc058ae7b4b5de784ac4f20e47f7904040be3a406ee",
   "artifacts": {
     "pillowfort_openmls.d.ts": "40c5f3d716b4f0dec3cd119f02eb44d6fc778a5b81064b99aac8207367e77e97",
     "pillowfort_openmls.js": "37d72c68b20c436113beb18c9cb8a1491726ed57e9fb292b7d544eecde0934ec",

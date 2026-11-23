@@ -264,8 +264,7 @@ export interface SecureRoomInboundCommitInspection {
 export type SecureRoomRelayControlCompletionV1 =
   | { kind: "retire-member-accepted"; requestId: string }
   | { kind: "host-changed"; deviceId: string }
-  | { kind: "host-transfer-expired"; authorizationId: string }
-  | { kind: "room-retired" };
+  | { kind: "host-transfer-expired"; authorizationId: string };
 
 interface NormalizedRosterEntry extends SecureRoomRosterEntry {
   identity: Uint8Array;
@@ -2015,13 +2014,6 @@ export class SecureRoomEngine {
     this.assertNoPendingApplication();
     if (!completion || typeof completion !== "object") {
       throw new SecureRoomEngineError("invalid-input", "invalid relay-control completion");
-    }
-    if (completion.kind === "room-retired") {
-      if (!this.durable.pendingRelayControls.some((control) => control.kind === "close-room")) {
-        throw new SecureRoomEngineError("invalid-input", "no room-close control is pending");
-      }
-      await this.retire();
-      return;
     }
     if (completion.kind === "host-transfer-expired") {
       if (canonicalBase64UrlByteLength(completion.authorizationId) !== SECURE_MESSAGE_ID_BYTES) {

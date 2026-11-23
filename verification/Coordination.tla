@@ -21,7 +21,9 @@ ResumeStep == /\ Stage >= 3 /\ R!Next
               /\ UNCHANGED <<delivery, admission, succession, badInterlock>>
 HostStep == /\ Stage >= 4 /\ H!Next
             /\ UNCHANGED <<delivery, admission, resume, badInterlock>>
-Next == /\ depth < MaxDepth /\ depth' = depth + 1
+\* In the closure profile depth is not a state dimension. Cycles are explored
+\* to a fixed point rather than cut off at an arbitrary number of steps.
+Next == /\ IF MaxDepth = 0 THEN depth' = 0 ELSE depth < MaxDepth /\ depth' = depth + 1
         /\ (DeliveryStep \/ AdmissionStep \/ ResumeStep \/ HostStep)
 Safety == D!Safety /\ A!Safety /\ R!Safety /\ H!Safety /\ ~badInterlock
 =============================================================================

@@ -10,7 +10,9 @@ import { once } from "node:events";
 const [fault, directory] = process.argv.slice(2);
 const idleCut = fault === "idle-retirement" || fault === "idle-retirement-prefix";
 const restartCut = idleCut || fault === "probe-restart" || fault === "persisted-offer";
-if ((!restartCut && !["silent-host-loss", "silent-host-uplink", "silent-host-downlink"].includes(fault)) || !directory) throw Error("Usage: node scripts/protocol-workerd-evidence.mjs persisted-offer|silent-host-{loss,uplink,downlink}|probe-restart|idle-retirement[-prefix] OUTPUT");
+if ((!restartCut && !["silent-host-loss", "silent-host-uplink", "silent-host-downlink", "premature-succession", "terminal-storage"].includes(fault)) || !directory) throw Error("Usage: node scripts/protocol-workerd-evidence.mjs persisted-offer|silent-host-{loss,uplink,downlink}|probe-restart|idle-retirement[-prefix]|premature-succession|terminal-storage OUTPUT");
+const extra = Number(process.env.PILLOWFORT_STUDY_EXTRA_MS || 0);
+if (![0, 30000].includes(extra) || extra && fault !== "premature-succession") throw Error("Invalid study control");
 const output = resolve(directory);
 await mkdir(output, { recursive: true });
 const disk = await mkdtemp(join(tmpdir(), "pillowfort-workerd-"));
@@ -29,9 +31,9 @@ try {
       name: worker, compatibilityDate: "2026-07-20",
       manifest: { mainModule: "fixture.mjs", modules: { "fixture.mjs": { type: "esm", contents: bundle.outputFiles[0].text } } },
       exports: { Room: { type: "durable-object", storage: "legacy-kv" } },
-      assets: { directory: resolve("client/dist"), hasUserWorker: true, runWorkerFirst: true },
+      assets: { directory: resolve(process.env.PILLOWFORT_QUALIFICATION_ASSETS || "client/dist"), hasUserWorker: true, runWorkerFirst: true },
       env: { ROOM: { type: "durable-object", worker, exportName: "Room" }, ASSETS: { type: "assets" },
-        CUT: { type: "text", value: fault }, EVIDENCE: { type: "fetcher", handler: async request => {
+        STUDY_EXTRA_MS: { type: "text", value: String(extra) }, CUT: { type: "text", value: fault }, EVIDENCE: { type: "fetcher", handler: async request => {
       const event = await request.json();
       if (event.kind === "cut" && !cut) {
         cut = event;

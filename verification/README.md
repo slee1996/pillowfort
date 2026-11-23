@@ -3,12 +3,14 @@
 The executable models implement the M1–M4 planning decomposition. The source-grounded protocol contract is in `docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md`; the property-by-property coverage and exclusions are in `docs/PROTOCOL_V4_VERIFICATION_MATRIX.md`.
 
 - `IdleRetirement.tla`: deletion and notification to two original device/socket pairs. Model dispatch and receipt separately; check exact ownership and conditional dispatch under fair scheduling, not delivery to an offline peer. Five weakened configurations violate a property; a witness reaches both receipts through a restart after the first send.
+- `OutcomeRecovery.tla`: two immutable application ciphertexts; accepted and rejected results, durable MLS generation, speculative application changes, retries and restoration.
+- `HistoricalCleanup.tla`: two ordered retirement tuples, old acknowledgments versus the current request, historical marker replay, and processing already-queued incoming work before socket close.
 - `M1Delivery.tla`: sender persistence, connection-bound grants, host preview readiness, delivery/result separation, replay and prefix ACKs.
 - `Reinvite.tla`: delayed receipt of a manual refusal versus the next offer, and independent invitation/roster/bootstrap checks after migration and reload. Three weakened guards must fail; an unweakened witness reaches active membership. It abstracts authenticated keys and storage, not the cryptography itself.
 - `M2Admission.tla`: host approval, Add/Welcome/bootstrap/proof/activation, partial-admission expiry, single-use KeyPackages and retained identity ambiguity.
 - `M3Resume.tla`: replay persistence, authenticated snapshot reconciliation and exact connection/request/terminator completion.
 - `M4Succession.tla`: internal join-order offers, explicit acceptance/refusal, old-host fencing, durable authority, former-host removal, successor policy refresh and safe termination without a new policy.
-- `Coordination.tla`: staged composition with admission, resume and host-availability interlocks and explicit 12/16-step bounds.
+- `Coordination.tla`: staged 12/16-step prefixes plus a fixed-point exploration of all four interlocked machines with one operation, one KeyPackage token, a backlog of one, and three host/succession identities. The latter has no step cutoff; it does not remove the finite domain bounds.
 - `ResumeAcrossSuccession.tla`: M3 replay and M4 consent joined by a signed acceptance in a returning guest's backlog. The relay can change host before or during replay; completion is checked against its current backlog end.
 - `RepeatedResume.tla`: two consecutive guest replacement sockets after handoff. Delayed completions retain their authenticated socket; delayed ACKs name a completion, not a backlog position.
 
@@ -23,7 +25,13 @@ python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output
 
 The runner checks the JAR SHA-256 before execution. It writes source copies, exact configurations, raw TLC logs, deliberate-mutant counterexamples, commands and per-configuration state counts to the output directory. It fails if a normal model violates its invariant or any deliberately weakened model does not produce a counterexample.
 
-The default run requires twelve safe configurations, fifteen deliberate mutations and six reachability witnesses. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
+The runner enumerates all normal, mutant and witness profiles and rejects an unexpected result in any of them. `--case composed-full-finite` selects the full finite product. Disabled TLC deadlock checking is not a deadlock-freedom result. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
+
+### Implementation conformance and the host-loss tradeoff
+
+`PILLOWFORT_RELAY_CONFORMANCE_REPORT=/tmp/relay.json bun test ./test/secure-relay-v4.test.ts` applies independent pre/postconditions to every transition exercised by the relay suite, not an alternative implementation. All wire families plus create, disconnect and clock advancement must be represented. It checks retained outcomes, grants, immutable bindings, exact admission and resume, the two transfer paths, replayed historical removals and exact FIFO head completion. The output contains counts, never credentials. Coverage of every family is not coverage of every possible input or schedule.
+
+For the private timing study, build the production client, then run `python3 scripts/measure-premature-succession.py /tmp/pillowfort-study` (a fresh output directory, Bun and Playwright Chromium; the process-suspension arm uses POSIX signals). The relay, stopwatch and two observers remain running. `--subset absence` selects the still-absent host comparison. A 30-second extension exists only in the counterfactual Worker fixture. The timed interruption begins at the first fresh challenge after setup. No clock is advanced. A stopped Chromium process set is not a physical sleeping laptop. Never suspend a shared test host.
 
 To check just the cross-host resume:
 
