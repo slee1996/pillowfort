@@ -1,0 +1,23 @@
+bun test v1.4.4 (38afee6c8)
+
+test/secure-room-engine.test.ts:
+1688 |     expect(result.replayedMarkerBeforeAckCode).toBe("accepted");
+1689 |     expect(result.replayedMarkerRestoredExactBarrier).toBe(true);
+1690 |     expect(result.replayedMarkerAfterAckCode).toBe("accepted");
+1691 |     expect(result.retirementControlSurvivedCommitAck).toBe(true);
+1692 |     expect(result.retirementControlSurvivedRestart).toBe(true);
+1693 |     expect(result.retriedExactRetirement).toBe(true);
+                                                 ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (SOURCE/test/secure-room-engine.test.ts:1693:43)
+(fail) protocol-v4 durable secure room engine > admits a member privately, inspects without mutation, rejects replay/reorder/forgeries, and authorizes commit summaries [691.11ms]
+
+ 0 pass
+ 25 filtered out
+ 1 fail
+ 95 expect() calls
+Ran 1 test across 1 file. [1.95s]

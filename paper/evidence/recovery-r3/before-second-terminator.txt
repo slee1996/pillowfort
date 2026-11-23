@@ -1,0 +1,23 @@
+bun test v1.4.4 (38afee6c8)
+
+test/secure-room-engine.test.ts:
+error: evaluate: SecureRoomEngineError: duplicate resume backlog terminator
+    at SecureRoomController.handleBacklogEnd (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:1857:13)
+    at SecureRoomController.handleServerFrame (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:1038:20)
+    at SecureRoomController.handleWire (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:565:16)
+    at wireB (eval at evaluate (:370:30), <anonymous>:126:39)
+    at eval (eval at evaluate (:370:30), <anonymous>:139:13)
+    at async <anonymous>:381:23
+  log: [],
+
+      at SecureRoomController.handleBacklogEnd (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:1857:13)
+      at SecureRoomController.handleServerFrame (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:1038:20)
+      at SecureRoomController.handleWire (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomController.ts:565:16)
+      at wireB (eval at evaluate (:370:30), <anonymous>:126:39)
+      at eval (eval at evaluate (:370:30), <anonymous>:139:13)
+(fail) protocol-v4 durable secure room engine > binds authentication to one socket and completes founder resume through an authoritative snapshot [127.81ms]
+
+ 0 pass
+ 25 filtered out
+ 1 fail
+Ran 1 test across 1 file. [1439.00ms]

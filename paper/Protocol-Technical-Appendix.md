@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 2 · 9 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 3 · 22 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Tested implementation:** [`c726c5eccafacb6fe6c881be3fcc174287c2f86f`](https://github.com/slee1996/pillowfort/tree/c726c5eccafacb6fe6c881be3fcc174287c2f86f). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
+**Tested implementation:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
 
 ## A. Profile and interoperability
 
@@ -124,7 +124,10 @@ The first-party host approval window is 180 seconds; relay admission expires at 
 | `backlog-end` | Snapshot reconciled; terminator matches the received replay boundary | End ID is final replay entry, or the owning resume request for an empty replay |
 | `resume-complete` | All preceding replay work persisted; exact terminator | Atomically activate and clear replay backlog, then emit completion ACK |
 | Active lifecycle repeated for an already admitted member | Verify roster/profile; with no matching admission barrier this is a no-op, including while an application is pending | This signal does not acknowledge or replace that application |
-| Completion ACK | Exact locally outstanding completion | Ordinary outbound work may resume |
+| Socket replaced before its completion ACK | Discard the old outstanding completion ID, not committed replay or device state. Process a fresh snapshot and terminator even if the end ID is unchanged. | An earlier socket cannot activate this connection |
+| Completion ACK | Matches the completion issued on this socket; a delayed earlier ACK cannot release sends | Ordinary outbound work may resume |
+
+Roster absence is not a receipt. A successor can see the former host absent from both rosters before the relay has cleared its removal marker. A pending Remove retains its original device/admission binding on retry. After the commit result, the successor retries its stored `retire-member` request and withholds new ordinary grants until `frame-accepted` names that request. Neither a snapshot nor a duplicate `retired` notice substitutes for it. An observer that already applied the Remove verifies the full delivery digest on replay; it does not require or consume a second marker for a completed removal.
 
 **Replay does not send separate ordinary `delivery-ack` frames for each replayed entry.** The exact `resume-complete` terminator acknowledges that replay. Sending an independent prefix ACK first can change the relay's expected boundary; that is not the controller's protocol.
 
@@ -176,7 +179,7 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | Candidate explicitly refuses | Same exact authorization checks | Consume that offer; keep refuser admitted; offer next eligible member |
 | Offer expires/unanswered | Current offer reaches expiry | Next eligible unattempted member; never implicit acceptance |
 | Exhaustion | No eligible authorized candidate | Retire room and close live connections: fort collapses |
-| Successor cleans up | Exact former-host admission/Remove binding | Persist Remove, accepted result, retirement control and lifecycle completion |
+| Successor cleans up | Exact former-host admission/Remove binding | Persist the Remove and its result; retry `retire-member` until the exact request is acknowledged |
 | Successor refreshes policy | New host, reconciled membership, cleanup complete | Publish policy under the new host's own signing authority |
 
 Authorization IDs are deterministic per policy/candidate:
@@ -223,7 +226,11 @@ The models implement the existing plan's stages: M1 delivery; M2 admission/ident
 
 Standalone models explore their finite reachable graphs with up to two operation/KeyPackage tokens, backlog capacity two, three host/member identities, and before/after deadline regions. Composed profiles check prefixes of 12 steps, plus a 16-step configuration with backlog capacity two. These are **safety** checks; deadlock, fairness, real-time liveness, crash recovery of an unavailable storage device, and unbounded executions are excluded. The composed resume abstraction is an interlock, not a model of every repeated socket incarnation or all concrete host-view combinations.
 
-The runner also weakens seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
+The original staged profiles weaken seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
+
+`ResumeAcrossSuccession.tla` checks a narrower interaction beyond those staged runs: an ordinary guest reconnects across one accepted host change. The guest's signed replay evidence is distinct from the relay's host snapshot. At activation, the relay must still have the backlog end that the guest acknowledged. Two weakened configurations omit the evidence check or accept a superseded backlog end; a separate unmodified configuration must reach a guest ready under the new host after cleanup. This last trace demonstrates a possible recovery, not eventual recovery. See §H for reproduction.
+
+`RepeatedResume.tla` starts after handoff and permits two replacement sockets, identical nonempty backlog ends and delayed completions or ACKs. The safe witness reaches ordinary work after the second ACK despite loss of the first. Weakening the socket check or the ACK check produces distinct counterexamples; neither implies that stale traffic was accepted by the implementation. The browser test instead exposed a progress defect: the client retained its old completion ID and rejected a fresh terminator.
 
 | Plan property / failure | Concrete evidence | Limit |
 |---|---|---|
@@ -242,7 +249,7 @@ The runner also weakens seven safeguards individually: persist-before-send, gran
 ```
 git clone https://github.com/slee1996/pillowfort.git
 cd pillowfort
-git checkout --detach c726c5eccafacb6fe6c881be3fcc174287c2f86f
+git checkout --detach 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
 npm ci
 npm --prefix client ci
 npx playwright install chromium
@@ -253,11 +260,19 @@ curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7
 python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models
 ```
 
+The recovery experiments use three independent browser profiles and the real 120-second disconnect grace. Each output directory contains its own result and environment. The observer case checks its roster before admitting any replacement-socket replay; receipt of a frame alone is not the assertion.
+
+```sh
+for fault in guest-resume-after-succession second-resume former-host-removal; do
+  bun scripts/protocol-browser-evidence.ts --mode faults --fault "$fault" --output "/tmp/pillowfort-$fault" || exit 1
+done
+```
+
 Use Node/Bun versions required by the lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and Chromium for pinned Playwright 1.65.0. The source archive omits the earlier `paper/` publication subtree, not runtime or test inputs. Cloning the pinned commit includes that subtree; explicit `./test/...` selection keeps archived source copies out of test discovery.
 
 ### H.2 Retained light-load latency and browser-fault records
 
-The latency samples and four browser-fault executions are retained from `10fe8f8b490c9e890d5a642bc25568e985c2fe8a`; neither is presented as a new measurement of `c726c5e`. From the clone above, reproduce that earlier environment separately:
+The latency samples and four browser-fault executions are retained from `10fe8f8b490c9e890d5a642bc25568e985c2fe8a`; neither is presented as a new measurement of this revision. From the clone above, reproduce that earlier environment separately:
 
 ```
 git worktree add ../pillowfort-latency-10fe8f8b490c 10fe8f8b490c9e890d5a642bc25568e985c2fe8a

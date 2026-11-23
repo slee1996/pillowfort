@@ -2515,7 +2515,7 @@ for (const finalChoice of ["accept", "reject"] as const) {
   });
 }
 
-async function acceptedSuccessionForRecovery() {
+async function prepareSuccessionForRecovery() {
   const setup = await successionRoom();
   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
@@ -2534,11 +2534,96 @@ async function acceptedSuccessionForRecovery() {
     ...applicationFrame(ordered.state, ordered.grant, setup.ids),
     relayKind: "host-transfer-accept", authorizationId, authorityEvent: response,
   };
-  state = accepted(await reduceSecureRelayV4(ordered.state, setup.first, frame, {
+  return { ...setup, state: ordered.state, frame };
+}
+
+async function acceptedSuccessionForRecovery() {
+  const setup = await prepareSuccessionForRecovery();
+  const state = accepted(await reduceSecureRelayV4(setup.state, setup.first, setup.frame, {
     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
   })).state;
-  return { ...setup, state, frame };
+  return { ...setup, state };
 }
+
+it("requires a fresh replay boundary when succession commits during guest resume", async () => {
+  const { state, host, first, second, frame, ids, clock, roomInstance } = await prepareSuccessionForRecovery();
+  const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+  const disconnected = accepted(disconnectSecureRelayDeviceV4(state, second, options()));
+  const reconnect = async (from: SecureRelayStateV4) => {
+    const guest = actor(second.deviceId, ids(), "device");
+    const replay = accepted(await reduceSecureRelayV4(from, guest, {
+      kind: "resume", v: 4, suite: 1, roomInstance, requestId: ids(), deviceId: guest.deviceId,
+    }, options()));
+    const complete = { kind: "resume-complete", v: 4, suite: 1, roomInstance, requestId: ids(),
+      lastMessageId: effect(replay.effects, "backlog-end").lastMessageId } as const;
+    return { guest, replay, complete };
+  };
+  const before = await reconnect(disconnected.state);
+  expect(effect(before.replay.effects, "room-state-snapshot").hostDeviceId).toBe(host.deviceId);
+  const handoff = accepted(await reduceSecureRelayV4(before.replay.state, first, frame, options()));
+  rejected(await reduceSecureRelayV4(handoff.state, before.guest, before.complete, options()), "invalid-reference");
+
+  const after = await reconnect(handoff.state);
+  expect(effect(after.replay.effects, "room-state-snapshot").hostDeviceId).toBe(first.deviceId);
+  expect(after.complete.lastMessageId).toBe(frame.envelope.messageId);
+  const active = accepted(await reduceSecureRelayV4(after.replay.state, after.guest, after.complete, options()));
+  expect(active.state.members.find(member => member.deviceId === second.deviceId)?.status).toBe("active");
+  expect(active.effects).toContainEqual({ type: "frame-accepted", deviceId: second.deviceId, messageId: after.complete.requestId });
+});
+
+it("fences the first resume socket even when the second replay has the same handoff terminator", async () => {
+  const { state, second, frame, first, ids, clock, roomInstance } = await acceptedSuccessionForRecovery();
+  const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+  const connect = async (from: SecureRelayStateV4) => {
+    const device = actor(second.deviceId, ids(), "device");
+    const resumed = accepted(await reduceSecureRelayV4(from, device, {
+      kind: "resume", v: 4, suite: 1, roomInstance, requestId: ids(), deviceId: device.deviceId,
+    }, options()));
+    expect(effect(resumed.effects, "room-state-snapshot").hostDeviceId).toBe(first.deviceId);
+    const completion = { kind: "resume-complete", v: 4, suite: 1, roomInstance,
+      requestId: ids(), lastMessageId: effect(resumed.effects, "backlog-end").lastMessageId } as const;
+    return { device, completion, state: resumed.state };
+  };
+  const firstReplay = await connect(accepted(disconnectSecureRelayDeviceV4(state, second, options())).state);
+  const nextReplay = await connect(accepted(disconnectSecureRelayDeviceV4(firstReplay.state, firstReplay.device, options())).state);
+  expect(firstReplay.completion.lastMessageId).toBe(frame.envelope.messageId);
+  expect(nextReplay.completion.lastMessageId).toBe(firstReplay.completion.lastMessageId);
+  rejected(await reduceSecureRelayV4(nextReplay.state, firstReplay.device, firstReplay.completion, options()), "connection-mismatch");
+  const active = accepted(await reduceSecureRelayV4(nextReplay.state, nextReplay.device, nextReplay.completion, options()));
+  expect(active.effects).toContainEqual({ type: "frame-accepted", deviceId: second.deviceId, messageId: nextReplay.completion.requestId });
+  expect(active.state.members.find(m => m.deviceId === second.deviceId)).toMatchObject({ status: "active", backlog: [] });
+});
+
+it("replays a former-host retirement without releasing the next removal after a relay restart", async () => {
+  const { state, host, first, second, ids, clock, roomInstance } = await acceptedSuccessionForRecovery();
+  const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+  const lost = accepted(disconnectSecureRelayDeviceV4(state, second, options())).state;
+  clock.now = lost.members.find(m => m.deviceId === second.deviceId)!.disconnectExpiresAt!;
+  const expired = accepted(advanceSecureRelayV4(lost, options())).state;
+  const [former, next] = expired.pendingZombieRemovals;
+  expect([former.deviceId, next.deviceId]).toEqual([host.deviceId, second.deviceId]);
+  const order = await requestGrant(await ackAll(expired, ids, clock), first, ids, clock);
+  const commitMessageId = ids();
+  const removed = accepted(await reduceSecureRelayV4(order.state, first, {
+    kind: "relay", relayKind: "commit", grant: order.grant, retirementDeviceId: former.deviceId,
+    retirementAdmissionCommitMessageId: former.admissionCommitMessageId,
+    envelope: envelope(roomInstance, commitMessageId, "group", ids(8)),
+  }, options())).state;
+  const notice = { kind: "retire-member", v: 4, suite: 1, roomInstance,
+    requestId: ids(), deviceId: former.deviceId, commitMessageId } as const;
+  const finished = accepted(await reduceSecureRelayV4(await ackAll(removed, ids, clock), first, notice, options()));
+  const restored = importSecureRelayStateV4(exportSecureRelayStateV4(finished.state));
+  if (!restored) throw new Error("Retirement checkpoint must restore");
+  const duplicate = accepted(await reduceSecureRelayV4(restored, first, notice, options()));
+  expect(effect(duplicate.effects, "member-lifecycle")).toMatchObject({ deviceId: former.deviceId, status: "retired" });
+  expect(duplicate.state.pendingZombieRemovals).toEqual([next]);
+  rejected(await reduceSecureRelayV4(duplicate.state, first, {
+    ...notice, requestId: ids(), deviceId: next.deviceId,
+  }, options()), "invalid-reference");
+  const done = await removeCurrentZombie(duplicate.state, first, ids, clock);
+  expect(done.pendingZombieRemovals).toEqual([]);
+  expect(done.members.find(m => m.deviceId === next.deviceId)?.status).toBe("retired");
+});
 
 describe("M4 successor crash boundaries", () => {
   for (const boundary of ["result-unacknowledged", "removal-unstarted", "removal-completed"] as const) {
