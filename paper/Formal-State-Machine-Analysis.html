@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Formal State Machine Analysis — Evidence edition 5</title>
+  <title>Formal State Machine Analysis — Evidence edition 6</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -27,7 +27,7 @@
 <h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
 State-Machine Analysis</h1>
 <p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 5 · 22 November 2026</em></p>
+edition 6 · 22 November 2026</em></p>
 <p><strong>Status:</strong> TLC 2.19 checked eleven finite safety
 configurations of the models at <code>1ba68f236163</code>. Eleven
 deliberate guard weakenings produced invariant counterexamples. Two
@@ -35,7 +35,7 @@ separate probes, with the safeguards intact, reached successful guest
 recovery. These are bounded coordination results, not a cryptographic
 proof, implementation refinement, deadlock-freedom result, or guarantee
 of eventual progress. The companion description is <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Pillowfort-Protocol-Paper.pdf">Pillowfort:
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Pillowfort-Protocol-Paper.pdf">Pillowfort:
 An MLS-Based Protocol for Ephemeral Rooms</a>.</p>
 <h2 id="executed-analysis">Executed analysis</h2>
 <table>
@@ -124,11 +124,11 @@ execution terminates. The largest composition excludes these focused
 models; its state count is not a product of theirs.</p>
 <p>Exact models, configurations, tool identity, commands and traces are
 in <code>evidence/models/</code> in the <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">public
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">public
 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the

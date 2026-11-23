@@ -1,19 +1,19 @@
 {
   "schemaVersion": 4,
   "edition": {
-    "number": 5,
+    "number": 6,
     "title": "Pillowfort: An MLS-Based Protocol for Ephemeral Rooms",
     "date": "2026-11-22",
     "wireVersion": 4,
     "profile": "pf-v4-cs1",
-    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r5",
-    "previousArtifactCommit": "150e165590bdee5a77bfaa1cbfb0cc6f3d30e6a6",
+    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r6",
+    "previousArtifactCommit": "9372fd3b64459551c7a1bdb2b7f5a37e6f91faa4",
     "previousEditionPreserved": true,
     "changes": [
-      "Introduce the encrypted room, its participants, the relay, and the host before presenting the succession rule.",
-      "Use an interrupted game to explain why a host is needed; distinguish an authentic move from a legal one in the introduction."
+      "Show how an admitted device takes over the same encrypted room using its own identity, on a planned handoff or after a disconnect.",
+      "Trace a declined offer, a signed acceptance, the recorded authority change, and removal of the absent device in a three-member example. Link the recorded guest recovery without changing the evidence."
     ],
-    "publicPullRequest": "https://github.com/slee1996/pillowfort/pull/12",
+    "publicPullRequest": "https://github.com/slee1996/pillowfort/pull/13",
     "evidenceRetainedFrom": "protocol-v4-cs1-evidence-2026-11-22-r3"
   },
   "source": {
@@ -227,7 +227,7 @@
         "2x PNG"
       ],
       "figuresUnchanged": true,
-      "visualVerification": "Opened all three rendered documents in Chromium. All seven figures decoded. Both new abstract paragraphs and the out-of-turn example in section 1 appear on the first PDF page. Numbered A4 pages have no blank page, out-of-page words, local links, or replacement characters. The evidence table, latency table, caption, and their evidence links are unchanged from edition 4.",
+      "visualVerification": "Rendered all three documents in Chromium; all seven figures decoded. Inspected the first PDF page and the host migration discussion with Figures 5 and 6 on pages 5–7. Both paths and the returning guest observation appear on page one. Verified numbered A4 pages, no blank pages or out-of-page words, no local links or replacement characters. The evidence and latency tables, their captions and evidence links are unchanged from edition 5.",
       "claimsTable": {
         "paperPage": 9,
         "claims": 6,
@@ -343,17 +343,17 @@
     {
       "file": "Formal-State-Machine-Analysis.html",
       "bytes": 27643,
-      "sha256": "439018aaf2d2c72e7dad95cbd3c625213c9c4ba2eb053f681c9053b2111e97c9"
+      "sha256": "088dc2687c35cefed81e3bd5ddd6cce37778cf746f38349ada2013198d07563a"
     },
     {
       "file": "Formal-State-Machine-Analysis.md",
       "bytes": 22976,
-      "sha256": "2f29a9ada3a139e8ec54c82d052d034c3a1edeb1729f28279bf810b95aeb3a79"
+      "sha256": "d7e547101dceedd175b7ba84782764160b5c48caab3b82be464573bd462fede3"
     },
     {
       "file": "Formal-State-Machine-Analysis.pdf",
-      "bytes": 327133,
-      "sha256": "d71e5ae68147a5ad18579a609910f54f583ae6fe387ed16d3e7ac4849a1be64c"
+      "bytes": 326924,
+      "sha256": "3b75da44953cedc0e59bae2e9c5e116fc0b9ff9c09a0366a56e1fb660cf07daf"
     },
     {
       "file": "PRODUCTION_DEPLOYMENT.json",
@@ -362,43 +362,43 @@
     },
     {
       "file": "Pillowfort-Protocol-Paper.html",
-      "bytes": 38477,
-      "sha256": "681f9bd203d2af56267cf63dd4c08ccd89229183efc77fab473247fe4f234bde"
+      "bytes": 38606,
+      "sha256": "1ee87eabd4269fca0b801672bd8686945ec1d5477dd4a93154c1daa7e75bd228"
     },
     {
       "file": "Pillowfort-Protocol-Paper.md",
-      "bytes": 30545,
-      "sha256": "4178b37bd85f0760c7e74897966df1b892825d8c3d0a69197fb9693e1ee9aac1"
+      "bytes": 30660,
+      "sha256": "9037c57eea54c2ac0ab9a2733ec22da2a79322cc51db131a8d8e4e06e05f26d6"
     },
     {
       "file": "Pillowfort-Protocol-Paper.pdf",
-      "bytes": 669512,
-      "sha256": "f6c8456f29a92945f8cd78df28b3354f59d3d501c4319acd37ada91963c7a130"
+      "bytes": 669263,
+      "sha256": "f7c4865b2a7e33b81741fcd825b3766a93059a49f70bd60b53aaad39cf6c04bf"
     },
     {
       "file": "Protocol-Technical-Appendix.html",
       "bytes": 43254,
-      "sha256": "38433263cb8db74a614bc3205bf99cb3c2badf0803800a4dd8d9cc5fb5e3fc74"
+      "sha256": "6c23e8c1605a292bd900b48400d13ff4d79f907f977279ff9bc28e6374c74580"
     },
     {
       "file": "Protocol-Technical-Appendix.md",
       "bytes": 31523,
-      "sha256": "d2505fe06ef5c8b48c12f824be68a25b89069b25186b3e1b4e814e7413fc50f0"
+      "sha256": "01ed5c0538c2ec35a012079f75565d872edb1340bf64d5df956898fc7200d992"
     },
     {
       "file": "Protocol-Technical-Appendix.pdf",
-      "bytes": 558676,
-      "sha256": "429fad335dc98ce099990847baee6b7075bfecc4e25c6a2d64f12b35510086b2"
+      "bytes": 558387,
+      "sha256": "d3dc0ad86e9dfc2992135dc35a8074d7628a9ed3e48f73bf88ffdd3ea957a329"
     },
     {
       "file": "Protocol-Verification-Matrix.md",
       "bytes": 12906,
-      "sha256": "2a827fd182b5ddf239aa51e59c2beb03ef77b5e8f1ac25594ed5470bd85d60e7"
+      "sha256": "697d209166fc3d71caf81381eae036f00d355f65405c21481c1161bb650391a7"
     },
     {
       "file": "SOURCE_REVISION.txt",
       "bytes": 1371,
-      "sha256": "33c7f3372c79dd20b5ee2a7785e78e101777b44f17b52ea432365e6690a60a95"
+      "sha256": "43ea7b47ed42f36f63b8597e65f12b975279a7e9947e9f87790852e03392f5c1"
     },
     {
       "file": "assets/fig-01-system-model.png",
