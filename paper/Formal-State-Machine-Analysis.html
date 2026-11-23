@@ -27,14 +27,14 @@
 <h1 id="pillowfort-safety-of-the-room-state-machines">Pillowfort: Safety
 of the Room State Machines</h1>
 <p><em>Induction and finite exploration · Protocol v4-CS1 · Evidence
-edition 13 · 23 November 2026</em></p>
+edition 14 · 23 November 2026</em></p>
 <p>For each of the four model machines, we prove that its initial state
 satisfies an invariant and that each permitted step preserves it. A
 product step either takes the corresponding component step or leaves
 that component unchanged. Along with the product’s own send interlock,
 this establishes <strong>safety at every step</strong>, not a promise
 that any particular step will occur. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/induction.json">Proof
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/induction.json">Proof
 record</a>.</p>
 <table>
 <colgroup>
@@ -78,14 +78,24 @@ enabled interlocks.</td>
 </tr>
 </tbody>
 </table>
-<p>The proof quantifies over all natural operation and backlog bounds
-and all trace lengths. It does <strong>not</strong> turn three modeled
-succession identities into an arbitrary roster or one modeled
-replacement into unbounded socket churn. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/guards.json">Concrete
-guard equivalence</a> covers selected decisions in the source. Storage,
-cryptography and unexamined control flow are not proved by that
-equivalence.</p>
+<p>The induction quantifies over all trace lengths, natural operation
+and backlog bounds, and arbitrary positive finite bounds on admission
+ranks and socket incarnations. New ranks are never recycled. On each
+live change of authority the combined model requires a stored acceptance
+from the nominee. The selected rank is the least eligible and each offer
+removes one rank from the current policy’s untried set. Finite depletion
+bounds the number of offers under that policy; it does not require a
+participant to answer or prove a deadline will fire.</p>
+<p><code>RepeatedResume</code> retains completion requests and
+acknowledgments from previous sockets, including those naming the same
+backlog end. Only the current authenticated socket can activate, and
+only the corresponding receipt can release the endpoint. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/guards.json">Concrete
+decision checks</a> and <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/boundaries.json">publication-path
+checks</a> connect selected source expressions and storage boundaries to
+these claims. Neither result establishes agreement between arbitrary
+divergent MLS histories.</p>
 <h2 id="finite-exploration-and-reachable-failure-schedules">Finite
 exploration and reachable failure schedules</h2>
 <table>
@@ -124,18 +134,28 @@ exploration and reachable failure schedules</h2>
 </tr>
 <tr>
 <td>M4 succession</td>
-<td style="text-align: right;">499</td>
+<td style="text-align: right;">507</td>
 <td style="text-align: right;">201</td>
 </tr>
 <tr>
+<td>Changing membership, four ranks</td>
+<td style="text-align: right;">10,386</td>
+<td style="text-align: right;">2,929</td>
+</tr>
+<tr>
 <td>Guest resume during handoff</td>
-<td style="text-align: right;">492</td>
+<td style="text-align: right;">524</td>
 <td style="text-align: right;">214</td>
 </tr>
 <tr>
 <td>Two guest replacement sockets after handoff</td>
-<td style="text-align: right;">41</td>
+<td style="text-align: right;">42</td>
 <td style="text-align: right;">38</td>
+</tr>
+<tr>
+<td>Four replacements, earlier receipts retained</td>
+<td style="text-align: right;">394</td>
+<td style="text-align: right;">336</td>
 </tr>
 <tr>
 <td>Racing resumes and replay of an undelivered offer</td>
@@ -169,12 +189,12 @@ exploration and reachable failure schedules</h2>
 </tr>
 <tr>
 <td>Composed M1–M4, 12 steps</td>
-<td style="text-align: right;">989,902</td>
+<td style="text-align: right;">991,138</td>
 <td style="text-align: right;">350,246</td>
 </tr>
 <tr>
 <td>Composed M1–M4, backlog 2, 16 steps</td>
-<td style="text-align: right;">6,969,032</td>
+<td style="text-align: right;">6,987,480</td>
 <td style="text-align: right;">2,223,390</td>
 </tr>
 <tr>
@@ -189,18 +209,19 @@ exploration and reachable failure schedules</h2>
 </tr>
 <tr>
 <td>Full finite M1–M4 product, no depth cutoff</td>
-<td style="text-align: right;">27,037,625</td>
+<td style="text-align: right;">27,343,801</td>
 <td style="text-align: right;">6,544,512</td>
 </tr>
 </tbody>
 </table>
-<p>Standalone models use at most two operation/KeyPackage tokens,
-backlog capacity two, three succession identities, and before/after
-deadline regions. The full finite composition explores all reachable
-states for one operation, one KeyPackage token and one backlog slot,
-with no limit on path length; larger domains still use the stated
-cutoffs. Counts are per configuration; they must not be interpreted as
-disjoint implementation states.</p>
+<p>These finite configurations use at most two operation/KeyPackage
+tokens and backlog capacity two. The two new component profiles explore
+four admission ranks and five socket incarnations respectively. Time
+appears as relevant deadline regions. The full finite composition
+explores all reachable states for one operation, one KeyPackage token
+and one backlog slot, with no limit on path length; larger domains still
+use the stated cutoffs. Counts are per configuration; they must not be
+interpreted as disjoint implementation states.</p>
 <p>The seven original sensitivity checks cover persistence ordering,
 grant and transfer binding, host preview readiness, KeyPackage reuse,
 snapshot reconciliation and admission interlocks. The handoff model adds
@@ -237,15 +258,17 @@ mid-dispatch restart.</p>
 model make progress? Two traces recover a guest under a successor or on
 its second connection. Four more reach host-first recovery despite a
 stale close, guest-first nomination without promotion, acceptance after
-replay, and refusal followed by another candidate’s acceptance. None
+replay, and refusal followed by another candidate’s acceptance. Two
+further witnesses reach a fourth host after removal and policy renewal,
+and a fourth replacement with old receipts still in flight. None
 establishes that all executions terminate. Focused models are not
 multiplied into the composed state count.</p>
 <p>Exact model sources, configurations and traces are included in the <a
-href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r13/Pillowfort-Protocol-v4-CS1-R13.zip">evidence
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r14/Pillowfort-Protocol-v4-CS1-R14.zip">evidence
 bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the
@@ -655,8 +678,8 @@ execution.</p>
 Deliberately remove one safeguard at a time and require a
 counterexample: persist-before-ACK, exact grant binding, snapshot
 reconciliation, single-use KeyPackage tracking, or transfer-target
-binding. These are proposed model mutations, not known implementation
-vulnerabilities.</p>
+binding. These mutations test the sensitivity of the model, not the
+exploitability of the implementation.</p>
 <p>For each trace, distinguish model error, implementation error and an
 explicit limit. Map the sequence to storage and network boundaries. Turn
 a reproducible implementation fault into a regression and rerun the

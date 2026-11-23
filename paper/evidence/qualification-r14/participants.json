@@ -1,0 +1,35 @@
+{
+  "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "changing-tenures",
+      "admittedIdentities": 5,
+      "distinctFormerPolicies": 3,
+      "explicitChoices": 3,
+      "lateAdmissionUnderSuccessor": true,
+      "sameDeviceCompletionReceipts": 4,
+      "bidirectionalExchanges": 4,
+      "bothObservedRetirement": true
+    }
+  ],
+  "passed": true,
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "verificationSource": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "production": false,
+  "method": "Four initial browser identities. Successive current hosts were disconnected in a private room. A new member joined under the first successor. The observer required the exact policy-bound actor and a real choice for each transfer; the late member exchanged fresh encrypted messages in both directions after each exact resume receipt.",
+  "limitations": [
+    "One real execution schedule on the local Bun relay; the relay was not evicted in this scenario.",
+    "Terminal screen is endpoint observation, not proof of physical deletion."
+  ]
+}

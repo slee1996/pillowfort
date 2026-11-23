@@ -92,7 +92,7 @@
 id="pillowfort-v4-cs1-wire-contract-and-failure-semantics">Pillowfort
 v4-CS1: Wire Contract and Failure Semantics</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 13 · 23 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 14 · 23 November 2026
 </div>
 <p>This appendix specifies the consent-based succession profile of
 protocol v4. It separates required wire checks, endpoint persistence,
@@ -104,11 +104,11 @@ machines, not all implementation behavior or the cryptography.</p>
 <p><strong>Implementation:</strong> <a
 href="https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb"><code>ccc195d8</code></a>.
 The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Formal-State-Machine-Analysis.pdf">state-machine
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf">state-machine
 analysis</a> and <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json">qualification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json">qualification
 record</a> identify tested contracts and exclusions. Historical
 experiments retain their own revisions.</p>
 <h2 id="a.-profile-and-interoperability">A. Profile and
@@ -1073,14 +1073,36 @@ TLC</td>
 </tr>
 </tbody>
 </table>
+<h3 id="execution-scope">Execution scope</h3>
+<p>A candidate list is an ordered sequence, not a set. The issuing
+endpoint filters its current membership order without re-sorting it;
+receiving endpoints compare its length and every position to their own
+projection. The relay scans the signed list for the first currently
+eligible member. This does not establish that the relay reported
+reachability honestly. During one attempt series a nomination consumes
+one previously untried rank; changing connectivity can affect the next
+offer, but cannot make an attempted rank fresh under the same
+policy.</p>
+<p>The <a
+href="https://github.com/slee1996/pillowfort/blob/3e7acb452eae3d1936f8beba624486ac82652c71/verification/README.md">coordination
+analysis</a> checks arbitrary finite rank and socket bounds. The <a
+href="https://github.com/slee1996/pillowfort/blob/3e7acb452eae3d1936f8beba624486ac82652c71/scripts/check-protocol-boundaries.mjs">publication-path
+check</a> examines a separate obligation: which concrete success effects
+are allowed after a failed or unfinished write. A browser database
+request can succeed before its transaction commits. Authority and
+durable retirement claims rely on the latter. These source checks do not
+assume that observing a frame proves its peer has committed
+anything.</p>
 <h2 id="h.-reproduction-and-measurement-interpretation">H. Reproduction
 and measurement interpretation</h2>
 <h3 id="h.0-current-release-qualification">H.0 Current release
 qualification</h3>
 <p>The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json">qualification
-record</a> pins runtime <code>ccc195d8</code> and the separately checked
-models. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json">qualification
+record</a> pins the released runtime <code>ccc195d8</code> and <a
+href="https://github.com/slee1996/pillowfort/tree/3e7acb452eae3d1936f8beba624486ac82652c71">verification
+source <code>3e7acb45</code></a>. Use the latter checkout for these
+commands; the runtime inputs are unchanged. The <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json">paired
 detector trials</a> retain their original measurements and revisions.
 Install locked dependencies in the root, <code>client</code> and
@@ -1092,12 +1114,13 @@ directory. All interventions below are private and loopback-only:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cut <span class="kw">in</span> silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage<span class="kw">;</span> <span class="cf">do</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">node</span> scripts/protocol-workerd-evidence.mjs <span class="st">&quot;</span><span class="va">$cut</span><span class="st">&quot;</span> <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/</span><span class="va">$cut</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> scenario <span class="kw">in</span> second-resume succession-during-leave peer-storage full-room lost-guest-keys<span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> scenario <span class="kw">in</span> second-resume succession-during-leave changing-tenures peer-storage full-room lost-guest-keys<span class="kw">;</span> <span class="cf">do</span></span>
 <span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> <span class="st">&quot;</span><span class="va">$scenario</span><span class="st">&quot;</span> <span class="at">--output</span> <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/</span><span class="va">$scenario</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
 <span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span>
 <span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> scripts/check-protocol-models.py <span class="at">--jar</span> /path/to/tla2tools.jar <span class="at">--output</span> <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/models&quot;</span></span>
 <span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> scripts/check-protocol-proofs.py <span class="at">--tlapm</span> /path/to/tlapm <span class="at">--output</span> <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/induction&quot;</span></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/check-protocol-guards.mjs <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/guards&quot;</span> /path/to/z3</span></code></pre></div>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/check-protocol-guards.mjs <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/guards&quot;</span> /path/to/z3</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/check-protocol-boundaries.mjs <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/boundaries&quot;</span></span></code></pre></div>
 <p>The idle cuts evict a local Worker immediately after deletion or
 after its first of two notifications. The lost-keys case erases a local
 guest database, then uses the real admission flow. No production

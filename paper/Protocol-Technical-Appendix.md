@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 13 · 23 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 14 · 23 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. Separate inductive proofs cover the four abstract safety machines, not all implementation behavior or the cryptography.
 
-**Implementation:** [`ccc195d8`](https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md), [state-machine analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
+**Implementation:** [`ccc195d8`](https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md), [state-machine analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
 
 ## A. Profile and interoperability
 
@@ -265,22 +265,29 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 | Invalid peer membership transition | Engine commit-validation/rollback tests and controller fail-close path | No epoch merge or Byzantine agreement claim |
 | Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution; local IndexedDB failure followed by reload and retry | Concrete serialization and physical erasure are not proved by TLC |
 
+### Execution scope
+
+A candidate list is an ordered sequence, not a set. The issuing endpoint filters its current membership order without re-sorting it; receiving endpoints compare its length and every position to their own projection. The relay scans the signed list for the first currently eligible member. This does not establish that the relay reported reachability honestly. During one attempt series a nomination consumes one previously untried rank; changing connectivity can affect the next offer, but cannot make an attempted rank fresh under the same policy.
+
+The [coordination analysis](https://github.com/slee1996/pillowfort/blob/3e7acb452eae3d1936f8beba624486ac82652c71/verification/README.md) checks arbitrary finite rank and socket bounds. The [publication-path check](https://github.com/slee1996/pillowfort/blob/3e7acb452eae3d1936f8beba624486ac82652c71/scripts/check-protocol-boundaries.mjs) examines a separate obligation: which concrete success effects are allowed after a failed or unfinished write. A browser database request can succeed before its transaction commits. Authority and durable retirement claims rely on the latter. These source checks do not assume that observing a frame proves its peer has committed anything.
+
 ## H. Reproduction and measurement interpretation
 
 ### H.0 Current release qualification
 
-The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json) pins runtime `ccc195d8` and the separately checked models. The [paired detector trials](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json) retain their original measurements and revisions. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
+The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json) pins the released runtime `ccc195d8` and [verification source `3e7acb45`](https://github.com/slee1996/pillowfort/tree/3e7acb452eae3d1936f8beba624486ac82652c71). Use the latter checkout for these commands; the runtime inputs are unchanged. The [paired detector trials](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json) retain their original measurements and revisions. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
 
 ```sh
 for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage; do
   node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
 done
-for scenario in second-resume succession-during-leave peer-storage full-room lost-guest-keys; do
+for scenario in second-resume succession-during-leave changing-tenures peer-storage full-room lost-guest-keys; do
   bun scripts/protocol-browser-evidence.ts --mode faults --fault "$scenario" --output "$OUT/$scenario" || exit 1
 done
 python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"
 python3 scripts/check-protocol-proofs.py --tlapm /path/to/tlapm --output "$OUT/induction"
 node scripts/check-protocol-guards.mjs "$OUT/guards" /path/to/z3
+node scripts/check-protocol-boundaries.mjs "$OUT/boundaries"
 ```
 
 The idle cuts evict a local Worker immediately after deletion or after its first of two notifications. The lost-keys case erases a local guest database, then uses the real admission flow. No production credential is needed.

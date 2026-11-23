@@ -1,0 +1,81 @@
+{
+  "runtime": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "method": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "comparedArchives": {
+    "released": {
+      "file": "sources/runtime-ccc195d8c0.tar.gz",
+      "sha256": "2ce38e0d3ae807124d136a1b1fe8482b7b34464f5231f7b201b88827bd5ea482",
+      "revision": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+      "contents": "Complete tracked runtime and test tree, omitting paper/."
+    },
+    "method": {
+      "file": "sources/method-3e7acb452e.tar.gz",
+      "sha256": "e18a98def911fd9bd421377896d4c9d47249df3e19a7041a5fb6932e2578119f",
+      "revision": "3e7acb452eae3d1936f8beba624486ac82652c71",
+      "contents": "Complete tracked method, runtime and test checkout excluding paper/. Root has no enclosing directory."
+    }
+  },
+  "runtimeFileComparison": {
+    "runtimeTracked": 402,
+    "methodTracked": 414,
+    "differingPaths": [
+      ".github/workflows/protocol-induction.yml",
+      ".github/workflows/release-check.yml",
+      "docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md",
+      "docs/PROTOCOL_V4_VERIFICATION_MATRIX.md",
+      "scripts/check-protocol-boundaries.mjs",
+      "scripts/check-protocol-guards.mjs",
+      "scripts/check-protocol-models.py",
+      "scripts/check-protocol-proofs.py",
+      "scripts/protocol-browser-evidence.ts",
+      "scripts/protocol-effect-paths.mjs",
+      "scripts/protocol-source.mjs",
+      "verification/Coordination.tla",
+      "verification/CoordinationProof.tla",
+      "verification/M1Delivery.tla",
+      "verification/M1DeliveryProof.tla",
+      "verification/M2AdmissionProof.tla",
+      "verification/M3Resume.tla",
+      "verification/M3ResumeProof.tla",
+      "verification/M4Succession.tla",
+      "verification/M4SuccessionProof.tla",
+      "verification/README.md",
+      "verification/RepeatedResume.tla",
+      "verification/RepeatedResumeProof.tla",
+      "verification/ResumeAcrossSuccession.tla",
+      "verification/app/README.md"
+    ],
+    "securityRelevantInputSubsetMatchedByDigest": 192,
+    "comparison": "Compared every archived file by normalized path and SHA-256 and symbolic links by target. All differences are evidence, documentation, test instrumentation or CI; no application/Worker code differed."
+  },
+  "productionObservation": {
+    "timestamp": "2026-11-23T22:18:18+00:00",
+    "origin": "https://pillowfort.xyz/",
+    "status": 200,
+    "description": "Read-only public homepage points at the same JavaScript and CSS, whose JavaScript references the matching MLS WebAssembly. No Worker redeploy or production room mutation for this evidence edition.",
+    "assets": [
+      {
+        "url": "https://pillowfort.xyz/assets/index-DZeI2l0x.css",
+        "httpStatus": 200,
+        "bytes": 54756,
+        "sha256": "09c00245cfb53f5580da79bfcd23bfbf109467d642c33af5b3b21f76696ec4d6"
+      },
+      {
+        "url": "https://pillowfort.xyz/assets/index-LmbDTvfx.js",
+        "httpStatus": 200,
+        "bytes": 742594,
+        "sha256": "2337f00c6c73d128b42ae1e4a165df8992833f0a3d3bedcdf5544b943953c75a"
+      },
+      {
+        "url": "https://pillowfort.xyz/assets/pillowfort_openmls_bg-BxD-mDtq.wasm",
+        "httpStatus": 200,
+        "bytes": 1132383,
+        "sha256": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94"
+      }
+    ]
+  },
+  "runtimeDeploymentAndPriorLiveRooms": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json",
+  "detectorMeasurements": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json",
+  "changeToDetector": false,
+  "physicalLaptopSleepTested": false
+}
