@@ -1,9 +1,10 @@
 import { chromium, type Browser, type BrowserContext, type Page, type WebSocket as BrowserSocket } from "playwright";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, connect, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { cpus, platform, release, totalmem } from "node:os";
 import { startLocalServer } from "../server";
+import type { SecureRelayStateV4 } from "../src/secureRelayV4";
 import { createRoomInvitationUrl } from "../src/participant/roomInvitation";
 
 const outputIndex = process.argv.indexOf("--output");
@@ -35,8 +36,11 @@ const report: Record<string, unknown> = {
   benchmarks: [], faults: [], passed: false,
 };
 const staged = process.env.PILLOWFORT_QUALIFICATION_ORIGIN;
-const cuts = process.env.PILLOWFORT_QUALIFICATION_CUTS;
-if (staged && (live || !cuts || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
+if (staged && (live || !process.send || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
+type FixtureReceipt = { detectedAt: number } | { offer: NonNullable<SecureRelayStateV4["pendingHostTransfer"]> };
+const fixtureReceipt = staged ? new Promise<FixtureReceipt>(resolve => {
+  process.once("message", message => resolve(message as FixtureReceipt));
+}) : null;
 const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "idle-retirement", "idle-retirement-prefix"] as const;
 type WorkerCut = typeof workerCuts[number];
 const workerCut = workerCuts.find(cut => cut === selectedFault);
@@ -670,14 +674,18 @@ async function workerdHandoff(browser: Browser, fault: WorkerCut) {
       const onset = Date.now(); path.block();
       await offer.waitFor({ timeout: 32_000 });
       const observed = Date.now();
-      const detected = JSON.parse(await readFile(resolve(cuts!, "detected.json"), "utf8"));
-      if (detected < onset || detected > observed) throw Error("Inconsistent host loss clock");
+      const receipt = await awaitBoundary(fixtureReceipt!, "relay detection receipt");
+      if (!("detectedAt" in receipt)) throw Error("Wrong detection receipt");
+      const detected = receipt.detectedAt;
+      if (!Number.isSafeInteger(detected) || detected < onset || detected > observed) throw Error("Inconsistent host loss clock");
       Object.assign(metrics, { lossToRelayDetectionMs: detected - onset, relayDetectionToObservedVisibleOfferMs: observed - detected,
         forcedClose: false, direction, transport: "Dropped application bytes on a still-open loopback path; no FIN/RST at onset." });
     } else {
       await host.context.close();
       await offer.waitFor({ timeout: 17_000 }); // Must precede the original 30-second authorization deadline.
-      const saved = JSON.parse(await readFile(resolve(cuts!, "cut.json"), "utf8"));
+      const receipt = await awaitBoundary(fixtureReceipt!, "committed offer receipt");
+      if (!("offer" in receipt)) throw Error("Wrong offer receipt");
+      const saved = receipt.offer;
       const n = notices[0];
       if (!n || n.authorizationId !== saved.authorizationId || n.offerMessageId !== saved.offerMessageId ||
           n.expiresAt !== saved.expiresAt || n.policyEventId !== saved.policyEventId || n.fromHostDeviceId !== saved.hostDeviceId ||

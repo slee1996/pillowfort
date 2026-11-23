@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 10 · 23 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 11 · 23 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Implementation:** [`8ba7ab70`](https://github.com/slee1996/pillowfort/tree/8ba7ab7040da0522a02ea0c222801e2a072efa05). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Verification-Matrix.md), [bounded analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identify tested contracts and exclusions. Historical fault experiments and latency samples retain their original revisions.
+**Implementation:** [`a5f0fe6b`](https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md), [bounded analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
 
 ## A. Profile and interoperability
 
@@ -66,6 +66,8 @@ A retained device proves resume with its device signing key over:
 ```
 
 The server challenge is 32 random bytes. Invitation-key authentication cannot replace this proof for an established device.
+
+Losing all device keys is not a resume. A guest must use a fresh device key and KeyPackage and receive a new approval. If the old profile still holds the requested name, the guest signs a distinct name in its join proof (the first free numeric suffix, case-insensitive, within 24 Unicode scalar values). The guest sees its accepted name; mentions use that name. Neither the name nor the invitation restores the old device or its chat history.
 
 ## C. Ordered frames and relay decisions
 
@@ -226,7 +228,9 @@ A retired room has no host authority and no succession policy. Both explicit shu
 
 Applying the signed close application event precedes the relay's durable terminal notice; it is not evidence that retirement was stored. The production failure returned `persistence-failed` before that notice. The regression `persists explicit retirement after a signed succession policy was installed` failed before correction and now checks export/import, absent delegation, retired members and exact retry. A production browser execution at `c726c5e` confirms the terminal screen after an acknowledged signed policy. This concrete serialization path is not represented in the reduced TLC models.
 
-### F.3 Detecting an unresponsive host
+When an idle room has connected members, the Worker commits deletion and a retry alarm in one transaction. The only delivery data retained are the original authenticated connection/device pairs. On wake it attempts the content-free `room-retired` notice only on sockets still bound to those pairs, then clears the record and retry alarm. A restart during fan-out may repeat a send. A send is not a receipt; offline, replaced or unreachable sockets are not promised notification.
+
+### F.5 Detecting an unresponsive host
 
 | State / input | Guard | Action |
 |---|---|---|
@@ -265,17 +269,19 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 
 ### H.0 Current release qualification
 
-The [edition 10 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json) pins code, evidence, and deployment. Use the runtime revision `181a29f79205650328fd3a1049f673003d113af3`. After installing locked dependencies and browser engines, run the normal test gates and then build production browser assets. Run the following against loopback only:
+The [edition 11 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) pins code, evidence, and deployment. Use the runtime revision `a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f`. After installing locked dependencies and browser engines, run the normal test gates and then build production browser assets. Run the following against loopback only:
 
 ```sh
-for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix; do
   node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
 done
-for scenario in peer-storage full-room; do
+for scenario in peer-storage full-room lost-guest-keys; do
   bun scripts/protocol-browser-evidence.ts --mode faults --fault "$scenario" --output "$OUT/$scenario" || exit 1
 done
 python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"
 ```
+
+The idle cuts evict a local Worker immediately after deletion or after its first of two notifications. The lost-keys case erases a local guest database, then uses the real admission flow. No production credential is needed.
 
 The historical transport-only experiment included a forced-close control. The current partition gate fails if an offer does not arrive; it cannot use a forced close to pass. For a healthy-path smoke use `--fault healthy-host`. The edition 10 evidence tag also supplies two local-only cases: `--fault suspended-host` freezes a Chromium page, while `--fault paused-host` verifies a debugger pause on its JavaScript thread. A page that can answer is not a silent host. Never inject a network or storage fault into production.
 
@@ -371,10 +377,10 @@ The silent-path fixture discards bytes in both directions without forwarding a W
 
 ## I. Related designs
 
+The comparison concerns mechanisms, not measured performance or cryptographic superiority.
+
 | Design | Relevant mechanism | Distinction from Pillowfort |
 |---|---|---|
-| MLS architecture, RFC 9750 §§5.2–5.3, 6.4–6.6 | Delivery-service consistency, application access control, invalid commits, state-loss recovery | These responsibilities are already recognized by MLS; Pillowfort specifies a particular room coordinator and persist-before-effect composition |
-| Matrix Megolm, specification v1.19 | Per-sender outbound ratchets, session-key distribution, application replay tracking | Different cryptographic/state organization; not an MLS epoch or Pillowfort coordinator benchmark baseline |
-| Signal private group system | Server-canonicalized encrypted group state with privacy-preserving authorization proofs | Different metadata/privacy goals; Pillowfort's relay observes device/membership coordination metadata and uses explicit admitted-host authority |
-
-Sources: [RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html), [Megolm v1.19](https://spec.matrix.org/v1.19/olm-megolm/megolm/), [Signal private group design](https://signal.org/blog/signal-private-group-system/). This is a design comparison, not a claim that these systems were experimentally benchmarked or that Pillowfort improves their cryptography.
+| [MLS architecture, RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html), §§5.2–5.3, 6.4–6.6 | Delivery-service consistency, application access control, invalid commits, state-loss recovery | These responsibilities are already recognized by MLS; Pillowfort specifies a particular room coordinator and persist-before-effect composition |
+| [Matrix Megolm, v1.19](https://spec.matrix.org/v1.19/olm-megolm/megolm/) | Per-sender outbound ratchets, session-key distribution, application replay tracking | Different cryptographic/state organization; not an MLS epoch or Pillowfort coordinator benchmark baseline |
+| [Signal private group system](https://signal.org/blog/signal-private-group-system/) | Server-canonicalized encrypted group state with privacy-preserving authorization proofs | Different metadata/privacy goals; Pillowfort's relay observes device/membership coordination metadata and uses explicit admitted-host authority |

@@ -1,0 +1,42 @@
+{
+  "source": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+  "npmLockedAudit": {
+    "root": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "client": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "hosted-mcp": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "githubAdvisoryRangeReconciliation": {
+    "open": 84,
+    "present": {
+      "client/package-lock.json": 12,
+      "package-lock.json": 39
+    },
+    "absent": {
+      "video/package-lock.json": 31,
+      "video/package.json": 2
+    },
+    "matches": []
+  },
+  "scope": "Open GitHub alerts were compared to resolved package versions on their named manifest. No alerts were dismissed. Zero matched ranges is not an independent source audit."
+}

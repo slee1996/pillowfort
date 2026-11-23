@@ -4,6 +4,8 @@ The [edition 9 protocol qualification](https://github.com/slee1996/pillowfort/bl
 
 [Edition 10](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json) adds silent and asymmetric host loss, healthy restart, same-device admission replay after a transient write failure, and operation at the 20-member limit. Its model establishes eventual suspicion only under fair alarm dispatch. Physical handsets, independent cryptographic review and third-party idle model scheduling are not inferred from those tests.
 
+[Edition 11](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) covers restart during delivery of an idle-room closure and fresh admission after a guest loses its keys. Interrupted delivery was tested only in a local Worker; production evidence is reported separately.
+
 ## Earlier app-wide baseline (before the protocol repairs)
 
 **Disposition: hold app-wide sign-off.** Ordinary room creation, chat, games and host handoff work in the tested environments. Two adjacent lifecycle paths do not. A passing protocol model or release gate is not evidence that either path works.
