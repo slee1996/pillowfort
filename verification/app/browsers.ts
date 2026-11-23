@@ -257,7 +257,7 @@ try {
           // applied rosters and controls; the new host exercises the actual controls below.
           at = "verify both participants applied the new host";
           await Promise.all([host, guest].map((page) => page
-            .locator('.member-entry.is-host .member-name[title="Rowan"]').waitFor({ state: "attached" })));
+            .locator('.member-entry.is-host .member-name[title="Rowan"]').first().waitFor({ state: "attached" })));
           await Promise.all([
             guest.locator("#btn-knock-down").waitFor({ state: "attached" }),
             host.locator("#btn-leave-room").waitFor({ state: "attached" }),

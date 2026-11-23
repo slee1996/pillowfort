@@ -157,7 +157,8 @@
   "publicationHarness": {
     "pinnedAt": "protocol-v4-cs1-evidence-2026-11-23-r12",
     "file": "verification/app/browsers.ts",
-    "sha256": "6e0df1dddc1efac1b8978fe3def5ea870dab9cb41808a52e77df0ee887166a25",
-    "why": "The first live attempt timed out observing an open host menu; the second timed out in the multi-step guest-resume block. The final observer records the exact failed substep and bounded protocol discriminants on failure, and separately requires both applied host roles before testing actual authority. Both earlier attempts are retained. Copy reproduction/ over the unpacked source only for the amended normal browser smoke."
+    "sha256": "5761021815b3b05fcd9167fa33e8c6521d23c4d9de7a592d1b54a41abafb7d6a",
+    "why": "The first live attempt timed out observing an open host menu; the second timed out in the multi-step guest-resume block. The final observer records the exact failed substep and bounded protocol discriminants on failure, and separately requires both applied host roles before testing actual authority. Both earlier attempts are retained. Copy reproduction/ over the unpacked source only for the amended normal browser smoke. The exact historical observer is also included as observed-browsers.ts. The published rerun procedure accepts the duplicate representations of the same named host in mobile and desktop rosters; it still requires the named host on both independent pages.",
+    "observedSourceSha256": "6e0df1dddc1efac1b8978fe3def5ea870dab9cb41808a52e77df0ee887166a25"
   }
 }
