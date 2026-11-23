@@ -233,9 +233,11 @@ binding version, suite, room ID, room instance, device ID, connection ID,
 request ID, and challenge. The relay verifies this proof with the credential
 key stored for that active device.
 
-A missing, retired, pending, or `requiresFreshAdmission` device cannot resume.
-It must join again with a fresh, never-before-used KeyPackage and a new
-invitation-signed binding.
+A device still awaiting admission cannot resume. An already admitted device whose
+previous connection stopped during replay can restart replay with the same credential;
+it cannot send ordinary traffic until it receives its new completion acknowledgment.
+A missing, retired, or `requiresFreshAdmission` device needs fresh admission with a
+never-before-used KeyPackage and a new invitation-signed binding.
 
 ## Relay-visible and encrypted data
 

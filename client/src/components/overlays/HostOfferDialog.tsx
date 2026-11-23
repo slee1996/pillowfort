@@ -10,13 +10,11 @@ export function HostOfferDialog() {
   if (!hostOffer) return null;
 
   const handleCatch = () => {
-    useGameStore.getState().setHostOffer(null);
-    send("accept-host");
+    if (send("accept-host")) useGameStore.getState().setHostOffer(null);
   };
 
   const handleDuck = () => {
-    useGameStore.getState().setHostOffer(null);
-    send("reject-host");
+    if (send("reject-host")) useGameStore.getState().setHostOffer(null);
   };
 
   return (

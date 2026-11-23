@@ -411,8 +411,16 @@ export class SecureRoomController {
     // Bound producer traffic before it can accumulate behind asynchronous MLS work.
     // Acceptance here means queued in memory, never relay acceptance or application.
     if (type === "draw") return this.queueUiDrawing(payload);
+    const choice = type === "accept-host" || type === "reject-host";
+    const offer = choice ? this.currentHostOffer() : undefined;
+    if (!this.uiActionReady(type, offer?.policyEventId !== undefined)) return false;
+    const authorizationId = offer?.authorizationId;
+    if (choice && !authorizationId) {
+      this.store.getState().showError("That host offer is no longer valid.");
+      return false;
+    }
     const generation = this.generation;
-    this.enqueue(async () => this.mapUiAction(type, payload), generation);
+    this.enqueue(() => this.mapUiAction(type, payload, authorizationId ?? undefined), generation);
     return true;
   }
 
@@ -2941,16 +2949,31 @@ export class SecureRoomController {
     });
   }
 
-  private async mapUiAction(type: string, payload: Record<string, unknown>): Promise<void> {
+  private currentHostOffer() {
+    const engine = this.engine;
+    const offer = engine?.pendingRelayControls.find(control => control.kind === "transfer-host" &&
+      control.targetDeviceId === engine.deviceId && control.authorizationId !== null && control.acceptMessageId === null);
+    return offer?.kind === "transfer-host" ? offer : undefined;
+  }
+
+  private uiActionReady(type: string, delegatedChoice: boolean): boolean {
+    const reason = !this.authenticated || this.replayingBacklog || !this.engine?.isActive()
+      ? "The secure room is reconnecting. Try again in a moment."
+      : !delegatedChoice && this.hasMembershipBarrier()
+        ? "Securing the fort's membership. Try again in a moment." : null;
+    if (reason && type !== "typing") this.store.getState().showError(reason);
+    return reason === null;
+  }
+
+  private async mapUiAction(type: string, payload: Record<string, unknown>, authorizationId?: string): Promise<void> {
+    // State may change while serialized crypto runs. Never apply a queued click to a later offer.
+    const control = authorizationId === undefined ? undefined : this.currentHostOffer();
+    if (authorizationId !== undefined && control?.authorizationId !== authorizationId) {
+      this.store.getState().showError("That host offer is no longer valid.");
+      return;
+    }
+    if (!this.uiActionReady(type, control?.policyEventId !== undefined)) return;
     const engine = this.requireEngine();
-    if (!this.authenticated || this.replayingBacklog || !engine.isActive()) {
-      this.store.getState().showError("The secure room is reconnecting. Try again in a moment.");
-      return;
-    }
-    if (this.hasMembershipBarrier()) {
-      this.store.getState().showError("Securing the fort after a member disconnected. Try again in a moment.");
-      return;
-    }
     const state = engine.state;
     const target = (key: string): string | null => {
       const name = stringField(payload, key)?.normalize("NFC").trim();
@@ -3035,20 +3058,14 @@ export class SecureRoomController {
       }
       case "accept-host":
       case "reject-host": {
-        const control = engine.pendingRelayControls.find((candidate) => candidate.kind === "transfer-host" &&
-          candidate.targetDeviceId === engine.deviceId && candidate.authorizationId !== null &&
-          candidate.acceptMessageId === null);
-        if (control?.kind !== "transfer-host" || control.authorizationId === null) {
-          this.store.getState().showError("That host offer is no longer valid.");
-          return;
-        }
+        if (!control || !authorizationId) return;
         const action = type === "accept-host" ? "accept" : "reject";
         this.enqueueApplication(
           control.policyEventId !== undefined
-            ? { type: "host-succession", action, policyEventId: control.policyEventId, authorizationId: control.authorizationId }
-            : action === "accept" ? { type: "host-transfer", action, authorizationId: control.authorizationId }
+            ? { type: "host-succession", action, policyEventId: control.policyEventId, authorizationId }
+            : action === "accept" ? { type: "host-transfer", action, authorizationId }
             : { type: "host-transfer", action },
-          control.policyEventId !== undefined ? `host-succession:${control.authorizationId}` : `host-choice:${control.authorizationId}`,
+          control.policyEventId !== undefined ? `host-succession:${authorizationId}` : `host-choice:${authorizationId}`,
           true,
         );
         return;
@@ -3310,9 +3327,8 @@ export class SecureRoomController {
   private async runAutomations(): Promise<void> {
     const engine = this.engine;
     if (!engine || !this.authenticated || this.replayingBacklog || !engine.isActive()) return;
-    const offer = engine.pendingRelayControls.find((control) => control.kind === "transfer-host" &&
-      control.targetDeviceId === engine.deviceId && control.authorizationId !== null && control.acceptMessageId === null);
-    if (offer?.kind === "transfer-host" && offer.authorizationId !== null) {
+    const offer = this.currentHostOffer();
+    if (offer && offer.authorizationId !== null) {
       const succession = offer.policyEventId !== undefined;
       const key = succession ? `host-succession:${offer.authorizationId}` : `host-choice:${offer.authorizationId}`;
       // The signed manual offer alone cannot be answered. Its matching relay capability
