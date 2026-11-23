@@ -21,7 +21,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness", "succession-during-leave"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -805,6 +805,51 @@ async function workerdHandoff(browser: Browser, fault: WorkerCut) {
   } finally { path?.stop(); await closeRoom(room); }
 }
 
+// Stop the old host after it has prepared an MLS Remove but before the relay receives it.
+// The other members have applied a signed leave: ordinary work is barred, consent is not.
+async function successionDuringLeave(browser: Browser) {
+  const removePrepared = Promise.withResolvers<void>();
+  const choices: string[] = [];
+  let armed = false;
+  const room = await setupRoom(browser, 4, async ({ page }, index) => {
+    if (index === 0) {
+      await page.routeWebSocket("**", client => {
+        const server = client.connectToServer();
+        client.onMessage(raw => {
+          const f = JSON.parse(raw.toString());
+          if (armed && f.kind === "relay" && f.relayKind === "commit") { removePrepared.resolve(); return; }
+          server.send(raw);
+        });
+      });
+    } else {
+      page.on("websocket", socket => socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (f.authorityEvent?.content.type === "host-succession") choices.push(`${index}:${f.authorityEvent.content.action}`);
+      }));
+    }
+  });
+  const [host, first, second, leaver] = room.participants.map(p => p.page);
+  try {
+    await deliver(first, second, "all peers present before departure");
+    armed = true;
+    await leaver.locator("#btn-room-menu").click();
+    await leaver.locator("#btn-leave-room").click();
+    await leaver.locator("#btn-confirm-room-exit").click();
+    await awaitBoundary(removePrepared.promise, "former host prepared the departing member's removal");
+    await host.goto("about:blank");
+    await first.locator("#btn-duck").click({ timeout: 8_000 });
+    await second.locator("#btn-catch").click({ timeout: 8_000 }).catch(() => {
+      throw Error(`Second candidate never got a choice after explicit refusal; signed responses: ${choices.join(",")}`);
+    });
+    await second.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 20_000 });
+    await deliver(first, second, "traffic after both removals");
+    await deliver(second, first, "the unwilling member can still participate");
+    if (choices.join(",") !== "1:reject,2:accept") throw Error(`Unexpected consent sequence: ${choices.join(",")}`);
+    return { fault: "succession-during-leave", removalUnsentAtHostLoss: true, signedChoices: choices,
+      survivingMembers: 2, ordinaryChatBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
 async function secondResume(browser: Browser) {
   const withheld = Promise.withResolvers<() => void>();
   let joined: string | undefined, oldAck: string | undefined;
@@ -853,18 +898,24 @@ async function secondResume(browser: Browser) {
     // An observed, later encrypted message fences processing of the old ACK.
     await deliver(successor.page, guest.page, "message after the delayed ACK");
     const input = guest.page.getByRole("textbox", { name: "Message", exact: true });
-    await input.fill("must not send before the current ACK");
+    const draft = "the same draft across the current resume ACK";
+    await input.fill(draft);
     await input.press("Enter");
     await guest.page.getByText("The secure room is reconnecting. Try again in a moment.", { exact: true }).first().waitFor();
+    const received = successor.page.locator(".chat-content").getByText(draft, { exact: true });
+    if (await input.inputValue() !== draft) throw new Error("Resume discarded a draft before accepting it for delivery");
+    if (await received.count()) throw new Error("Peer received blocked draft before the current ACK");
     release();
     await deliver(successor.page, guest.page, "message after the current ACK");
-    await deliver(guest.page, successor.page, "sent after the current ACK");
+    await input.press("Enter");
+    await received.first().waitFor({ timeout: 20_000 });
     if (!joined || returning.length !== 2 || returning.some(id => id !== joined) ||
         completions.length !== 2 || completions[0] === completions[1] ||
-        (await text(successor.page)).includes("must not send before the current ACK")) {
+        await input.inputValue() !== "" || await received.count() !== 1) {
       throw new Error("Second resume replaced the device or released an old send");
     }
-    return { fault: "second-resume", sameDeviceResumes: 2, staleAckRefusedSend: true, currentAckReleasedSend: true };
+    return { fault: "second-resume", sameDeviceResumes: 2, staleAckRefusedSend: true, draftRetainedBeforeCurrentAck: true,
+      currentAckReleasedSend: true, peerCopiesAfterExplicitResubmission: 1 };
   } finally { await closeRoom(room); }
 }
 
@@ -1183,6 +1234,7 @@ try {
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
     if (selectedFault === "manual-offer-readiness") results.push(await manualOfferReadiness(browser!));
+    if (selectedFault === "succession-during-leave") results.push(await successionDuringLeave(browser!));
     if (selectedFault === "terminal-storage") results.push(await retirementStorage(browser!));
     if (selectedFault === "premature-succession") results.push(await prematureSuccession(origin, (host, configure, gateway) =>
       setupRoom(browser!, 3, configure, gateway, 250, undefined, host), closeRoom, deliver));

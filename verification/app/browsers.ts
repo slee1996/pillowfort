@@ -62,6 +62,9 @@ try {
     const relayErrors: string[] = [];
     const hostChangeFrames = { host: 0, guest: 0 };
     const started = Date.now();
+    const resumePhases: { phase: string; elapsedMs: number }[] = [];
+    const resumeReceipt = Promise.withResolvers<void>();
+    const resumePhase = (phase: string) => resumePhases.push({ phase, elapsedMs: Date.now() - started });
     const trace: string[] = [];
     function note(role: string, direction: string, ...kinds: unknown[]) {
       // Protocol discriminants only. Never report a payload, identifier, name, credential or URL.
@@ -72,16 +75,27 @@ try {
     }
     for (const [role, p] of [["host", host], ["guest", guest]] as const) {
       p.on("websocket", (ws) => {
+        let resuming = false, completion: string | undefined;
         ws.on("close", () => note(role, "socket", "close"));
         ws.on("framesent", ({ payload }) => {
           if (typeof payload !== "string") return;
           const f = JSON.parse(payload);
           note(role, "send", f.kind, f.type, f.mode, f.frame?.relayKind);
+          if (role === "guest" && f.kind === "secure-authenticate" && f.mode === "resume") {
+            resuming = true; resumePhase("authentication-sent");
+          }
+          if (resuming && f.kind === "resume-complete") {
+            completion = f.requestId; resumePhase("completion-sent");
+          }
         });
         ws.on("framereceived", ({ payload }) => {
           if (typeof payload !== "string") return;
           const f = JSON.parse(payload);
           note(role, "recv", f.type, f.relayKind ?? f.frame?.relayKind, f.status, f.result);
+          if (resuming && ["authenticated", "room-state-snapshot", "backlog-end"].includes(f.type)) resumePhase(f.type);
+          if (resuming && completion !== undefined && f.type === "frame-accepted" && f.messageId === completion) {
+            resumePhase("current-socket-completion-ack"); resuming = false; resumeReceipt.resolve();
+          }
           if (f.type === "host-changed") hostChangeFrames[role]++;
           if (f.type === "error" && /^[a-z-]{1,40}$/.test(f.code)) relayErrors.push(role + ": " + f.code);
         });
@@ -96,6 +110,7 @@ try {
       retoss,
       versions: [hostBrowser.version(), peerBrowser.version()],
       hostChangeFrames,
+      resumePhases,
       failureTrace: [] as string[],
       passed,
       errors,
@@ -224,10 +239,23 @@ try {
         await guest.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
         at = "wait for resumed guest composer";
         await untilVisible(guest, "#msg-input");
+        at = "observe receipt for the current guest completion";
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([resumeReceipt.promise, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(Error("No receipt for this socket's guest completion")), 20_000);
+          })]);
+        } finally { clearTimeout(timer); }
+        // The wire receipt precedes application handling. A later applied message is a receive-side fence.
+        at = "observe ordinary chat at the resumed guest";
+        await send(host, "welcome back Rowan");
+        await messages(guest, "welcome back Rowan").first().waitFor();
+        resumePhase("guest-applied-host-chat");
         at = "send from resumed guest";
         await send(guest, "same guest returned");
         at = "observe resumed guest chat at original host";
         await messages(host, "same guest returned").first().waitFor();
+        resumePhase("host-applied-guest-chat");
         assert(
           authModes.includes("join") &&
             authModes.includes("resume") &&

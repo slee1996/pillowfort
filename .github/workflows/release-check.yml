@@ -62,6 +62,12 @@ jobs:
       - name: Verify a throttled participant resumes without duplicating delivery
         run: bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-backpressure --output "$RUNNER_TEMP/guest-backpressure"
 
+      - name: Verify draft retention during resume and consent during membership cleanup
+        run: |
+          for cut in second-resume succession-during-leave; do
+            bun scripts/protocol-browser-evidence.ts --mode faults --fault "$cut" --output "$RUNNER_TEMP/pillowfort-$cut"
+          done
+
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 
