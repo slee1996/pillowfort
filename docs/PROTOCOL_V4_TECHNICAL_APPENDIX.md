@@ -63,6 +63,8 @@ A retained device proves resume with its device signing key over:
 
 The server challenge is 32 random bytes. Invitation-key authentication cannot replace this proof for an established device.
 
+Losing all device keys is not a resume. A guest must use a fresh device key and KeyPackage and receive a new approval. If the old profile still holds the requested name, the guest signs a distinct name in its join proof (the first free numeric suffix, case-insensitive, within 24 Unicode scalar values). The guest sees its accepted name; mentions use that name. Neither the name nor the invitation restores the old device or its chat history.
+
 ## C. Ordered frames and relay decisions
 
 An envelope has exactly `v`, `suite`, `roomInstance`, `messageId`, `route`, `payload`, plus `to` only for device routing. `payload` is a complete MLS wire message, or the specified Welcome/tree admission bundle. The relay payload bound is 64 KiB; the complete WebSocket frame bound is 96 KiB.
@@ -78,6 +80,8 @@ For an ordinary application frame:
 ```
 
 The relay validates socket ownership, active membership, empty sender delivery backlog, route, current grant, exact order, expiry, barriers, and replay fingerprint. An ordinary non-host frame is retained for host preview. Host software inspects a temporary MLS engine, verifies the event and legal transition, and signs no replacement message: it sends an exact `application-decision` referring to that pending frame. Relay acceptance is persisted before dependent effects; recipients independently validate and persist before acknowledging.
+
+When an idle room has connected members, the Worker commits deletion and a retry alarm in one transaction. The only delivery data retained are the original authenticated connection/device pairs. On wake it attempts the content-free `room-retired` notice only on sockets still bound to those pairs, then clears the record and retry alarm. A restart during fan-out may repeat a send. A send is not a receipt; offline, replaced or unreachable sockets are not promised notification.
 
 ### C.1 M1 transition contract
 

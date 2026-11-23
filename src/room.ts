@@ -139,6 +139,9 @@ const MAX_ENC_B64_LEN = 4096;
 const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
 const ALARM_SCHEDULE_KEY = "alarmSchedule";
 const HOST_PATH_KEY = "secureHostPathV1";
+// At most one entry per connected member. No room secret, credential, MLS state or message is retained.
+const IDLE_NOTICE_KEY = "secureIdleNoticeV1";
+type IdleNoticeRecipients = Record<string, string>; // authenticated connection ID -> device ID
 const SAB_BOMB_KEY = "sabBomb";
 const FORT_PASS_ENTITLEMENT_KEY = "fortPassEntitlement";
 const FORT_PASS_REDEMPTION_KEY = "fortPassRedemption";
@@ -548,6 +551,8 @@ export class Room implements DurableObject {
       this.fortPassEntitlement = normalizeFortPassEntitlement(await state.storage.get(FORT_PASS_ENTITLEMENT_KEY));
       this.roomTheme = normalizeRoomTheme(await state.storage.get(ROOM_THEME_KEY)) || "away-message";
       await this.restoreSecureRelayState();
+      const recipients = await state.storage.get<IdleNoticeRecipients>(IDLE_NOTICE_KEY);
+      if (recipients) await this.replayIdleNotice(recipients);
       // Deployment of protocol v4 is a hard downgrade boundary. Any socket
       // hibernated from a legacy deployment is closed before it can deliver a
       // new event under the upgraded code.
@@ -2036,6 +2041,10 @@ export class Room implements DurableObject {
       const schedule = await this.loadAlarmSchedule();
       const due = firstDueRoomAlarm(schedule, now);
 
+      if (due === "idle-notice") {
+        await this.replayIdleNotice(await this.state.storage.get<IdleNoticeRecipients>(IDLE_NOTICE_KEY));
+        return;
+      }
       if (due === "sab-bomb") {
         await this.state.storage.get<SabBombState>(SAB_BOMB_KEY);
         this.log("legacy game alarm fired");
@@ -2655,6 +2664,32 @@ export class Room implements DurableObject {
     this.broadcast("sab-bomb-start", { saboteur, seconds: SAB_BOMB_SECONDS, durationMs: SAB_BOMB_MS });
   }
 
+  // On recovery, a reused room code, replacement socket, or pending handshake must never
+  // receive the previous connection’s terminal notice. Socket closure is not a client ACK.
+  private notifyIdleSockets(recipients: IdleNoticeRecipients | undefined, reason: string, closeAll: boolean) {
+    for (const socket of this.state.getWebSockets()) {
+      const a = this.att(socket);
+      const owns = recipients && a.protocol === "v4" && a.secureAuthenticated && a.secureConnectionId &&
+        a.secureDeviceId && recipients[a.secureConnectionId] === a.secureDeviceId;
+      if (owns) this.sendSecure(socket, { kind: "secure-server", v: 4, suite: 1, type: "room-retired" });
+      if (owns || closeAll) { try { socket.close(1000, reason); } catch {} }
+    }
+  }
+
+  private async replayIdleNotice(recipients: IdleNoticeRecipients | undefined) {
+    this.notifyIdleSockets(recipients, "room retired", false);
+    await this.clearIdleNotice();
+  }
+
+  private async clearIdleNotice() {
+    await this.state.storage.transaction(async tx => {
+      const schedule = normalizeRoomAlarmSchedule(await tx.get(ALARM_SCHEDULE_KEY));
+      delete schedule["idle-notice"];
+      await tx.delete(IDLE_NOTICE_KEY);
+      await this.saveAlarmSchedule(schedule, tx);
+    });
+  }
+
   private async destroyRoom(reason: string) {
     const [rawRedemption, rawPreGrantRevocation] = await Promise.all([
       this.state.storage.get<unknown>(FORT_PASS_REDEMPTION_KEY),
@@ -2670,12 +2705,23 @@ export class Room implements DurableObject {
       || (rawPreGrantRevocation !== undefined && !preGrantRevocation)) {
       throw new Error("room payment state is corrupt");
     }
+    let recipients: IdleNoticeRecipients | undefined;
+    if (this.secureRelayState?.lifecycle === "open") {
+      for (const member of this.secureRelayState.members) {
+        if (member.connectionId) (recipients ??= {})[member.connectionId] = member.deviceId;
+      }
+    }
     await this.state.storage.transaction(async (transaction) => {
       await transaction.deleteAlarm();
       const stored = await transaction.list();
       const disposableKeys = [...stored.keys()].filter((key) => key !== FORT_PASS_REDEMPTION_KEY
         && key !== FORT_PASS_PREGRANT_REVOCATION_KEY);
       if (disposableKeys.length) await transaction.delete(disposableKeys);
+      if (recipients) {
+        await transaction.put(IDLE_NOTICE_KEY, recipients);
+        // If execution stops before notification, even completely passive browsers must get another attempt.
+        await this.saveAlarmSchedule({ "idle-notice": Date.now() }, transaction);
+      }
       if (redemption) await transaction.put(FORT_PASS_REDEMPTION_KEY, redemption);
       if (preGrantRevocation) {
         await transaction.put(FORT_PASS_PREGRANT_REVOCATION_KEY, preGrantRevocation);
@@ -2691,16 +2737,14 @@ export class Room implements DurableObject {
     // clear all grace timers
     for (const [, disc] of this.disconnected) clearTimeout(disc.timer);
     this.disconnected.clear();
-    if (this.secureRelayState) {
+    if (this.secureRelayState?.lifecycle === "retired") {
       this.broadcastSecureTerminal({
         kind: "secure-server", v: 4, suite: 1, type: "room-retired",
       });
-    } else {
+    } else if (!this.secureRelayState) {
       this.broadcast("knocked-down", { reason });
     }
-    for (const w of this.state.getWebSockets()) {
-      try { w.close(1000, reason); } catch {}
-    }
+    this.notifyIdleSockets(recipients, reason, true);
     if (this.secureRelayState?.lifecycle === "open") {
       recordRoomActivity(this.env, this.state, "room.retired");
     }
@@ -2717,6 +2761,7 @@ export class Room implements DurableObject {
     this.fortPassEntitlement = null;
     this.roomTheme = "away-message";
     this.tossPillowFrom = null;
+    if (recipients) await this.clearIdleNotice();
   }
 
   // --- handlers ---

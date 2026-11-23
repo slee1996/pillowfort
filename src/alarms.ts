@@ -1,7 +1,7 @@
-export type RoomAlarmKind = "idle" | "sab-bomb" | "auth-sockets" | "secure-relay" | "offer-delivery" | "host-path";
+export type RoomAlarmKind = "idle" | "sab-bomb" | "auth-sockets" | "secure-relay" | "offer-delivery" | "host-path" | "idle-notice";
 export type RoomAlarmSchedule = Partial<Record<RoomAlarmKind, number>>;
 
-const DUE_PRIORITY: RoomAlarmKind[] = ["sab-bomb", "auth-sockets", "secure-relay", "offer-delivery", "idle", "host-path"];
+const DUE_PRIORITY: RoomAlarmKind[] = ["idle-notice", "sab-bomb", "auth-sockets", "secure-relay", "offer-delivery", "idle", "host-path"];
 
 export function normalizeRoomAlarmSchedule(input: unknown): RoomAlarmSchedule {
   const raw = input && typeof input === "object" ? input as RoomAlarmSchedule : {};

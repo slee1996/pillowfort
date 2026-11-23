@@ -60,6 +60,11 @@ def main():
                  [("HostPath", "None"), ("mutation-OldSocket", "OldSocket"), ("mutation-WrongNonce", "WrongNonce"),
                   ("mutation-PeerReply", "PeerReply"), ("mutation-NeverDetect", "NeverDetect"),
                   ("witness-ReturnedHostPath", "None")]]
+    witnesses["witness-RecoveredIdlePrefix"] = "NoRecoveredPrefix"
+    profiles += [(name, "IdleRetirement", 1, 1, mutation, None, None) for name, mutation in
+                 [("IdleRetirement", "None"), ("mutation-NoMarker", "NoMarker"), ("mutation-NoWake", "NoWake"),
+                  ("mutation-AnyDevice", "AnyDevice"), ("mutation-AnyConnection", "AnyConnection"),
+                  ("mutation-Unauthenticated", "Unauthenticated"), ("witness-RecoveredIdlePrefix", "None")]]
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:
@@ -68,8 +73,9 @@ def main():
     for name, module, capacity, operations, mutant, stage, depth in profiles:
         config = output / (name + ".cfg")
         invariants = "Safety" + (" " + witnesses[name] if name in witnesses else "")
-        temporal = module == "HostPath" and (name == "HostPath" or mutant == "NeverDetect")
-        behavior = "SPECIFICATION Spec\nPROPERTY SilentProgress" if temporal else "INIT Init\nNEXT Next"
+        temporal = {"HostPath": "SilentProgress", "mutation-NeverDetect": "SilentProgress",
+                    "IdleRetirement": "AttachedProgress", "mutation-NoWake": "AttachedProgress"}.get(name)
+        behavior = f"SPECIFICATION Spec\nPROPERTY {temporal}" if temporal else "INIT Init\nNEXT Next"
         config.write_text(f"{behavior}\nINVARIANTS {invariants}\nCONSTANTS\n"
                           f' Capacity = {capacity}\n MaxOps = {operations}\n Broken = "{mutant}"\n' +
                           (f" Stage = {stage}\n MaxDepth = {depth}\n" if stage is not None else ""))
@@ -84,17 +90,17 @@ def main():
         match = re.search(r"Invariant (\w+) is violated", log)
         violated = match[1] if match else None
         if temporal and "Temporal properties were violated" in log:
-            violated = "SilentProgress"
-        if mutant == "NeverDetect":
-            expected = "SilentProgress"
+            violated = temporal
+        if temporal and mutant != "None":
+            expected = temporal
         exhaustive = "Model checking completed. No error has been found." in log
-        success = (run.returncode == (13 if expected == "SilentProgress" else 12) and violated == expected if expected
+        success = (run.returncode == (13 if temporal and expected == temporal else 12) and violated == expected if expected
                    else run.returncode == 0 and exhaustive)
         counts = re.search(r"([\d,]+) states generated, ([\d,]+) distinct states found", log)
         result = {"name": name, "module": module, "capacity": capacity, "maxOperations": operations,
                   "stage": stage, "maxCompositionSteps": depth, "mutation": mutant,
                   "exitCode": run.returncode, "expectedCounterexample": mutant != "None",
-                  "counterexampleFound": violated in ("Safety", "SilentProgress"), "expectedViolation": expected,
+                  "counterexampleFound": violated in ("Safety", "SilentProgress", "AttachedProgress"), "expectedViolation": expected,
                   "observedViolation": violated, "passed": success,
                   "statesGenerated": int(counts[1].replace(",", "")) if counts else None,
                   "distinctStates": int(counts[2].replace(",", "")) if counts else None,
@@ -104,7 +110,7 @@ def main():
         report = {"checker": "TLC 2.19 / tla2tools v1.7.4", "jarSha256": JAR_SHA256,
                   "selectedModel": args.model, "platform": platform.platform(),
                   "java": subprocess.run(["java", "-version"], capture_output=True, text=True).stderr,
-                  "scope": "Finite coordination abstractions. HostPath additionally checks silent-path progress assuming weakly fair alarm dispatch. No cryptographic proof, system-wide deadlock freedom or unconditional liveness claim.",
+                  "scope": "Finite coordination abstractions. HostPath and IdleRetirement additionally check conditional progress under weakly fair dispatch; a send is not receipt. No cryptographic proof, system-wide deadlock freedom or unconditional liveness claim.",
                   "results": results, "passed": len(results) == len(profiles) and all(r["passed"] for r in results)}
         (output / "model-results.json").write_text(json.dumps(report, indent=2) + "\n")
         if not success:

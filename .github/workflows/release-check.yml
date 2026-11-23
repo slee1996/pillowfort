@@ -67,6 +67,14 @@ jobs:
           for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
             node scripts/protocol-workerd-evidence.mjs "$cut" "$RUNNER_TEMP/pillowfort-$cut"
           done
+      - name: Verify idle retirement survives a Worker restart before and during notification
+        run: |
+          for cut in idle-retirement idle-retirement-prefix; do
+            node scripts/protocol-workerd-evidence.mjs "$cut" "$RUNNER_TEMP/pillowfort-$cut"
+          done
+      - name: Verify a guest with lost keys needs new approval and gets a distinct address
+        run: bun scripts/protocol-browser-evidence.ts --mode faults --fault lost-guest-keys --output "$RUNNER_TEMP/lost-guest-keys"
+
       - name: Verify recovery after a peer cannot store a committed membership change
         run: bun scripts/protocol-browser-evidence.ts --mode faults --fault peer-storage --output "$RUNNER_TEMP/peer-storage"
 

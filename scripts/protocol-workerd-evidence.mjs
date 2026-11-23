@@ -8,7 +8,9 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 
 const [fault, directory] = process.argv.slice(2);
-if (!["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart"].includes(fault) || !directory) throw Error("Usage: node scripts/protocol-workerd-evidence.mjs persisted-offer|silent-host-{loss,uplink,downlink}|probe-restart OUTPUT");
+const idleCut = fault === "idle-retirement" || fault === "idle-retirement-prefix";
+const restartCut = idleCut || fault === "probe-restart" || fault === "persisted-offer";
+if ((!restartCut && !["silent-host-loss", "silent-host-uplink", "silent-host-downlink"].includes(fault)) || !directory) throw Error("Usage: node scripts/protocol-workerd-evidence.mjs persisted-offer|silent-host-{loss,uplink,downlink}|probe-restart|idle-retirement[-prefix] OUTPUT");
 const output = resolve(directory);
 await mkdir(output, { recursive: true });
 const disk = await mkdtemp(join(tmpdir(), "pillowfort-workerd-"));
@@ -28,13 +30,14 @@ try {
       const event = await request.json();
       if (event.kind === "cut" && !cut) {
         cut = event;
-        await writeFile(join(disk, "cut.json"), JSON.stringify(event.offer));
+        if (event.offer) await writeFile(join(disk, "cut.json"), JSON.stringify(event.offer));
         // Return from the instrumented handler first; no request is sent to wake it.
         evict = new Promise(done => setImmediate(done)).then(async () => {
           await mf.unsafeEvictDurableObject(worker, "Room", { name: event.room, webSockets: "hibernate" });
           evicted = true;
         }).catch(e => { evictionError = String(e); });
       } else if (event.kind === "awoke" && cut && event.room === cut.room && event.instance !== cut.instance && (fault !== "probe-restart" || event.nonce === cut.offer.nonce && Number.isSafeInteger(cut.idle) && event.idle === cut.idle)) woke = true;
+      else if (idleCut && cut?.deletionCommitted && event.kind === "terminal-replayed" && event.instance !== cut.instance) woke = true;
       else if (event.kind === "detected" && fault.startsWith("silent-host-")) await writeFile(join(disk, "detected.json"), JSON.stringify(event.at));
       return new Response(null, { status: 204 });
     } } },
@@ -47,6 +50,6 @@ try {
   });
   const [code] = await once(child, "exit");
   await evict;
-  if (fault === "persisted-offer" || fault === "probe-restart") await writeFile(join(output, "eviction.json"), JSON.stringify({ cutAfterCommit: !!cut, socketsHibernated: evicted, recoveredExactPendingWork: !!woke, ...(fault === "probe-restart" && { originalIdleDeadlineUnchanged: !!woke }), evictionError: evictionError ?? null }, null, 2) + "\n");
-  if (code !== 0 || evictionError || ["persisted-offer", "probe-restart"].includes(fault) && (!cut || !evicted || !woke)) process.exitCode = 1;
+  if (restartCut) await writeFile(join(output, "eviction.json"), JSON.stringify({ cutAfterCommit: !!cut, socketsHibernated: evicted, recoveredExactPendingWork: !!woke, ...(idleCut && { deletionCommitted: cut?.deletionCommitted === true, sentBeforeInterruption: cut?.sent }), ...(fault === "probe-restart" && { originalIdleDeadlineUnchanged: !!woke }), evictionError: evictionError ?? null }, null, 2) + "\n");
+  if (code !== 0 || evictionError || restartCut && (!cut || !evicted || !woke || idleCut && cut.sent !== (fault === "idle-retirement-prefix" ? 1 : 0))) process.exitCode = 1;
 } finally { await mf?.dispose(); await rm(disk, { recursive: true, force: true }); }

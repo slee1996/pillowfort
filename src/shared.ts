@@ -45,12 +45,13 @@ export function sanitizeStyle(s: any): Record<string, any> | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-export function uniqueName(base: string, taken: Set<string>): string {
+export function uniqueName(base: string, taken: Pick<ReadonlySet<string>, "has">): string {
   if (!taken.has(base)) return base;
+  const scalars = [...base];
   let i = 2;
   while (true) {
     const suffix = String(i);
-    const candidate = base.slice(0, MAX_NAME_LEN - suffix.length) + suffix;
+    const candidate = scalars.slice(0, MAX_NAME_LEN - suffix.length).join("") + suffix;
     if (!taken.has(candidate)) return candidate;
     i++;
   }
