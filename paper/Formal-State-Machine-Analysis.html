@@ -27,17 +27,22 @@
 <h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
 State-Machine Analysis</h1>
 <p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 10 · 23 November 2026</em></p>
-<p><strong>Status:</strong> Fourteen finite configurations passed; 22
+edition 11 · 23 November 2026</em></p>
+<p><strong>Status:</strong> Fifteen finite configurations passed; 27
 deliberately weakened configurations yielded their expected violations
-and eight unweakened reachability checks reached their targets. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json">qualification
-record</a> identifies each configuration, tested revision, and bound. A
-fair-alarm assumption supports one progress property; neither it nor the
+and nine unweakened reachability checks reached their targets. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json">qualification
+record</a> identifies each configuration, tested revision, and bound.
+Two models check progress under fair scheduling; neither they nor the
 safety checks prove implementation refinement, cryptography, or
 whole-protocol liveness.</p>
 <h2 id="executed-analysis">Executed analysis</h2>
 <table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 36%" />
+<col style="width: 36%" />
+</colgroup>
 <thead>
 <tr>
 <th>Configuration</th>
@@ -90,6 +95,11 @@ whole-protocol liveness.</p>
 <td>Watched host, two socket incarnations</td>
 <td style="text-align: right;">157</td>
 <td style="text-align: right;">96</td>
+</tr>
+<tr>
+<td>Idle retirement, two original connections and one restart</td>
+<td style="text-align: right;">7,597</td>
+<td style="text-align: right;">2,014</td>
 </tr>
 <tr>
 <td>Composed M1, 12 steps</td>
@@ -146,6 +156,15 @@ forever and violates <code>SilentProgress</code> under weakly fair alarm
 dispatch. The positive witness includes socket replacement, Worker
 restart, suspicion and acceptance. Alarm fairness neither schedules a
 browser on a suspended phone nor bounds wall time.</p>
+<p><code>IdleRetirement</code> separates deletion, dispatch and
+observation. It allows an interruption at any dispatch position, a
+disappearing peer, and a socket with the wrong device, connection or
+authentication state. Five weakened variants lose the retry record,
+suppress wakeup or relax one binding. Each violates the expected
+property. With fair dispatch and at most one restart, a continuously
+attached original socket gets a send attempt; observation is not
+guaranteed. A separate trace reaches both observations after a
+mid-dispatch restart.</p>
 <p>Reachability probes answer a different question: can the unmodified
 model make progress? Two traces recover a guest under a successor or on
 its second connection. Four more reach host-first recovery despite a
@@ -154,11 +173,11 @@ replay, and refusal followed by another candidate’s acceptance. None
 establishes that all executions terminate. Focused models are not
 multiplied into the composed state count.</p>
 <p>Exact model sources, configurations and traces are included in the <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Pillowfort-Protocol-v4-CS1-R10.zip">edition
-10 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r11/Pillowfort-Protocol-v4-CS1-R11.zip">edition
+11 evidence bundle</a>. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the

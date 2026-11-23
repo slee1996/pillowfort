@@ -125,5 +125,12 @@
     "applicationVersion": "f6860069-a8bc-494f-8c15-656a8aa14ffc",
     "hostedVersion": "c12ae625-0fa3-424b-9125-f91802477800",
     "trafficPercent": 100
+  },
+  "edition11": {
+    "record": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/deployment.json",
+    "runtimePr": "https://github.com/slee1996/pillowfort/pull/24",
+    "releaseSource": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+    "appVersion": "75eb3a28-45c0-4c0f-a302-92205e72ba2b",
+    "hostedVersion": "a4fa0194-6d89-45aa-9789-7d14927607f0"
   }
 }

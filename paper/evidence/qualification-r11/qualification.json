@@ -1,0 +1,110 @@
+{
+  "edition": 11,
+  "protocol": "v4-CS1",
+  "runtimeSource": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+  "runtimePr": "https://github.com/slee1996/pillowfort/pull/24",
+  "evidenceTag": "protocol-v4-cs1-evidence-2026-11-23-r11",
+  "previous": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json",
+  "sourceArchive": {
+    "file": "sources/source-a5f0fe6b4f.tar.gz",
+    "sha256": "59950b4605c5e15e49ae40995a954bb781b32a3c86e33b9a75bfa1fe4664c61a",
+    "contents": "All tracked release source except paper/."
+  },
+  "localScenarioAndModelSource": "5a5c66fdc814393b44e555a79d3dae4c23b845fe",
+  "supplementalAgentHarness": {
+    "path": "verification/app/agents.ts",
+    "sha256": "2523f218203829e7cda27f760f71fdc7bdc67358e4d8ca1f4f04bf9960c308a9",
+    "pinnedAt": "protocol-v4-cs1-evidence-2026-11-23-r11"
+  },
+  "gates": {
+    "application": {
+      "command": "npm run check",
+      "passed": true,
+      "testCases": 591,
+      "bunPassed": 575,
+      "nodePassed": 16
+    },
+    "hosted": {
+      "command": "npm --prefix hosted-mcp run check",
+      "passed": true,
+      "testCases": 14
+    },
+    "models": {
+      "passed": true,
+      "profiles": 51,
+      "intact": 15,
+      "mutations": 27,
+      "witnesses": 9
+    }
+  },
+  "records": {
+    "faults": "scenarios.json",
+    "formal": "models.json",
+    "production": "deployment.json",
+    "advisories": "dependencies.json"
+  },
+  "scopeAndRemainingLimits": [
+    {
+      "property": "Idle retirement",
+      "established": "After commit, both originally attached browser peers reached the terminal screen across an interrupted initial or partial notification. No user action triggered replay. The model requires matching device, connection and authenticated socket.",
+      "notEstablished": "An offline or replaced socket need not receive anything. A send is not an acknowledgment. Permanent storage loss, an unavailable scheduler, unreliable delivery or repeated crashes can prevent observation; no exactly-once delivery or real-time bound."
+    },
+    {
+      "property": "Identity after key loss",
+      "established": "Fresh key, device identifier, MLS admission and explicit host decision; absent pre-admission chat; case-insensitively distinct label; new identity survives reconnect. A label is a room-local address, not proof of human identity.",
+      "notEstablished": "Lost keys and prior history are not restored. Members may independently disclose earlier content. No recovery from a permanently divergent epoch or an uncooperative host."
+    },
+    {
+      "property": "Formal scope",
+      "established": "The bounded models check 15 intact configurations, 27 deliberately broken variants and 9 reachability witnesses. IdleRetirement permits at most one restart.",
+      "notEstablished": "No proof that the implementation refines these models, no complete asynchronous network model, no whole-protocol liveness or independent cryptographic audit."
+    },
+    {
+      "property": "Agents, devices and integrations",
+      "established": "A receiver can stay subscribed and read a private mention resource during the participant lifetime.",
+      "notEstablished": "Does not establish wakeups in arbitrary third-party runtimes, perpetual identity, physical mobile background behavior, WAN latency, real billing or accessibility certification."
+    }
+  ],
+  "reproduce": {
+    "install": [
+      "npm ci",
+      "npm --prefix client ci",
+      "npm --prefix hosted-mcp ci",
+      "npx playwright install chromium firefox"
+    ],
+    "gates": [
+      "npm run check",
+      "npm --prefix hosted-mcp run check",
+      "NODE_ENV=production npm run build",
+      "python3 scripts/check-protocol-models.py --jar \"$TLA_JAR\" --output \"$OUT/models\""
+    ],
+    "localOnly": [
+      "for cut in idle-retirement idle-retirement-prefix; do node scripts/protocol-workerd-evidence.mjs \"$cut\" \"$OUT/$cut\" || exit 1; done",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault lost-guest-keys --output \"$OUT/lost-guest-keys\"",
+      "bun verification/app/agents.ts stdio \"$OUT/stdio.json\" \"$PKG/scripts/agent.mjs\" --same-name",
+      "bun verification/app/browsers.ts \"$OUT/cross-browser.json\" all retoss"
+    ],
+    "normalProductionOptIn": [
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault natural-idle --production --output \"$OUT/natural-idle\"",
+      "bun verification/app/agents.ts hosted \"$OUT/live-hosted.json\" --same-name"
+    ],
+    "notes": "Use fresh profiles/rooms. The supplement verification/app/agents.ts is in the tagged edition and in reproduction/; overlay it on the release source for --same-name. PKG is a separate installation of @ontologic/pillowfort-agent@2.1.1. Run local-only cuts only on loopback. The tool refuses to start a hosted session when shared capacity is in use. The pinned TLC JAR is v1.7.4."
+  },
+  "pdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 10,
+      "pageNumbers": true,
+      "publicLinks": 52
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 14,
+      "pageNumbers": true,
+      "publicLinks": 12
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 7,
+      "pageNumbers": true,
+      "publicLinks": 13
+    }
+  }
+}

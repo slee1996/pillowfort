@@ -1,3 +1,14 @@
+Evidence edition 11; protocol v4; profile pf-v4-cs1.
+Release source, CI and production build: a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f
+https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f
+Instrumented local Chromium/workerd qualification and formal models: 5a5c66fdc814393b44e555a79d3dae4c23b845fe
+The only intervening change corrected the registration of a Unicode unit test. The release CI repeats the browser and model gates.
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-23-r11
+Records: evidence/qualification-r11/qualification.json
+The release archive contains sources/source-a5f0fe6b4f.tar.gz, supplementary harnesses and SHA256SUMS.
+
+Historical edition 10 provenance (unchanged):
+
 Evidence edition 10; protocol v4; profile pf-v4-cs1.
 
 Implementation, models, Worker fixture, participant and capacity checks: 181a29f79205650328fd3a1049f673003d113af3

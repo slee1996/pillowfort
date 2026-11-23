@@ -9,6 +9,8 @@ import { startLocalServer } from "../../server";
 const [mode, output, entry] = process.argv.slice(2);
 if (!["stdio", "hosted"].includes(mode) || !output || (mode === "stdio" && !entry))
   throw Error("Usage: bun verification/app/agents.ts stdio|hosted OUTPUT [installed npm CLI path]");
+const sameName = process.argv.includes("--same-name");
+const guestName = sameName ? "host2" : "RelayBot";
 const service = "https://mcp.pillowfort.xyz",
   rev = "2026-07-28";
 const server = mode === "stdio" ? startLocalServer(0) : null;
@@ -158,7 +160,7 @@ try {
   at = "exact admission";
   session = (await call("session_create")).session;
   await action("room_join_link", {
-    displayName: "RelayBot",
+    displayName: sameName ? "host" : guestName,
     invitationUrl: setup.invitationUrl,
     confirm: true,
   });
@@ -179,11 +181,12 @@ try {
     confirm: true,
   });
   const s = await state("guest", (s) => s.connection.roomId === room && s.legalActions.canAct);
-  await state("host", (s) => s.room.members.some((m: any) => m.name === "RelayBot"));
+  assert.equal(s.connection.name, guestName);
+  await state("host", (s) => s.room.members.some((m: any) => m.name === guestName));
   mark(at);
   at = "subscribe and reconcile baseline";
   const uri = `pillowfort://sessions/${session}/mentions`;
-  const marker = "@RelayBot release check",
+  const marker = `@${guestName} release check`,
     reply = "Acknowledged the release check";
   const notified = Promise.withResolvers<void>();
   void notified.promise.catch(() => {});
@@ -209,6 +212,14 @@ try {
   assert(sub.honoredFilter.resourceSubscriptions?.includes(uri));
   const base: any = await client.readResource({ uri });
   assert.equal(JSON.parse(base.contents[0].text).messages.length, 0);
+  if (sameName) {
+    const oldAddress = "@Host original address only";
+    await native("chat_send", { roomId: room, text: oldAddress });
+    await state("guest", s => s.messages.some((m: any) => m.text === oldAddress));
+    const privateRead: any = await client.readResource({ uri });
+    assert.equal(JSON.parse(privateRead.contents[0].text).messages.length, 0);
+    mark("original name visible in chat but absent from new guest's mention resource");
+  }
   mark(at);
   if (mode === "hosted") {
     at = "cancel independent Task";
@@ -239,9 +250,9 @@ try {
     clearTimeout(stop);
   }
   const delivered = await state("host", (s) =>
-    s.messages.some((m: any) => m.text === reply && m.from === "RelayBot"),
+    s.messages.some((m: any) => m.text === reply && m.from === guestName),
   );
-  assert.equal(delivered.messages.filter((m: any) => m.text === reply && m.from === "RelayBot").length, 1);
+  assert.equal(delivered.messages.filter((m: any) => m.text === reply && m.from === guestName).length, 1);
   mark(at);
   if (task) {
     at = "independent Task fan-out and cursor read";

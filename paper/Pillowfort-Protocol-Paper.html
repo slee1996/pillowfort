@@ -28,7 +28,7 @@
 id="pillowfort-an-mls-based-protocol-for-ephemeral-rooms">Pillowfort: An
 MLS-Based Protocol for Ephemeral Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 10 · 23 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 11 · 23 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
 <p>Pillowfort is a protocol for temporary, end-to-end encrypted rooms
@@ -200,9 +200,11 @@ precedes dependent transmission or activation; delivery acknowledgments
 are omitted for clarity.
 </figcaption>
 </figure>
-<p>A pending device cannot send ordinary member traffic or invoke
-active-device resume. The bootstrap excludes pre-admission chat and
-drawings; an existing member may nevertheless disclose earlier content
+<p>A pending device cannot send ordinary member traffic or resume as an
+active member. A guest that loses its keys must obtain fresh approval.
+If the old device still holds its name, the new device uses a distinct
+name for chat and mentions. Neither the name nor the invitation restores
+earlier chat or drawings. An existing member can still disclose them
 independently.</p>
 <p>In v2.1.1, the host-local approval window is 180 seconds. The relay
 bounds admission to 185 seconds from acceptance of the join, leaving a
@@ -307,8 +309,11 @@ must not be silently reconstructed as a replacement participant.</p>
 before the relay persists the terminal state. Only after that write does
 it notify authenticated attached devices. Receiving the signed close
 application event alone does not establish that durable shutdown has
-completed. Idle-room eviction follows the same ordering: the relay
-commits deletion before notifying or closing sockets.</p>
+completed. At idle expiry, deletion and the identities of the
+connections to notify are committed together. If the relay restarts
+before finishing, it retries on those same authenticated sockets. This
+protects connected peers without treating a send as proof that a peer
+received it.</p>
 <h2 class="page-start" id="host-migration-the-pillow-toss">7. Host
 migration: the pillow toss</h2>
 <p>Host migration transfers two duties: approving joins and validating
@@ -534,6 +539,20 @@ href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37
 intact, not recovery after permanent loss.</td>
 </tr>
 <tr>
+<td style="text-align: left;">Idle deletion survives a restart during
+notification.</td>
+<td style="text-align: left;">In <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/scenarios.json">two
+local runs</a>, the relay stopped after notifying zero or one of two
+peers. Both peers then saw closure without acting.</td>
+<td style="text-align: left;"><a
+href="https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f"><code>a5f0fe6b</code></a></td>
+<td style="text-align: left;"><a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/deployment.json">One
+live room</a>: both saw closure by 600.45 s. No offline receipt
+guarantee.</td>
+</tr>
+<tr>
 <td style="text-align: left;">The former host’s policy cannot authorize
 a second succession.</td>
 <td style="text-align: left;">In a <a
@@ -602,30 +621,30 @@ href="https://github.com/slee1996/pillowfort/tree/181a29f79205650328fd3a1049f673
 intact; no arbitrary epoch repair.</td>
 </tr>
 <tr>
-<td style="text-align: left;">An invitation permits a request, not
-admission.</td>
-<td style="text-align: left;">A <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/test/secure-room-engine.test.ts#L1717">real-MLS
-test</a> required explicit approval of the exact device request before
-the host could admit the invitation holder.</td>
+<td style="text-align: left;">Losing a device key does not transfer
+membership.</td>
+<td style="text-align: left;">After <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/scenarios.json">erasing
+a guest’s local keys</a>, the same invite and name produced a different
+key and request. The host approved it anew. Only its new name received
+mentions; earlier chat was absent.</td>
 <td style="text-align: left;"><a
-href="https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b"><code>1ba68f23</code></a></td>
-<td style="text-align: left;">Identifies an approved device, not the
-person operating it.</td>
+href="https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f"><code>a5f0fe6b</code></a></td>
+<td style="text-align: left;">New admission, not restoration of old keys
+or history.</td>
 </tr>
 </tbody>
 </table>
 <p>At <a
-href="https://github.com/slee1996/pillowfort/tree/181a29f79205650328fd3a1049f673003d113af3"><code>181a29f7</code></a>,
-the release gates passed 589 application tests and 14 hosted-adapter
-tests. TLC checked 14 finite configurations, detected all 22 deliberate
-faults, and reached all eight designated witness states. One model
-establishes a conditional progress result: if a watched path remains
-silent and due alarms continue to run, it eventually becomes suspect. It
-does not establish a maximum real time to detection. The largest bounded
-composition explored 2,292,582 distinct states. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json">Configurations,
-outcomes and limits</a>.</p>
+href="https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f"><code>a5f0fe6b</code></a>,
+591 application and 14 hosted-adapter tests passed. TLC checked 15
+intact configurations, found violations in 27 deliberately weakened
+variants and reached nine recovery states. Under fair scheduling, a
+persistently silent watched host is eventually suspected, and an
+attached peer is offered closure after idle deletion despite one
+restart. Neither result bounds elapsed time or proves receipt. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json">Configurations
+and bounds</a>.</p>
 <p>The <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/silent/browser-results.json">earlier
 transport-only test</a> saw no disconnect in 150 seconds. With
@@ -723,46 +742,44 @@ href="https://www.rfc-editor.org/rfc/rfc9420.html">rfc-editor.org/rfc/rfc9420</a
 href="https://www.rfc-editor.org/rfc/rfc9750.html">rfc-editor.org/rfc/rfc9750</a>.</li>
 <li>Pillowfort. <em>Secure Room Protocol v4</em>. Wire contract for the
 measured implementation. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
 <li>Pillowfort. <em>Application Event Encoding and Signatures</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/src/applicationEventsV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/src/applicationEventsV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Relay State and Transitions</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/src/secureRelayV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/src/secureRelayV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Secure Room Engine</em>. Persistence, rejection, and
 recovery. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/src/participant/secureRoomEngine.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/src/participant/secureRoomEngine.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Participant Controller</em>. Admission and host
 succession. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/src/participant/secureRoomController.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/src/participant/secureRoomController.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Agent Security and Custody</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/181a29f79205650328fd3a1049f673003d113af3/docs/agents/security.md">Pinned
+href="https://github.com/slee1996/pillowfort/blob/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f/docs/agents/security.md">Pinned
 source</a>.</li>
 <li>Model Context Protocol. <em>Subscriptions</em>, protocol revision
 2026-07-28. <a
 href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions.md">Specification</a>.</li>
 <li>Model Context Protocol. <em>Tasks Extension</em>. <a
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
-<li>Pillowfort. <em>Protocol v4-CS1: Wire Contract and Failure
-Semantics</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Technical-Appendix.pdf">Technical
-appendix</a>.</li>
+<li>Pillowfort. <em>Protocol v4-CS1.</em> <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Technical-Appendix.pdf">Wire
+contract</a>, <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Formal-State-Machine-Analysis.pdf">state
+machines</a>, <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md">claim
+matrix</a>, <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json">results</a>,
+<a
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r11/Pillowfort-Protocol-v4-CS1-R11.zip">replication
+archive</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
 <li>Signal. <em>The Signal Private Group System</em>. <a
 href="https://signal.org/blog/signal-private-group-system/">Design</a>.</li>
 </ol>
-<p><strong>Companion artifacts:</strong> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Formal-State-Machine-Analysis.pdf">bounded
-analysis</a>; <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Verification-Matrix.md">claim-to-test
-matrix</a>; <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json">edition
-10 qualification</a>; <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Pillowfort-Protocol-v4-CS1-R10.zip">downloadable
-papers, source and evidence</a>.</p>
 </body>
 </html>

@@ -1,0 +1,218 @@
+{
+  "testedSource": "5a5c66fdc814393b44e555a79d3dae4c23b845fe",
+  "releaseSource": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+  "qualificationDifference": "Only an unrelated unit-test closing brace changed between the pinned local scenarios and the release head; the release CI runs these scenarios on that head.",
+  "baseSource": "6657c1867bbe1821ea878a0b518c1a476f826647",
+  "preFix": {
+    "idleDelete": {
+      "cutAfterCommit": true,
+      "socketsHibernated": true,
+      "recoveredExactPendingWork": false,
+      "deletionCommitted": true,
+      "sentBeforeInterruption": 0,
+      "evictionError": null
+    },
+    "passivePeerReachedTerminalWithin22s": false,
+    "newlyApprovedGuestWithCollidingName": "The new device had requested and received fresh approval, but its chat composer remained unavailable for the 30-second observation."
+  },
+  "fixed": {
+    "idle-retirement": {
+      "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "outcome": {
+        "fault": "idle-retirement",
+        "originalPeersReachedTerminal": 2,
+        "noUserActionUntilNotice": true,
+        "noticeBeforeDisconnect": true
+      },
+      "eviction": {
+        "cutAfterCommit": true,
+        "socketsHibernated": true,
+        "recoveredExactPendingWork": true,
+        "deletionCommitted": true,
+        "sentBeforeInterruption": 0,
+        "evictionError": null
+      }
+    },
+    "idle-retirement-prefix": {
+      "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "outcome": {
+        "fault": "idle-retirement-prefix",
+        "originalPeersReachedTerminal": 2,
+        "noUserActionUntilNotice": true,
+        "noticeBeforeDisconnect": true
+      },
+      "eviction": {
+        "cutAfterCommit": true,
+        "socketsHibernated": true,
+        "recoveredExactPendingWork": true,
+        "deletionCommitted": true,
+        "sentBeforeInterruption": 1,
+        "evictionError": null
+      }
+    },
+    "lost-guest-keys": {
+      "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "outcome": {
+        "fault": "lost-guest-keys",
+        "erasedRealIndexedDb": true,
+        "originalIdentityNotResumed": true,
+        "freshKeyAndAdmission": true,
+        "hostApprovalRequired": true,
+        "previousChatWithheld": true,
+        "disambiguatedName": true,
+        "mentionsTargetOnlyNewLabel": true,
+        "newIdentityResumed": true,
+        "encryptedChatBothDirections": true
+      }
+    }
+  },
+  "limits": "Local independent browser profiles with real MLS, sockets and IndexedDB. The Worker restart was injected only on loopback. Wire identifiers and invitation contents were not published.",
+  "mentionAddressChecks": {
+    "harnessPath": "verification/app/agents.ts",
+    "supplementAt": "protocol-v4-cs1-evidence-2026-11-23-r11",
+    "publishedStdioAgainstLocalBuild": {
+      "mode": "stdio",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "original name visible in chat but absent from new guest's mention resource",
+        "subscribe and reconcile baseline",
+        "notification-driven private read and reply",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 65
+      }
+    },
+    "productionHosted": {
+      "mode": "hosted",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "original name visible in chat but absent from new guest's mention resource",
+        "subscribe and reconcile baseline",
+        "cancel independent Task",
+        "notification-driven private read and reply",
+        "independent Task fan-out and cursor read",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed",
+        "grant revoked"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 61
+      }
+    },
+    "interpretation": "In two independent rooms the requested host/guest names differed by case only. Both participants observed the distinct accepted name. The old target remained ordinary chat to the guest; the new target reached its private mention resource and one reply reached the host. Hosted delivery also used an independent MCP Task. The test runs a client handler; it does not demonstrate wakeup of an idle third-party model."
+  },
+  "crossBrowserReleaseJourneys": {
+    "source": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+    "runs": [
+      {
+        "host": "chromium",
+        "guest": "firefox",
+        "retoss": true,
+        "versions": [
+          "158.0.8127.18",
+          "159.0"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host admits from a fresh member-exported link",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "firefox",
+        "guest": "webkit",
+        "retoss": true,
+        "versions": [
+          "159.0",
+          "27.2"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "webkit",
+        "guest": "chromium",
+        "retoss": true,
+        "versions": [
+          "27.2",
+          "158.0.8127.18"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      }
+    ],
+    "scope": "Independent Chromium, Firefox and WebKit profiles on one OS, not physical devices."
+  }
+}
