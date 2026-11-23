@@ -976,13 +976,7 @@ export class Room implements DurableObject {
             roomRetired ? "room-retired" : "fresh-admission-required",
             roomRetired ? "room retired" : "fresh admission required",
           );
-          if (roomRetired) {
-            for (const socket of this.state.getWebSockets()) {
-              if (socket !== ws && this.att(socket).protocol === "v4") {
-                try { socket.close(1000, "room retired"); } catch {}
-              }
-            }
-          }
+          if (roomRetired) this.closeRetiredRoomSockets(ws);
           return;
         }
 
@@ -1069,11 +1063,7 @@ export class Room implements DurableObject {
         return;
       }
       this.dispatchSecureEffects(transition.effects);
-      if (transition.state.lifecycle === "retired") {
-        for (const socket of this.state.getWebSockets()) {
-          if (this.att(socket).protocol === "v4") try { socket.close(1000, "room retired"); } catch {}
-        }
-      }
+      if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets();
     });
   }
 
@@ -1101,7 +1091,16 @@ export class Room implements DurableObject {
       attachment.secureAuthenticated = false;
       ws.serializeAttachment(attachment);
       this.dispatchSecureEffects(transition.effects);
+      if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets(ws);
     });
+  }
+
+  private closeRetiredRoomSockets(except?: WebSocket) {
+    for (const socket of this.state.getWebSockets()) {
+      if (socket !== except && this.att(socket).protocol === "v4") {
+        try { socket.close(1000, "room retired"); } catch {}
+      }
+    }
   }
 
   private log(msg: string) {
@@ -2025,11 +2024,7 @@ export class Room implements DurableObject {
         }
         await this.persistSecureRelayState(transition.state, this.secureRoomAuthPublicKey);
         this.dispatchSecureEffects(transition.effects);
-        if (transition.state.lifecycle === "retired") {
-          for (const socket of this.state.getWebSockets()) {
-            if (this.att(socket).protocol === "v4") try { socket.close(1000, "room retired"); } catch {}
-          }
-        }
+        if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets();
         return;
       }
 

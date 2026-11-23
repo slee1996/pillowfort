@@ -18,18 +18,23 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
+}
+const live = process.argv.includes("--production");
+if (live && (mode !== "faults" || selectedFault !== "prompt-host-succession")) {
+  throw new Error("--production is only for the prompt-host-succession public UI check");
 }
 await mkdir(output, { recursive: true });
 const report: Record<string, unknown> = {
-  scope: "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+  scope: live ? "One production room, three browser profiles, public UI. Not a latency distribution or capacity test."
+    : "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
   environment: { os: platform(), release: release(), cpu: cpus()[0]?.model, logicalCpus: cpus().length,
     memoryBytes: totalmem(), bun: Bun.version, playwright: "1.65.0" },
   benchmarks: [], faults: [], passed: false,
 };
-const server = startLocalServer(0);
-const origin = `http://127.0.0.1:${server.port}`;
+const server = live ? null : startLocalServer(0);
+const origin = server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz";
 let browser: Browser | null = null;
 const save = () => writeFile(resolve(output, "browser-results.json"), JSON.stringify(report, null, 2) + "\n");
 const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
@@ -253,7 +258,7 @@ async function faultScenario(browser: Browser, fault: Fault) {
   try {
     await deliver(peer.page, host.page, `before-${fault}`);
     await host.page.goto("about:blank");
-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
     if ((await text(successor.page)).includes("\nHost\n")) throw new Error("Promotion without consent");
     await successor.page.locator("#btn-catch").click();
     await Promise.race([boundaryReached, wait(20_000).then(() => { throw new Error("Crash boundary not reached"); })]);
@@ -338,8 +343,8 @@ async function guestResumeAfterSuccession(browser: Browser) {
   try {
     await deliver(guest.page, host.page, "before guest recovery");
     await host.page.goto("about:blank");
-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
-    // Leave after the offer so the observer's own disconnect grace stays live.
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+    // Disconnect the observer before acceptance so it must recover that event by replay.
     await guest.page.goto("about:blank");
     if (!successorSocket) throw new Error("Successor socket not observed");
     await Promise.all([
@@ -377,6 +382,47 @@ async function reopen(room: RoomEvidence, index: number) {
   await page.goto(room.invitation);
   await page.locator("#join-name").fill(room.names[index]);
   await page.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
+}
+
+async function promptHostSuccession(browser: Browser) {
+  const policyReady = Promise.withResolvers<void>();
+  const choices: string[] = [];
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    page.on("websocket", socket => {
+      let policyFrame: string | undefined;
+      socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        const action = f.authorityEvent?.content;
+        if (index === 0 && action?.type === "host-succession-policy" && action.deviceIds.length === 2) {
+          policyFrame = f.envelope.messageId;
+        }
+        if (action?.type === "host-succession") choices.push(`${index}:${action.action}`);
+      });
+      socket.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (policyFrame && f.type === "application-result" && f.messageId === policyFrame && f.result === "accepted") {
+          policyReady.resolve();
+        }
+      });
+    });
+  });
+  const [host, first, second] = room.participants;
+  try {
+    await awaitBoundary(policyReady.promise, "signed policy covering both guests");
+    const start = performance.now();
+    await host.context.close();
+    await first.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+    const closeToFirstVisibleOfferMs = Math.round(performance.now() - start);
+    if (choices.length || await second.page.locator("#host-offer-overlay").isVisible()) throw new Error("Offer bypassed consent or order");
+    await first.page.locator("#btn-duck").click();
+    await second.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+    await second.page.locator("#btn-catch").click();
+    await second.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 15_000 });
+    await deliver(first.page, second.page, "first guest stayed in the room");
+    await deliver(second.page, first.page, "second guest is hosting");
+    if (choices.join(",") !== "1:reject,2:accept") throw new Error("Missing signed refusal or acceptance");
+    return { fault: "prompt-host-succession", closeToFirstVisibleOfferMs, signedChoices: choices, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
 }
 
 async function secondResume(browser: Browser) {
@@ -418,7 +464,7 @@ async function secondResume(browser: Browser) {
   const [host, successor, guest] = room.participants;
   try {
     await host.page.goto("about:blank");
-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
     await guest.page.goto("about:blank");
     await successor.page.locator("#btn-catch").click();
     await successor.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 20_000 });
@@ -519,7 +565,7 @@ async function formerHostRemoval(browser: Browser) {
   const [host, successor, peer] = room.participants;
   try {
     await host.page.goto("about:blank");
-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
     await successor.page.locator("#btn-catch").click();
     await awaitBoundary(beforeRemove.promise, "marker before Remove grant");
     if (removal) throw new Error("Remove preceded the first interruption");
@@ -614,13 +660,13 @@ try {
   if (mode !== "benchmark") {
     if (mode === "all") await wait(60_000); // Respect the normal five-new-rooms/minute ceiling.
     const faults: Fault[] = ["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy"];
-    // Separate rooms overlap only the real 120-second disconnect grace, not model inference.
     const results: unknown[] = await Promise.all(faults.filter(fault => selectedFault === null || fault === selectedFault)
       .map(fault => faultScenario(browser!, fault)));
     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
     if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
     if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
+    if (selectedFault === null || selectedFault === "prompt-host-succession") results.push(await promptHostSuccession(browser!));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;
@@ -633,6 +679,6 @@ try {
   process.exitCode = 1;
 } finally {
   await browser?.close();
-  server.stop(true);
+  server?.stop(true);
 }
 process.exit(process.exitCode ?? 0);

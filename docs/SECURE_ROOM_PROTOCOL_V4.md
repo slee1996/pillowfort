@@ -410,12 +410,21 @@ automatically after membership or host changes. Reconnection does not change
 that order; a fresh admission is a new position. This is internal protocol
 state: no succession queue, rank, or setting is added to the UI.
 
-After the host's 120-second disconnect grace expires, its old identity is
-fenced from resume. The relay offers a 30-second, room- and policy-bound
-authorization to the earliest connected, active, preauthorized member. It
-skips unavailable or removal-bound members and records attempted candidates
-durably. A refusal or an expired, unanswered offer advances to the next eligible
-member. A pending admission is not a succession authorization.
+When the relay observes the owning host socket close, it immediately offers the
+role to the earliest connected, active member eligible under the signed policy.
+The disconnect transition fences the former host from resuming and persists the
+room- and policy-bound 30-second offer before delivery. There is no pre-offer
+timer. Detection of a silent network failure and delivery to the recipient can
+still take time. A close from a replaced socket cannot start succession.
+
+Only when there is no eligible recipient does the absent host retain its
+120-second recovery window. If an authorized member finishes authenticated
+resume first, that transition starts the offer without waiting for the deadline.
+If the host resumes first, it keeps the role. If neither happens before expiry,
+the room retires. Ordinary guests retain their 120-second recovery window.
+Once offers start, refusal or expiry advances to the next eligible member;
+exhaustion closes the room without a second grace. A pending admission is not
+an authorization. Selection skips removal-bound devices; attempts are durable.
 
 The target persists the exact authorization before acknowledging delivery.
 Acknowledging delivery does not accept the host role. The participant is shown
