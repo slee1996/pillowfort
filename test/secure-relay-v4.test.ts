@@ -2424,6 +2424,59 @@ describe("preauthorized automatic host succession", () => {
     expect(importSecureRelayStateV4(exportSecureRelayStateV4(active.state))?.pendingHostTransfer?.authorizedAt).toBe(clock.now);
   });
 
+  for (const winner of ["host", "guest"] as const) {
+    it(`serializes ${winner}-first recovery against guest activation and a delayed socket close`, async () => {
+      const { state: initial, host, first, second, ids, clock, roomInstance } = await successionRoom();
+      const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+      let state = initial;
+      for (const member of [first, second, host]) state = accepted(disconnectSecureRelayDeviceV4(state, member, options())).state;
+      const begin = (from: SecureRelayStateV4, owner: SecureRelayActorV4) => reduceSecureRelayV4(from, owner, {
+        kind: "resume", v: 4, suite: 1, roomInstance, deviceId: owner.deviceId, requestId: ids(),
+      }, options());
+      const guest = actor(first.deviceId, ids()), replacement = actor(host.deviceId, ids());
+      const replay = accepted(await begin(state, guest));
+      const finish = (owner: SecureRelayActorV4, tail: string) => reduceSecureRelayV4(state, owner, {
+        kind: "resume-complete", v: 4, suite: 1, roomInstance, requestId: ids(), lastMessageId: tail,
+      }, options());
+      state = replay.state;
+      expect(state.pendingHostTransfer).toBeNull();
+      if (winner === "host") {
+        const owned = accepted(await begin(state, replacement));
+        state = owned.state;
+        rejected(disconnectSecureRelayDeviceV4(state, host, options()), "connection-mismatch");
+        state = accepted(await finish(guest, effect(replay.effects, "backlog-end").lastMessageId)).state;
+        expect(state.pendingHostTransfer).toBeNull();
+        state = accepted(await finish(replacement, effect(owned.effects, "backlog-end").lastMessageId)).state;
+        expect((await requestGrant(state, replacement, ids, clock)).grant.deviceId).toBe(host.deviceId);
+      } else {
+        const active = accepted(await finish(guest, effect(replay.effects, "backlog-end").lastMessageId));
+        state = active.state;
+        rejected(disconnectSecureRelayDeviceV4(state, first, options()), "connection-mismatch");
+        rejected(await begin(state, replacement), "fresh-admission-required");
+        const offer = effect(active.effects, "host-transfer-authorized");
+        expect(importSecureRelayStateV4(exportSecureRelayStateV4(state))?.pendingHostTransfer).toMatchObject({
+          targetDeviceId: guest.deviceId, authorizationId: offer.authorizationId, expiresAt: offer.expiresAt,
+        });
+      }
+      expect(state.hostDeviceId).toBe(host.deviceId);
+    });
+  }
+
+  for (const phase of ["awaiting-welcome", "awaiting-bootstrap", "awaiting-proof", "awaiting-activation"] as const) {
+    it(`preserves the exact interrupted admission removal across host loss at ${phase}`, async () => {
+      const { state, host, first, ids, clock } = await successionRoom();
+      const pending = await pendingAdmissionAtPhase(state, host, ids, clock, phase);
+      const lost = accepted(disconnectSecureRelayDeviceV4(pending.state, host, { now: tick(clock), nextGrantTokenId: ids() }));
+      const restored = importSecureRelayStateV4(exportSecureRelayStateV4(lost.state))!;
+      expect(restored.hostDeviceId).toBe(host.deviceId);
+      expect(restored.pendingHostTransfer?.targetDeviceId).toBe(first.deviceId);
+      expect(restored.members.find(m => m.deviceId === pending.guest.deviceId)?.status).toBe("retired");
+      expect(restored.pendingZombieRemovals.map(m => [m.deviceId, m.admissionCommitMessageId])).toContainEqual([
+        pending.guest.deviceId, pending.admissionId,
+      ]);
+    });
+  }
+
   for (const kind of ["application", "commit"] as const) {
     it(`offers immediately despite an outstanding ${kind} preview and retains its exact rejection`, async () => {
       const { state, first, second, ids, clock, host } = await successionRoom();
@@ -2551,12 +2604,13 @@ for (const finalChoice of ["accept", "reject"] as const) {
   });
 }
 
-async function prepareSuccessionForRecovery() {
+async function prepareSuccessionForRecovery(nearOfferDeadline = false) {
   const setup = await successionRoom();
   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
   })).state;
   state = await ackAll(state, setup.ids, setup.clock);
+  if (nearOfferDeadline) setup.clock.now = state.pendingHostTransfer!.expiresAt - 4;
   const ordered = await requestGrant(state, setup.first, setup.ids, setup.clock);
   const authorizationId = ordered.state.pendingHostTransfer!.authorizationId;
   const response = await signSecureApplicationEventV4({
@@ -2569,6 +2623,34 @@ async function prepareSuccessionForRecovery() {
     relayKind: "host-transfer-accept", authorizationId, authorityEvent: response,
   };
   return { ...setup, state: ordered.state, frame };
+}
+
+for (const delta of [-1, 0, 1]) {
+  it(`applies the original offer deadline after restore at expiry ${delta} ms`, async () => {
+    const { state, ids, first, second, host, frame } = await prepareSuccessionForRecovery(true);
+    const offer = state.pendingHostTransfer!;
+    const restored = importSecureRelayStateV4(exportSecureRelayStateV4(state))!;
+    const now = offer.expiresAt + delta;
+    const options = () => ({ now, nextGrantTokenId: ids() });
+    const choice = await reduceSecureRelayV4(restored, first, frame, options());
+    if (delta < 0) {
+      const result = accepted(choice);
+      expect(effect(result.effects, "host-changed").deviceId).toBe(first.deviceId);
+      const again = accepted(await reduceSecureRelayV4(importSecureRelayStateV4(exportSecureRelayStateV4(result.state))!, first, frame, options()));
+      expect(again.state.hostDeviceId).toBe(first.deviceId);
+      expect(again.state.pendingZombieRemovals).toEqual(result.state.pendingZombieRemovals);
+      // Recovery can repeat the receipt and the host notice, not the publication or the authority mutation.
+      expect(effect(again.effects, "application-accepted").messageId).toBe(frame.envelope.messageId);
+      expect(again.effects.some(e => e.type === "route-relay")).toBe(false);
+      expect(again.state.recentMessages).toEqual(result.state.recentMessages);
+    } else {
+      expect(choice.ok && choice.effects.some(e => e.type === "host-changed")).toBe(false);
+      const timed = accepted(advanceSecureRelayV4(choice.ok ? choice.state : restored, options()));
+      expect(timed.state.hostDeviceId).toBe(host.deviceId);
+      expect(timed.state.pendingHostTransfer?.targetDeviceId).toBe(second.deviceId);
+      expect(timed.state.pendingHostTransfer?.authorizationId).not.toBe(offer.authorizationId);
+    }
+  });
 }
 
 async function acceptedSuccessionForRecovery() {

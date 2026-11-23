@@ -785,6 +785,10 @@ export class SecureRoomController {
       return;
     }
     await this.handleServerFrame(frame, handshake);
+    // A relay barrier can be visible here before its local marker arrives.
+    // Advance parked work on a new receipt or state change, never on cancellation alone.
+    if (this.grantQueue.length && (frame.type === "frame-accepted" || frame.type === "relay" ||
+        frame.type === "member-lifecycle" || frame.type === "host-changed")) this.pumpGrantQueue();
   }
 
   private async handleChallenge(
@@ -1905,6 +1909,9 @@ export class SecureRoomController {
         this.releaseIntentKey(intent.key);
       } else {
         this.grantQueue.unshift(intent);
+        // A new request ID does not clear a remote barrier. In particular a
+        // declining candidate must wait while the next candidate considers the offer.
+        if (reason !== "connection-lost") return;
       }
       if (!this.replayingBacklog) this.pumpGrantQueue();
       return;

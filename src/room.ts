@@ -113,6 +113,16 @@ const RATE_WS_OPENS_PER_MIN = 60;
 
 const MAX_GUESTS = 20;
 const IDLE_MS = 10 * 60 * 1000;
+// This is a transport recovery wakeup, not a delay before offering or a renewal.
+const OFFER_DELIVERY_CHECK_MS = 4_000;
+
+function pendingLiveOffer(state: SecureRelayStateV4) {
+  const offer = state.pendingHostTransfer;
+  if (!offer?.policyEventId) return null;
+  const target = state.members.find(m => m.deviceId === offer.targetDeviceId);
+  return target?.status === "active" && target.connectionId !== null && target.backlog.some(entry =>
+    entry.kind === "host-transfer-authorization" && entry.authorizationId === offer.authorizationId) ? offer : null;
+}
 const RATE_MSGS_PER_5S = 10;
 const VOTE_DURATION_MS = 30_000;
 const CHALLENGE_TIMEOUT_MS = 30_000;
@@ -634,6 +644,12 @@ export class Room implements DurableObject {
       const relayDeadline = nextSecureRelayDeadlineV4(relayState);
       if (relayDeadline === null) delete schedule["secure-relay"];
       else schedule["secure-relay"] = relayDeadline;
+      const offer = pendingLiveOffer(relayState);
+      if (!offer) delete schedule["offer-delivery"];
+      else if (offer.authorizationId !== this.secureRelayState?.pendingHostTransfer?.authorizationId) {
+        // Commit a one-shot wakeup alongside the first authorization, before any socket send.
+        schedule["offer-delivery"] = offer.authorizedAt + OFFER_DELIVERY_CHECK_MS;
+      }
       if (options.touchIdle) {
         schedule.idle = Date.now() + fortPassIdleMs(this.fortPassEntitlement, IDLE_MS);
       }
@@ -2003,6 +2019,18 @@ export class Room implements DurableObject {
           }
         }
         if (nextExpiry !== null) schedule["auth-sockets"] = nextExpiry;
+        await this.saveAlarmSchedule(schedule);
+        return;
+      }
+
+      if (due === "offer-delivery") {
+        const offer = this.secureRelayState && pendingLiveOffer(this.secureRelayState);
+        if (offer && now < offer.expiresAt && schedule[due] === offer.authorizedAt + OFFER_DELIVERY_CHECK_MS) {
+          // Reconnect only the current owner. Normal authenticated resume replays
+          // the full ordered prefix; sending just the offer could ACK past a lost item.
+          this.secureSocketForDevice(offer.targetDeviceId)?.close(1012, "resume pending host offer");
+        }
+        delete schedule[due];
         await this.saveAlarmSchedule(schedule);
         return;
       }

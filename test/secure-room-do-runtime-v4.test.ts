@@ -233,6 +233,31 @@ describe("protocol-v4 Durable Object runtime", () => {
     expect(state.storage.alarm).toBeNull();
   });
 
+  it("wakes only the current owner of an unacknowledged, unexpired succession offer", async () => {
+    for (const mode of ["missing-delivery", "acknowledged", "replaying", "expired", "superseded"] as const) {
+      const state = new TestState(), room = new Room(state as unknown as DurableObjectState, env());
+      await state.ready;
+      const now = Date.now(), auth = generateSecureRelayIdV4(), target = generateSecureRelayIdV4();
+      const socket = (id: string) => new TestSocket({ protocol: "v4", secureAuthenticated: true,
+        secureDeviceId: target, secureConnectionId: id }, state.storage.events);
+      const old = socket(generateSecureRelayIdV4()), owner = socket(generateSecureRelayIdV4());
+      state.sockets.push(old, owner);
+      const authorizedAt = now - (mode === "expired" ? 30_001 : 4_001);
+      const offer = { authorizedAt, expiresAt: authorizedAt + 30_000, targetDeviceId: target,
+        authorizationId: auth, policyEventId: generateSecureRelayIdV4() };
+      (room as any).secureRelayState = { lifecycle: "open", pendingHostTransfer: offer,
+        members: [{ deviceId: target, connectionId: owner.attachment.secureConnectionId,
+          status: mode === "replaying" ? "pending" : "active", backlog: mode === "acknowledged" ? [] :
+            [{ kind: "host-transfer-authorization", authorizationId: auth }] }] };
+      const idle = now + 120_000;
+      state.storage.values.set("alarmSchedule", { idle, "offer-delivery": authorizedAt + 4_000 - (mode === "superseded" ? 1 : 0) });
+      await room.alarm();
+      expect(old.closed).toBeNull();
+      expect(owner.closed?.code ?? null).toBe(mode === "missing-delivery" ? 1012 : null);
+      expect(state.storage.alarm).toBe(idle);
+    }
+  });
+
   it("bounds pending authentication sockets and releases terminal challenges", async () => {
     const state = new TestState();
     state.storage.values.set("roomId", "socketcap");

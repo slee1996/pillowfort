@@ -171,6 +171,7 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
 | Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
+| Relay restarts after storing first offer, before dispatch | Original candidate still owns an active socket; original capability unexpired and unacknowledged | One durable delivery check forces same-device replay if necessary. Preserve the original policy, target, authorization and deadline; never ACK past earlier backlog |
 | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
 | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
 | Candidate explicitly refuses | Same exact authorization checks | Consume that offer; keep refuser admitted; offer next eligible member |

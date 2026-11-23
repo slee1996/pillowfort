@@ -426,6 +426,15 @@ Once offers start, refusal or expiry advances to the next eligible member;
 exhaustion closes the room without a second grace. A pending admission is not
 an authorization. Selection skips removal-bound devices; attempts are durable.
 
+The Durable Object commits a one-shot delivery check with each new automatic
+offer. Normal delivery is immediate. If the current target socket
+still has the authorization unacknowledged after four seconds, the Worker
+closes that socket so the participant can authenticate again and replay its
+whole ordered backlog. The alarm does not select a target, generate a second
+authorization, extend the original 30 seconds, or imply acceptance. After an
+order cancellation, a participant waits for new relay progress before retrying
+blocked work; a refusal must not make the member exhaust its own rate limit.
+
 The target persists the exact authorization before acknowledging delivery.
 Acknowledging delivery does not accept the host role. The participant is shown
 the existing catch-or-duck choice; an agent must explicitly invoke its host
