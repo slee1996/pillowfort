@@ -19,7 +19,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "guest-backpressure"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -760,6 +760,52 @@ async function formerHostRemoval(browser: Browser) {
   } finally { allowPeerReplay.resolve(); await closeRoom(room); }
 }
 
+// Emulate a relay's documented rate-limit closure on one ordinary delivery ACK.
+// No overload traffic is generated; this cut is disallowed against production.
+async function guestBackpressure(browser: Browser) {
+  let armed = false, cutAt = 0, retriedAt = 0, original = "", restored = "", completion = "";
+  const ready = Promise.withResolvers<void>();
+  const room = await setupRoom(browser, 2, async ({ page }, index) => {
+    if (index !== 1) return;
+    await page.routeWebSocket("**", socket => {
+      if (cutAt && !retriedAt) retriedAt = Date.now();
+      const remote = socket.connectToServer();
+      socket.onMessage(message => {
+        const f = JSON.parse(message.toString());
+        if (armed && !cutAt && f.kind === "delivery-ack") {
+          cutAt = Date.now();
+          socket.send(JSON.stringify({ kind: "secure-server", v: 4, suite: 1, type: "error", code: "rate-limited" }));
+          socket.close({ code: 1008, reason: "rate limit exceeded" });
+          remote.close();
+          return;
+        }
+        if (restored && f.kind === "resume-complete") completion = f.requestId;
+        remote.send(message);
+      });
+      remote.onMessage(message => {
+        const f = JSON.parse(message.toString());
+        if (f.type === "authenticated" && f.mode === "join") original = f.deviceId;
+        if (f.type === "authenticated" && f.mode === "resume") restored = f.deviceId;
+        socket.send(message);
+        if (completion && f.type === "frame-accepted" && f.messageId === completion) ready.resolve();
+      });
+    });
+  });
+  const [host, guest] = room.participants;
+  try {
+    await deliver(guest.page, host.page, "before transport pressure");
+    armed = true;
+    await deliver(host.page, guest.page, "durable before limited ACK");
+    await awaitBoundary(ready.promise, "authenticated guest resumed after rate-limit close");
+    await deliver(guest.page, host.page, "recovered without readmission");
+    await deliver(host.page, guest.page, "recipient still active");
+    const copies = await guest.page.locator("#messages .chat-content").getByText("durable before limited ACK", { exact: true }).count();
+    if (!cutAt || retriedAt - cutAt < 5000 || !original || restored !== original || copies !== 1)
+      throw Error("Rate-limit recovery lost identity, retried early or duplicated delivery");
+    return { fault: "guest-backpressure", retryDelayMs: retriedAt - cutAt, sameDevice: true, receivedCopies: copies, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
 async function peerStorageFailure(browser: Browser) {
   const room = await setupRoom(browser, 3);
   const [host, sender, failingPeer] = room.participants;
@@ -823,6 +869,7 @@ try {
     const results: unknown[] = await Promise.all(faults.filter(fault => selectedFault === null || fault === selectedFault)
       .map(fault => faultScenario(browser!, fault)));
     if (planned) results.unshift(planned);
+    if (selectedFault === null || selectedFault === "guest-backpressure") results.push(await guestBackpressure(browser!));
     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
     if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));

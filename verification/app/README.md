@@ -1,4 +1,8 @@
-# Application acceptance — 23 November 2026
+# Application and room-protocol acceptance — 23 November 2026
+
+The [edition 9 protocol qualification](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) supersedes the two protocol holds below. Refusal followed by a new manual offer and admission with a successor-exported link are now release gates. The earlier app-wide findings on visual baselines, physical devices, billing and telemetry are independent; a protocol pass does not close them.
+
+## Earlier app-wide baseline (before the protocol repairs)
 
 **Disposition: hold app-wide sign-off.** Ordinary room creation, chat, games and host handoff work in the tested environments. Two adjacent lifecycle paths do not. A passing protocol model or release gate is not evidence that either path works.
 
@@ -44,7 +48,7 @@ Record each outcome as passed, failed, partial, or externally blocked and give t
 
 ## Reproduce
 
-Use Bun 1.4.4, a supported patched Node (run: 24.22.2), Playwright 1.65.0, and the project lockfiles. The product was checked out at [`5a321c35`](https://github.com/slee1996/pillowfort/tree/5a321c35b9b3866e6a9c3d86969ee8e31933e2d3). The only app runtime change in this verification branch is the CSS fix. The production JS SHA-256 equals the release-mode JS on the branch. The CSS differs. No app or hosted Worker was deployed by this sweep.
+Baseline environment: Bun 1.4.4, a supported patched Node (run: 24.22.2), Playwright 1.65.0, and the project lockfiles. The product was checked out at [`5a321c35`](https://github.com/slee1996/pillowfort/tree/5a321c35b9b3866e6a9c3d86969ee8e31933e2d3). At that historical checkpoint, the only app runtime change was the CSS fix. The production JS SHA-256 equals the release-mode JS on the branch. The CSS differs. No Worker was deployed during that baseline measurement.
 
 ```sh
 OUT=$(mktemp -d)
@@ -62,11 +66,11 @@ bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts
 NODE_ENV=production npm run build
 bun verification/app/browsers.ts "$OUT/browsers.json"
 bun verification/app/phone.ts "$OUT/phone.json"
-for game in ttt rps koth vote saboteur breakout; do
+for game in ttt rps koth vote saboteur breakout all-decline; do
   node verification/app/game-handoff.ts "$game" "$OUT/$game.json" "$PKG" || exit 1
 done
 bun verification/app/agents.ts stdio "$OUT/stdio.json" "$PKG/scripts/agent.mjs"
-# Open regressions. These should fail until the underlying issues are fixed.
+# Previously failing regressions. These must pass on edition 9.
 bun verification/app/browsers.ts "$OUT/retoss.json" all retoss
 node verification/app/game-handoff.ts fresh-admission "$OUT/fresh-admission.json" "$PKG"
 ```
@@ -79,10 +83,10 @@ node verification/app/game-handoff.ts fresh-admission "$OUT/fresh-admission.json
 
 **Provider and dependency checks:** run `npm audit --package-lock-only` in the root, `client/`, and `hosted-mcp/`, and `cargo audit --file crypto/openmls-wasm/Cargo.lock`. For the provider tests, pin both `RUSTC="$(rustup which --toolchain 1.94.1 rustc)"` and `RUSTDOC="$(rustup which --toolchain 1.94.1 rustdoc)"` when invoking `rustup run 1.94.1 cargo test --locked --manifest-path crypto/openmls-wasm/Cargo.toml --test hpke_suite1`.
 
-## Remaining acceptance work
+## Remaining non-protocol acceptance work
 
-1. Resolve #18 and #19 independently and run the failing journeys with the normal passing transfer as the control. Bring the fixes back to the protocol verification matrix before changing admission or handoff claims.
-2. Review the 28 image comparisons; correct the UI or approve specific new baselines, not a blanket replacement. Exercise real iOS/Android keyboards, backgrounding, VoiceOver/TalkBack, and notification permission prompts on actual devices.
-3. Restore operational signal coverage and confirm an alert reaches an authorized recipient. Green HTTP scrapes alone did not establish this.
-4. Run an owner-authorized Stripe sandbox purchase → return in the same tab → redemption → refund, then apply the separate promotion gate before live payments. A configured status endpoint and local fixtures are not external fulfillment evidence.
-5. For idle agent wakeup claims, connect an independently supported client, leave it idle, and measure whether a mention actually starts a turn. Discord-verified identity and unattended offline reachability are not properties of the tested release.
+The protocol regressions #18 and #19 are closed. The following product and integration work is outside that result.
+1. Review the 28 image comparisons; correct the UI or approve specific new baselines, not a blanket replacement. Exercise real iOS/Android keyboards, backgrounding, VoiceOver/TalkBack, and notification permission prompts on actual devices.
+2. Restore operational signal coverage and confirm an alert reaches an authorized recipient. Green HTTP scrapes alone did not establish this.
+3. Run an owner-authorized Stripe sandbox purchase → return in the same tab → redemption → refund, then apply the separate promotion gate before live payments. A configured status endpoint and local fixtures are not external fulfillment evidence.
+4. For idle agent wakeup claims, connect an independently supported client, leave it idle, and measure whether a mention actually starts a turn. Discord-verified identity and unattended offline reachability are not properties of the tested release.

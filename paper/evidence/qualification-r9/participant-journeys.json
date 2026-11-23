@@ -1,0 +1,207 @@
+{
+  "source": "8ba7ab7040da0522a02ea0c222801e2a072efa05",
+  "publishedConsumer": "@ontologic/pillowfort-agent@2.1.1",
+  "mixedEngines": [
+    {
+      "host": "chromium",
+      "guest": "firefox",
+      "retoss": true,
+      "versions": [
+        "158.0.8127.18",
+        "159.0"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host admits from a fresh member-exported link",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "firefox",
+      "guest": "webkit",
+      "retoss": true,
+      "versions": [
+        "159.0",
+        "27.2"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "webkit",
+      "guest": "chromium",
+      "retoss": true,
+      "versions": [
+        "27.2",
+        "158.0.8127.18"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    }
+  ],
+  "agentGames": {
+    "ttt": {
+      "game": "ttt",
+      "checks": [
+        "JSONL founder",
+        "exact rejection",
+        "admit independent SDK participants",
+        "active ttt",
+        "observed founder disconnect and voluntary catch",
+        "restart ttt under successor",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "rps": {
+      "game": "rps",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "mute and unmute",
+        "active rps",
+        "observed founder disconnect and voluntary catch",
+        "restart rps under successor",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "koth": {
+      "game": "koth",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active koth",
+        "observed founder disconnect and voluntary catch",
+        "restart koth under successor",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "vote": {
+      "game": "vote",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active vote",
+        "observed founder disconnect and voluntary catch",
+        "restart vote under successor",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "saboteur": {
+      "game": "saboteur",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active saboteur",
+        "observed founder disconnect and voluntary catch",
+        "restart saboteur under successor",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "breakout": {
+      "game": "breakout",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active breakout",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "fresh-admission": {
+      "game": "fresh-admission",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "observed founder disconnect and voluntary catch",
+        "old founder invite refused before asking anyone to approve",
+        "newcomer has no prior chat and its new encrypted message reaches the successor",
+        "admission with the successor-exported invite",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    }
+  },
+  "unanimousRefusal": {
+    "game": "all-decline",
+    "checks": [
+      "JSONL founder",
+      "admit independent SDK participants",
+      "Alpha may decline without becoming the host",
+      "Beta may decline without becoming the host",
+      "Gamma may decline without becoming the host",
+      "room retired on every refusing device"
+    ],
+    "errors": []
+  },
+  "npmStdioAndBrowser": {
+    "mode": "stdio",
+    "passed": [
+      "native focused/full selection and preflight",
+      "authenticated discovery / guides / prompts",
+      "native encrypted host",
+      "exact admission",
+      "subscribe and reconcile baseline",
+      "notification-driven private read and reply",
+      "cancel listen without losing identity",
+      "encrypted drawing and browser PNG export",
+      "terminal room observation",
+      "participant closed"
+    ],
+    "errors": [],
+    "counts": {
+      "catalog": 65
+    }
+  },
+  "mobile": {
+    "812x375": {
+      "transcriptPixels": 83,
+      "mentionHelpInAccessibilityTree": true
+    },
+    "375x667-visible320": {
+      "transcriptPixels": 90,
+      "mentionHelpInAccessibilityTree": true
+    }
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "edition": 9,
+  "profile": "pf-v4-cs1",
+  "source": "8ba7ab7040da0522a02ea0c222801e2a072efa05",
+  "sourceUrl": "https://github.com/slee1996/pillowfort/tree/8ba7ab7040da0522a02ea0c222801e2a072efa05",
+  "merge": {
+    "mergeCommit": {
+      "oid": "3054881df640d00139bf3b33f4171bbd75e2962d"
+    },
+    "mergedAt": "2026-11-23T16:23:02Z",
+    "state": "MERGED",
+    "url": "https://github.com/slee1996/pillowfort/pull/20"
+  },
+  "releaseGate": {
+    "url": "https://github.com/slee1996/pillowfort/actions/runs/45215112408",
+    "hostedJobs": [
+      "check",
+      "protocol-models",
+      "hosted-mcp",
+      "dependency-audit"
+    ],
+    "allPassed": true
+  },
+  "scope": "Release acceptance for the first-party protocol and harness-neutral adapters; no universal verification or cryptographic security proof. Only ordinary consenting participants and normal actions in self-owned production rooms.",
+  "runtime": {
+    "node": "24.22.2",
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "npmConsumer": "@ontologic/pillowfort-agent@2.1.1",
+    "mcpRevision": "2026-07-28",
+    "os": "macOS-27.0-arm64-arm-64bit"
+  },
+  "implementationGates": {
+    "applicationTests": 586,
+    "applicationBreakdown": {
+      "releaseBun": 321,
+      "nodeRuntimeAndPersistence": 16,
+      "wasmProtocol": 5,
+      "browserEngine": 26,
+      "securityBoundaries": 15,
+      "bunRelayRuntime": 9,
+      "relayTransportReducersAndAgents": 194
+    },
+    "hostedWorkerTests": 14,
+    "suite1ProviderVectors": 5,
+    "openMlsArtifactDigests": 4,
+    "openMlsSourceInputs": 51,
+    "rootClientHostedLockAudits": "zero reported npm advisories on all three lockfiles; not a source audit",
+    "rustSec": "No advisory in the earlier app acceptance run for the same Cargo.lock.",
+    "CI": "Linux x64, Node 22.23.4; same checkout separately exercised on macOS arm64."
+  },
+  "models": {
+    "safe": 13,
+    "guardMutationsDetected": 18,
+    "witnessesReached": 7,
+    "configurations": 38,
+    "report": "models.json",
+    "largestCompositionDistinctStates": 2292582
+  },
+  "recovery": {
+    "browserScenarios": 10,
+    "isolatedWorkerScenarios": 2,
+    "report": "fault-schedules.json",
+    "silentLossScope": "Censored at 150 s; a forced transport close is a separate control, not a silent-failure detection measurement."
+  },
+  "participants": {
+    "mixedBrowserPairs": 3,
+    "gamesAfterFounderDisconnect": 6,
+    "extraCases": [
+      "fresh-admission",
+      "all-decline"
+    ],
+    "acceptedGuestCanSend": true,
+    "stdioAndNativeWebMcp": true,
+    "report": "participant-journeys.json"
+  },
+  "production": {
+    "report": "deployment.json",
+    "oneCleanLossMs": 180,
+    "browserInviteAfterBothKindsOfTransfer": true,
+    "authenticatedHostedMentionReadAndObservedReply": true,
+    "signedRefusalThenAcceptance": [
+      "1:reject",
+      "2:accept"
+    ]
+  },
+  "evidenceEditionTag": "protocol-v4-cs1-evidence-2026-11-23-r9",
+  "reproduce": {
+    "fromRuntimeCommit": [
+      "npm ci && npm --prefix client ci && npm --prefix hosted-mcp ci",
+      "npx playwright install --with-deps chromium firefox webkit",
+      "npm run check && npm --prefix hosted-mcp run check",
+      "NODE_ENV=production npm run build",
+      "python3 scripts/check-protocol-models.py --jar /path/to/pinned/tla2tools.jar --output \"$OUT/models\"",
+      "bun verification/app/browsers.ts \"$OUT/retoss.json\" all retoss",
+      "node verification/app/game-handoff.ts fresh-admission \"$OUT/fresh.json\" \"$PKG\"",
+      "bun verification/app/agents.ts stdio \"$OUT/stdio.json\" \"$PKG/scripts/agent.mjs\""
+    ],
+    "supplementFromEvidenceTag": [
+      "node verification/app/game-handoff.ts all-decline \"$OUT/decline.json\" \"$PKG\"",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-backpressure --output \"$OUT/backpressure\""
+    ],
+    "normalLiveOptIn": [
+      "bun verification/app/browsers.ts \"$OUT/production.json\" chromium retoss --production",
+      "node verification/app/game-handoff.ts fresh-admission \"$OUT/production-admit.json\" \"$PKG\" --production",
+      "bun verification/app/agents.ts hosted \"$OUT/production-hosted.json\"",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --production --output \"$OUT/production-succession\"",
+      "node verification/app/idle.mjs --production \"$OUT/absolute.json\" absolute"
+    ]
+  },
+  "excluded": [
+    "No unbounded interleaving, fairness, deadlock-freedom, or mathematical liveness claim.",
+    "Not a cryptographic proof, third-party implementation interoperability review or independent security audit.",
+    "No repair of arbitrarily divergent MLS epochs, unavailable durable storage or compromised endpoints.",
+    "A listening MCP client sent the reply. No proof of an idle third-party host scheduling an AI turn or delivery to an offline identity.",
+    "No WAN latency bound or capacity claim, no physical mobile suspension, and no billing, Grafana or pixel-baseline certification."
+  ],
+  "paperPdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 10,
+      "publicLinks": 44,
+      "pageNumbers": true
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 12,
+      "publicLinks": 11,
+      "pageNumbers": true
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 6,
+      "publicLinks": 13,
+      "pageNumbers": true
+    }
+  }
+}

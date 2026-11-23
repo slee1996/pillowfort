@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 8 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 9 · 23 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Tested implementation and models:** [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
+**Implementation:** [`8ba7ab70`](https://github.com/slee1996/pillowfort/tree/8ba7ab7040da0522a02ea0c222801e2a072efa05). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Verification-Matrix.md), [bounded analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identify tested contracts and exclusions. Historical fault experiments and latency samples retain their original revisions.
 
 ## A. Profile and interoperability
 
@@ -249,6 +249,23 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 | Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution | Concrete serialization/notification path is not modeled by TLC |
 
 ## H. Reproduction and measurement interpretation
+
+### H.0 Edition 9 release qualification
+
+The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identifies the application and Worker builds, the independent clients, and the live checks. For the deployed implementation, check out `8ba7ab7040da0522a02ea0c222801e2a072efa05`. Run `npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`, and install Chromium, Firefox and WebKit for the locked Playwright version. Run `npm run check`, `npm --prefix hosted-mcp run check`, then `NODE_ENV=production npm run build`. Use a new output directory. The model runner verifies the TLC JAR digest before execution.
+
+Run `python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"` and `bun verification/app/browsers.ts "$OUT/retoss.json" all retoss`. Install the published `@ontologic/pillowfort-agent@2.1.1` into an isolated directory; set `PKG` to its installed package directory and run `node "$PKG/scripts/agent.mjs" install-browser`. Then run:
+
+```sh
+for game in fresh-admission ttt rps koth vote saboteur breakout; do
+  node verification/app/game-handoff.ts "$game" "$OUT/$game.json" "$PKG" || exit 1
+done
+bun verification/app/agents.ts stdio "$OUT/stdio.json" "$PKG/scripts/agent.mjs"
+node scripts/protocol-workerd-evidence.mjs persisted-offer "$OUT/persisted-offer"
+node scripts/protocol-workerd-evidence.mjs silent-host-loss "$OUT/silent-host-loss"
+```
+
+The edition 9 tagged checkout additionally supplies `all-decline`, the isolated `guest-backpressure` browser cut, and opt-in public acceptance commands. No fault injection runs on production. The subsections below identify their own measured source; they are not instructions for checking the current revision.
 
 ### H.1 Retained model and recovery executions
 

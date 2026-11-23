@@ -6,25 +6,27 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFile } from "node:fs/promises";
 import { once } from "node:events";
-const [game, output, pkg] = process.argv.slice(2);
+const [game, output, pkg, target] = process.argv.slice(2);
+if (target !== undefined && (target !== "--production" || game !== "fresh-admission"))
+  throw Error("Production covers only one normal, self-owned successor-admission journey");
 if (
-  !["ttt", "rps", "koth", "vote", "saboteur", "breakout", "fresh-admission"].includes(game) ||
+  !["ttt", "rps", "koth", "vote", "saboteur", "breakout", "fresh-admission", "all-decline"].includes(game) ||
   !output ||
   !pkg
 )
-  throw Error("Usage: node verification/app/game-handoff.ts GAME OUTPUT INSTALLED_PACKAGE_DIRECTORY");
+  throw Error("Usage: node verification/app/game-handoff.ts GAME OUTPUT INSTALLED_PACKAGE_DIRECTORY [--production]");
 const { PillowfortAgent } = await import(pathToFileURL(resolve(pkg, "scripts/agent-sdk.mjs")).href);
-const relay = spawn("bun", ["-e", 'import {startLocalServer} from "./server.ts"; startLocalServer(0);'], {
+const relay = target ? null : spawn("bun", ["-e", 'import {startLocalServer} from "./server.ts"; startLocalServer(0);'], {
   stdio: ["ignore", "pipe", "inherit"],
 });
-const relayLines = createInterface({ input: relay.stdout });
-const [ready] = await once(relayLines, "line");
+const relayLines = relay ? createInterface({ input: relay.stdout }) : null;
+const [ready] = relayLines ? await once(relayLines, "line") : [""];
 const port = /^pillowfort :(\d+)$/.exec(ready)?.[1];
-if (!port) {
+if (relay && !port) {
   relay.kill();
   throw Error("Local relay did not start");
 }
-const url = `http://127.0.0.1:${port}`,
+const url = target ? "https://pillowfort.xyz" : `http://127.0.0.1:${port}`,
   sdk = new PillowfortAgent({ baseURL: url });
 const child = spawn("node", [resolve(pkg, "scripts/agent.mjs"), "jsonl", "--url", url], {
   stdio: ["pipe", "pipe", "ignore"],
@@ -160,7 +162,7 @@ async function openGame(owner: string) {
     await act("Beta", "breakout_move", { x: 0.25 });
   }
 }
-try {
+async function exercise() {
   host = (await cli("session_create")).session;
   const made = await cli("room_setup", { session: host, input: { displayName: "Host", confirm: true } });
   room = made.roomId;
@@ -189,7 +191,7 @@ try {
     assert(!seen.mentions.messages.some((m: any) => m.text === "@Beta before unmute"));
     checks.push(at);
   }
-  if (game !== "fresh-admission") {
+  if (game !== "fresh-admission" && game !== "all-decline") {
     at = "active " + game;
     await openGame("Host");
     checks.push(at);
@@ -198,6 +200,19 @@ try {
   child.stdin.end();
   await exited;
   await see("Alpha", (s) => !!s.room.hostOffer && !s.connection.isHost);
+  if (game === "all-decline") {
+    for (const name of ["Alpha", "Beta", "Gamma"]) {
+      at = name + " may decline without becoming the host";
+      await see(name, s => !!s.room.hostOffer && !s.connection.isHost);
+      await act(name, "host_reject", { confirm: true });
+      checks.push(at);
+    }
+    at = "room retired on every refusing device";
+    for (const name of ["Alpha", "Beta", "Gamma"]) await see(name, s =>
+      s.connection.terminalPresentation === "room-destroyed" && !s.connection.roomId && !s.legalActions.canAct);
+    checks.push(at);
+    return;
+  }
   await act("Alpha", "host_accept", { confirm: true });
   for (const name of ["Alpha", "Beta", "Gamma"])
     await see(
@@ -253,6 +268,9 @@ try {
   await act("Alpha", "room_end", { confirm: true });
   await see("Beta", (s) => s.connection.terminalPresentation === "room-destroyed");
   checks.push(at);
+}
+try {
+  await exercise();
 } catch (e) {
   errors.push(
     at +
@@ -266,8 +284,8 @@ try {
   await sdk.close();
   await exited;
   lines.close();
-  relayLines.close();
-  relay.kill();
+  relayLines?.close();
+  relay?.kill();
   await writeFile(output, JSON.stringify({ game, checks, errors }, null, 2) + "\n");
   console.log(game, checks, errors);
 }
