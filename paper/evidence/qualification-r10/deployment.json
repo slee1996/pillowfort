@@ -1,0 +1,231 @@
+{
+  "source": "181a29f79205650328fd3a1049f673003d113af3",
+  "runtimePullRequest": {
+    "mergeCommit": {
+      "oid": "6a0a87ade73f9eb636ef1292032fa786619d5ae8"
+    },
+    "mergedAt": "2026-11-23T18:35:46Z",
+    "state": "MERGED",
+    "url": "https://github.com/slee1996/pillowfort/pull/22"
+  },
+  "checks": [
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238971495/job/137918152485",
+      "name": "protocol-models",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238971495/job/137918152335",
+      "name": "check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238971495/job/137918152297",
+      "name": "hosted-mcp",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238971495/job/137918151788",
+      "name": "dependency-audit",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238965350/job/137918134650",
+      "name": "check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238965350/job/137918133657",
+      "name": "protocol-models",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238965350/job/137918133059",
+      "name": "hosted-mcp",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45238965350/job/137918133932",
+      "name": "dependency-audit",
+      "state": "SUCCESS"
+    }
+  ],
+  "assets": {
+    "match": true,
+    "publicPaths": [
+      "/assets/index-CWm56Bno.js",
+      "/assets/index-DZeI2l0x.css"
+    ],
+    "releaseHtmlSha256": "03241679292331c2436aee658f79ac025a8c24ac43275713276689adc7969c0b",
+    "publicHtmlSha256": "03241679292331c2436aee658f79ac025a8c24ac43275713276689adc7969c0b"
+  },
+  "rollout": {
+    "app": {
+      "before": {
+        "created_on": "2026-11-23T16:23:18.552206Z",
+        "versions": [
+          {
+            "version_id": "ca629aca-bf1d-4937-9209-19aa7a64ce9a",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T18:35:56.830641Z",
+        "versions": [
+          {
+            "version_id": "f6860069-a8bc-494f-8c15-656a8aa14ffc",
+            "percentage": 100
+          }
+        ]
+      }
+    },
+    "hosted": {
+      "before": {
+        "created_on": "2026-11-23T16:23:38.157208Z",
+        "versions": [
+          {
+            "version_id": "baf3ee89-6545-444f-8a08-20ef68eed042",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T18:36:09.850517Z",
+        "versions": [
+          {
+            "version_id": "c12ae625-0fa3-424b-9125-f91802477800",
+            "percentage": 100
+          }
+        ]
+      }
+    }
+  },
+  "normalProductionJourneys": {
+    "browserHost": {
+      "fault": "healthy-host",
+      "distinctEchoedChallenges": 2,
+      "offered": false,
+      "deliveredBothDirections": true
+    },
+    "hostedMcp": {
+      "mode": "hosted",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "subscribe and reconcile baseline",
+        "cancel independent Task",
+        "notification-driven private read and reply",
+        "independent Task fan-out and cursor read",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed",
+        "grant revoked"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 61
+      }
+    }
+    },
+    "cleanClosure": {
+      "fault": "prompt-host-succession",
+      "closeToFirstVisibleOfferMs": 287,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "deliveredBothDirections": true
+  },
+  "normalLocalJourneys": {
+    "browserPairs": [
+      {
+        "host": "chromium",
+        "guest": "firefox",
+        "retoss": true,
+        "versions": [
+          "158.0.8127.18",
+          "159.0"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host admits from a fresh member-exported link",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "firefox",
+        "guest": "webkit",
+        "retoss": true,
+        "versions": [
+          "159.0",
+          "27.2"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      },
+      {
+        "host": "webkit",
+        "guest": "chromium",
+        "retoss": true,
+        "versions": [
+          "27.2",
+          "158.0.8127.18"
+        ],
+        "passed": [
+          "create and retain own password",
+          "private invite and masked password",
+          "admit and withhold earlier content",
+          "styled mention while away from chat and private reply",
+          "away presence reaches the other device",
+          "export transcript and clear only one copy",
+          "reopen stored guest and exchange fresh chat",
+          "refuse, re-offer, then catch without evicting the host",
+          "new host retires the room for all participants"
+        ],
+        "errors": []
+      }
+    ],
+    "publishedNpmStdio": {
+      "mode": "stdio",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "subscribe and reconcile baseline",
+        "notification-driven private read and reply",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 65
+      }
+    }
+  },
+  "faultInjectionOnProduction": false
+}

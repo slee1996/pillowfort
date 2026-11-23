@@ -1,22 +1,22 @@
 {
   "schemaVersion": 5,
-  "edition": 9,
+  "edition": 10,
   "profile": "pf-v4-cs1",
-  "implementation": "8ba7ab7040da0522a02ea0c222801e2a072efa05",
-  "publishedTag": "protocol-v4-cs1-evidence-2026-11-23-r9",
-  "qualification": "evidence/qualification-r9/qualification.json",
+  "implementation": "181a29f79205650328fd3a1049f673003d113af3",
+  "publishedTag": "protocol-v4-cs1-evidence-2026-11-23-r10",
+  "qualification": "evidence/qualification-r10/qualification.json",
   "records": {
-    "deployment.json": "e939457a9de9d28ba1bddbc7bcf5c50c49346b83f2ac4a2a600bd82682ea0bfd",
-    "fault-schedules.json": "2e7285b9e90f03228c133310213dfee4034d54800925e3a3ed0a5d4e56db4195",
-    "models.json": "965bae7649a0959660222c1be19e94438453b2f09b2642141256c99e5b883a83",
-    "participant-journeys.json": "b6acd7e17553ebfd659e66aafa679c925c1788ed2ec1c89902fe2640394d8912",
-    "qualification.json": "60a538fbb8b64c93f909d21d823fa5b92d6f305961cf09928ca88fcb8183fbfa"
+    "dependencies.json": "a361470bc73563fb08a84922593811e0456476a00faf4a63fecdc8372c72d025",
+    "deployment.json": "a739d80d00302c2fba321451f7a1834c2a971ee3817f59dacb5009ec5c5c84dd",
+    "models.json": "a1180690123b01a2fd3eee2aa1fa9f55198234aaf8b8a5a8a031e4da124831fa",
+    "qualification.json": "f991aa1e46caa0cd69316570a3976872c5735171b517d9faad1f184e65fd749b",
+    "scenarios.json": "98edac812f6514538a208d936e6140f3da86576f07f1bd80f5b4f7d9ad5e4f54"
   },
-  "bundle": "Pillowfort-Protocol-v4-CS1-R9.zip",
-  "bundleIntegrity": "Per-file SHA-256 list in SHA256SUMS inside the ZIP; the download hash is also published with the release.",
+  "bundle": "Pillowfort-Protocol-v4-CS1-R10.zip",
+  "bundleIntegrity": "Each bundled file is SHA-256 listed in SHA256SUMS. Release assets also expose a whole-file digest.",
   "previousEdition": {
-    "tag": "protocol-v4-cs1-evidence-2026-11-22-r8",
-    "manifest": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/VERIFICATION.json",
-    "bundle": "Pillowfort-Protocol-v4-CS1-Evidence.zip"
+    "tag": "protocol-v4-cs1-evidence-2026-11-23-r9",
+    "manifest": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/VERIFICATION.json",
+    "bundle": "Pillowfort-Protocol-v4-CS1-R9.zip"
   }
 }

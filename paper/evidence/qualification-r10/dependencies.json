@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-11-23",
+  "npmAudit": {
+    "root": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "client": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "hosted": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "githubOpenAlertReconciliation": {
+    "rawAlerts": 84,
+    "presentManifestCounts": {
+      "client/package-lock.json": 12,
+      "package-lock.json": 39
+    },
+    "absentManifestCounts": {
+      "video/package-lock.json": 31,
+      "video/package.json": 2
+    },
+    "vulnerableRangeMatchesInCurrentLocks": 0,
+    "method": "Matched canonical package name and every resolved version against the open alert’s vulnerable semver range in the exact release lockfiles. No alert was dismissed. This is advisory matching, not a source audit or proof of zero vulnerabilities."
+  }
+}

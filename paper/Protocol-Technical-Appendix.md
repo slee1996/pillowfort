@@ -1,6 +1,6 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 9 · 23 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 10 · 23 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
@@ -135,7 +135,7 @@ Roster absence is not a receipt. A successor can see the former host absent from
 
 If one endpoint rejects an incoming commit, its engine restores its last valid committed snapshot and the controller fails that connection closed. It does not acknowledge the rejected delivery or continue ordinary sending. Other members may already have advanced. There is no automatic epoch merge, rollback of those peers, or quorum agreement protocol. Replaying a consistently invalid commit is not a repair mechanism. An irrecoverably divergent member needs fresh admission after retirement; loss of the necessary coordinator/state can require room termination. Outbound commit rejection and inbound validation failure are different cases and must not be conflated.
 
-Storage failure during incoming commit processing likewise withholds acknowledgment and stops that receiver. A storage-failure experiment can establish isolation of that failed path, not agreement among arbitrary MLS forks. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
+An unstorable incoming commit is not acknowledged. A group-delivered join proof records committed activation; its exact authenticated replay can release the matching barrier before later traffic. This recovers an intact prior state, not an arbitrary MLS fork. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
 
 ## F. M4 host transfer and public sidecars
 
@@ -175,7 +175,7 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | State / input | Guard | Persisted outcome / next step |
 |---|---|---|
 | Host connected; policy update | Host signature, exact current admission order, valid ordered application | Retain signed policy and outer frame message ID |
-| Host disconnects | Owning socket closes; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
+| Host disconnects | Owning socket closes or its negotiated path check expires; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
 | No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
 | Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
@@ -226,6 +226,19 @@ A retired room has no host authority and no succession policy. Both explicit shu
 
 Applying the signed close application event precedes the relay's durable terminal notice; it is not evidence that retirement was stored. The production failure returned `persistence-failed` before that notice. The regression `persists explicit retirement after a signed succession policy was installed` failed before correction and now checks export/import, absent delegation, retired members and exact retry. A production browser execution at `c726c5e` confirms the terminal screen after an acknowledged signed policy. This concrete serialization path is not represented in the reduced TLC models.
 
+### F.3 Detecting an unresponsive host
+
+| State / input | Guard | Action |
+|---|---|---|
+| Unwatched → quiet | Open room, another connected participant, current host advertised `hostProbe:true` at authentication | Bind watch to this host and socket; schedule ten seconds |
+| Quiet deadline | Same owner | Store a fresh canonical 16-byte nonce and a five-second deadline, then send `host-path-probe` |
+| Retry deadline | Same owner, same outstanding challenge | Store a ten-second final deadline and retransmit the identical nonce |
+| `host-path-reply` | Exact current authenticated host device/socket and nonce; before final expiry | Clear challenge and schedule the next ten-second check; do not touch the room idle deadline |
+| Final deadline | Same owner, no valid reply | Commit the existing disconnect transition before closing the socket or emitting an offer; continue under F.2 |
+| Owner replaced, another participant no longer connected, or room retired | Watch no longer applies | Replace or cancel the watch; an old nonce cannot establish reachability of a new socket |
+
+The Worker writes this small record and its alarm in one transaction. Probes do not change MLS or ordering state. A healthy watched room incurs roughly one round trip and two small storage transactions per ten seconds; solo rooms incur none. A late alarm, storage outage, or throttled client prevents a wall-clock bound. An old client without the capability still relies on a transport close. Neither a timeout nor an acknowledgment transfers authority. Idle eviction is separate: storage deletion must commit before terminal notices or socket closure; an aborted transaction leaves the room intact.
+
 ## G. Executed model scope and implementation mapping
 
 The models implement the existing plan's stages: M1 delivery; M2 admission/identity; M3 resume; M4 succession. `Coordination.tla` composes them in that order with admission, resume and host-availability send barriers. Separate state mutations represent persistence and network effects. Cryptography is an abstract authenticated capability; OpenMLS, IndexedDB and the transport are not formally verified by these models.
@@ -250,9 +263,25 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 
 ## H. Reproduction and measurement interpretation
 
-### H.0 Edition 9 release qualification
+### H.0 Current release qualification
 
-The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identifies the application and Worker builds, the independent clients, and the live checks. For the deployed implementation, check out `8ba7ab7040da0522a02ea0c222801e2a072efa05`. Run `npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`, and install Chromium, Firefox and WebKit for the locked Playwright version. Run `npm run check`, `npm --prefix hosted-mcp run check`, then `NODE_ENV=production npm run build`. Use a new output directory. The model runner verifies the TLC JAR digest before execution.
+The [edition 10 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json) pins code, evidence, and deployment. Use the runtime revision `181a29f79205650328fd3a1049f673003d113af3`. After installing locked dependencies and browser engines, run the normal test gates and then build production browser assets. Run the following against loopback only:
+
+```sh
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
+  node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
+done
+for scenario in peer-storage full-room; do
+  bun scripts/protocol-browser-evidence.ts --mode faults --fault "$scenario" --output "$OUT/$scenario" || exit 1
+done
+python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"
+```
+
+The historical transport-only experiment included a forced-close control. The current partition gate fails if an offer does not arrive; it cannot use a forced close to pass. For a healthy-path smoke use `--fault healthy-host`. The edition 10 evidence tag also supplies two local-only cases: `--fault suspended-host` freezes a Chromium page, while `--fault paused-host` verifies a debugger pause on its JavaScript thread. A page that can answer is not a silent host. Never inject a network or storage fault into production.
+
+### H.0.1 Edition 9 release qualification
+
+The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identifies the application and Worker builds, the independent clients, and the live checks. For that edition’s implementation, check out `8ba7ab7040da0522a02ea0c222801e2a072efa05`. Run `npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`, and install Chromium, Firefox and WebKit for the locked Playwright version. Run `npm run check`, `npm --prefix hosted-mcp run check`, then `NODE_ENV=production npm run build`. Use a new output directory. The model runner verifies the TLC JAR digest before execution.
 
 Run `python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"` and `bun verification/app/browsers.ts "$OUT/retoss.json" all retoss`. Install the published `@ontologic/pillowfort-agent@2.1.1` into an isolated directory; set `PKG` to its installed package directory and run `node "$PKG/scripts/agent.mjs" install-browser`. Then run:
 

@@ -19,7 +19,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -393,7 +393,10 @@ async function reopen(room: RoomEvidence, index: number) {
   await page.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
 }
 
-async function promptHostSuccession(browser: Browser) {
+async function promptHostSuccession(browser: Browser, condition: "close" | "freeze" | "pause" = "close") {
+  const suspend = condition !== "close";
+  const keptAnswering = Promise.withResolvers<"responsive">(), fresh = new Set<string>();
+  let measuring = false;
   const policyReady = Promise.withResolvers<void>();
   const choices: string[] = [];
   const room = await setupRoom(browser, 3, async ({ page }, index) => {
@@ -401,6 +404,10 @@ async function promptHostSuccession(browser: Browser) {
       let policyFrame: string | undefined;
       socket.on("framesent", ({ payload }) => {
         const f = JSON.parse(payload.toString());
+        if (index === 0 && measuring && f.kind === "host-path-reply") {
+          fresh.add(f.nonce);
+          if (fresh.size >= 2) keptAnswering.resolve("responsive");
+        }
         const action = f.authorityEvent?.content;
         if (index === 0 && action?.type === "host-succession-policy" && action.deviceIds.length === 2) {
           policyFrame = f.envelope.messageId;
@@ -419,9 +426,35 @@ async function promptHostSuccession(browser: Browser) {
   try {
     await awaitBoundary(policyReady.promise, "signed policy covering both guests");
     const start = performance.now();
-    await host.context.close();
-    await first.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
-    const closeToFirstVisibleOfferMs = Math.round(performance.now() - start);
+    if (suspend) {
+      if (live || staged) throw Error("Suspension is restricted to a private local browser");
+      const backend = await host.context.newCDPSession(host.page);
+      await first.page.bringToFront();
+      if (condition === "freeze") await backend.send("Page.setWebLifecycleState", { state: "frozen" });
+      else {
+        await backend.send("Debugger.enable");
+        const paused = Promise.withResolvers<void>();
+        backend.once("Debugger.paused", () => paused.resolve());
+        await backend.send("Debugger.pause");
+        await awaitBoundary(paused.promise, "JavaScript actually paused");
+      }
+      measuring = true;
+      if (condition === "freeze") {
+        // Some browser task sources keep servicing a socket after page freeze.
+        // Do not call that path dead if the participant actually answers probes.
+        const firstOutcome = await Promise.race([keptAnswering.promise,
+          first.page.locator("#host-offer-overlay").waitFor({timeout: 35_000}).then(() => "offered" as const)]);
+        if (firstOutcome === "responsive") {
+          if (choices.length || await first.page.locator("#host-offer-overlay").isVisible()) throw Error("responsive frozen page was fenced");
+          await backend.send("Page.setWebLifecycleState", { state: "active" });
+          await deliver(host.page, first.page, "original host after thaw");
+          await deliver(first.page, host.page, "peer after thaw");
+          return {fault:"suspended-host", outcome:"frozen page answered challenges", distinctReplies: fresh.size, offered:false, deliveredBothDirections:true};
+        }
+      }
+    } else await host.context.close();
+    await first.page.locator("#host-offer-overlay").waitFor({ timeout: suspend ? 35_000 : 5_000 });
+    const elapsedMs = Math.round(performance.now() - start);
     if (choices.length || await second.page.locator("#host-offer-overlay").isVisible()) throw new Error("Offer bypassed consent or order");
     await first.page.locator("#btn-duck").click();
     await second.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
@@ -430,7 +463,9 @@ async function promptHostSuccession(browser: Browser) {
     await deliver(first.page, second.page, "first guest stayed in the room");
     await deliver(second.page, first.page, "second guest is hosting");
     if (choices.join(",") !== "1:reject,2:accept") throw new Error("Missing signed refusal or acceptance");
-    return { fault: "prompt-host-succession", closeToFirstVisibleOfferMs, signedChoices: choices, deliveredBothDirections: true };
+    return { ...(suspend ? {fault: condition === "pause" ? "paused-host" : "suspended-host", suspensionToFirstVisibleOfferMs: elapsedMs,
+      scope: condition === "pause" ? "Debugger confirmed the original live host’s JavaScript was stopped; no simulated network fault." : "Chromium page frozen by its lifecycle API, not an actual locked phone."}
+      : {fault: "prompt-host-succession", closeToFirstVisibleOfferMs: elapsedMs}), signedChoices: choices, deliveredBothDirections: true };
   } finally { await closeRoom(room); }
 }
 
@@ -969,6 +1004,7 @@ try {
     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
     if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
     if (selectedFault === null || selectedFault === "prompt-host-succession") results.push(await promptHostSuccession(browser!));
+    if (selectedFault === "suspended-host" || selectedFault === "paused-host") results.push(await promptHostSuccession(browser!, selectedFault === "paused-host" ? "pause" : "freeze"));
     if (selectedFault === "healthy-host") results.push(await healthyHost(browser!));
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (workerCut) results.push(await workerdHandoff(browser!, workerCut));
