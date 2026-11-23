@@ -403,6 +403,57 @@ function createWorkerEnv() {
   };
 }
 
+describe("Public app search identity", () => {
+  it("provides crawlable product context and consistent structured identity without JavaScript", async () => {
+    const html = await Bun.file(new URL("../client/index.html", import.meta.url)).text();
+    expect(html).toContain("<title>Pillowfort.xyz | Private group chat, drawing &amp; games</title>");
+    const visible = html.replace(/<noscript>[\s\S]*?<\/noscript>/g, "");
+    for (const path of ["/", "/technology", "/private-group-chat", "/agents", "/agents/collaboration"]) {
+      expect(visible).toContain(`href="https://about.pillowfort.xyz${path}"`);
+    }
+    expect(visible).toContain("independent of Pillowfort.social");
+    const data = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]);
+    expect(data["@graph"].map((entry: any) => entry["@type"])).toEqual(["WebSite", "WebApplication"]);
+    expect(data["@graph"][1]["@id"]).toBe("https://pillowfort.xyz/#application");
+  });
+
+  it("upgrades production navigation without exposing or discarding invite context", async () => {
+    const { env, assetRequests, routed } = createWorkerEnv();
+    for (const method of ["GET", "HEAD"]) {
+      const response = await worker.fetch(new Request("http://pillowfort.xyz/party-1?invite=1", { method }), env);
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe("https://pillowfort.xyz/party-1?invite=1");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    }
+    expect(assetRequests).toHaveLength(0);
+    expect(routed).toHaveLength(0);
+  });
+
+  it("does not replay insecure mutations or WebSocket opens", async () => {
+    const { env, assetRequests, routed } = createWorkerEnv();
+    for (const request of [
+      new Request("http://pillowfort.xyz/analytics", { method: "POST", body: "private" }),
+      new Request("http://pillowfort.xyz/ws", { headers: { upgrade: "websocket" } }),
+    ]) {
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(400);
+      expect(response.headers.has("location")).toBe(false);
+    }
+    expect(assetRequests).toHaveLength(0);
+    expect(routed).toHaveLength(0);
+  });
+
+  it("keeps HTTPS and local HTTP usable and cannot redirect an arbitrary host", async () => {
+    for (const origin of ["https://pillowfort.xyz", "http://localhost:8787", "http://127.0.0.1:8787", "http://pillowfort.xyz.attacker.test"]) {
+      const { env } = createWorkerEnv();
+      const response = await worker.fetch(new Request(`${origin}/`), env);
+      expect(response.status).toBe(200);
+      expect(response.headers.has("location")).toBe(false);
+    }
+  });
+});
+
 describe("Worker production entrypoint", () => {
   it("preserves the accepted WebSocket while wrapping an upgrade response", () => {
     const acceptedWebSocket = {} as WebSocket;

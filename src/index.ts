@@ -464,6 +464,22 @@ async function revokeVerifiedStripeSession(
 async function handleFetch(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
+  // Upgrade only the known production origin, never an attacker-provided host.
+  // Preserve path/query and let browsers inherit the original fragment (room
+  // invitations keep their secrets there). Do not replay API bodies or WS opens.
+  if (url.protocol === "http:" && url.hostname === "pillowfort.xyz") {
+    if ((request.method !== "GET" && request.method !== "HEAD") || request.headers.has("upgrade")) {
+      return new Response("HTTPS required", { status: 400, headers: { "cache-control": "no-store" } });
+    }
+    const destination = new URL("https://pillowfort.xyz/");
+    destination.pathname = url.pathname;
+    destination.search = url.search;
+    return new Response(null, {
+      status: 308,
+      headers: { location: destination.href, "cache-control": "no-store" },
+    });
+  }
+
   const probeReason = probeReasonForPath(url.pathname);
   if (probeReason) {
     logBlockedProbe(url.pathname);
