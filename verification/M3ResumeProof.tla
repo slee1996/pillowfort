@@ -23,7 +23,7 @@ THEOREM Preserved == ASSUME Capacity \in Nat, MaxOps \in Nat, Broken = "None", I
   BY Z3 DEF Ind, Safety, ObserveEnd
 <1>6. SendCompletion => Ind'
   BY Z3 DEF Ind, Safety, SendCompletion
-<1>7. \A c \in {1, 2}, q \in {1, 2}, t \in {1, 2} : Acknowledge(c, q, t) => Ind'
+<1>7. \A c \in 1..SocketLimit, q \in 1..SocketLimit, t \in {1, 2} : Acknowledge(c, q, t) => Ind'
   BY Z3 DEF Ind, Safety, Acknowledge
 <1>8. Crash => Ind'
   BY Z3 DEF Ind, Safety, Crash

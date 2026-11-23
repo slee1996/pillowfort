@@ -1,6 +1,6 @@
 ---------------------------- MODULE M1Delivery ----------------------------
 EXTENDS Naturals, Sequences, FiniteSets
-CONSTANTS Capacity, MaxOps, Broken
+CONSTANTS Capacity, MaxOps, Broken, SocketLimit
 VARIABLE s
 vars == <<s>>
 Init == s = [id |-> 0, phase |-> "idle", stored |-> {}, sent |-> {},
@@ -16,8 +16,8 @@ Prepare == /\ ~s.down /\ Quiescent /\ s.id < MaxOps
                               !.stored = @ \cup {s.id + 1},
                               !.grantConnection = s.connection,
                               !.badHostPreview = @ \/ s.hostBacklog]
-ReplaceSocket == /\ s.phase = "prepared" /\ s.connection = 1
-                 /\ s' = [s EXCEPT !.connection = 2]
+ReplaceSocket == /\ s.phase = "prepared" /\ s.connection < SocketLimit
+                 /\ s' = [s EXCEPT !.connection = @ + 1]
 Regrant == /\ s.phase = "prepared" /\ s.connection # s.grantConnection
            /\ s' = [s EXCEPT !.grantConnection = s.connection]
 Send == /\ ~s.down /\ s.phase = "prepared"

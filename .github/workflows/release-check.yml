@@ -68,6 +68,9 @@ jobs:
             bun scripts/protocol-browser-evidence.ts --mode faults --fault "$cut" --output "$RUNNER_TEMP/pillowfort-$cut"
           done
 
+      - name: Verify consent, fresh admission and repeated resume across four host tenures
+        run: bun scripts/protocol-browser-evidence.ts --mode faults --fault changing-tenures --output "$RUNNER_TEMP/pillowfort-changing-tenures"
+
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 

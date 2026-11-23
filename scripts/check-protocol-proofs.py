@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-MODULES = ['M1Delivery', 'M2Admission', 'M3Resume', 'M4Succession', 'Coordination']
+MODULES = ['M1Delivery', 'M2Admission', 'M3Resume', 'M4Succession', 'RepeatedResume', 'Coordination']
 
 
 def main():
@@ -40,8 +40,8 @@ def main():
             print(f'{module}: {totals[0]} obligations proved', flush=True)
     (out / 'induction.json').write_text(json.dumps({
         'proofManager': version, 'strict': True, 'reusedFingerprints': False, 'modules': records,
-        'theorem': 'Init /\\ [][Next]_vars => []Safety for the intact modeled transitions, for every natural Capacity and MaxOps.',
-        'scope': 'Arbitrary trace length and parameter sizes, not arbitrary new identities or sockets. The models retain three succession identities, their abstract writes and their specified replay phases. Safety, not liveness or whole-program refinement.'
+        'theorem': 'Init /\\ [][Next]_vars => []Safety for the intact modeled transitions, for all natural backlog and operation bounds, positive finite admission-rank and socket bounds, and all trace lengths.',
+        'scope': 'Arbitrary finite admission ranks and socket incarnations; M4 models fresh joins, withdrawals and repeated disconnect-driven transfers. The repeated-resume channel retains old completions and receipts. State and per-transfer safety under abstract signatures and storage, not arbitrary JavaScript control flow or unconditional liveness.'
     }, indent=2) + '\n')
 
 

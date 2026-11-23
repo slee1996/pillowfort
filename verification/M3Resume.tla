@@ -1,6 +1,6 @@
 ---------------------------- MODULE M3Resume -------------------------------
 EXTENDS Naturals
-CONSTANTS Capacity, MaxOps, Broken
+CONSTANTS Capacity, MaxOps, Broken, SocketLimit
 VARIABLE s
 vars == <<s>>
 Init == s = [phase |-> "ready", connection |-> 1, request |-> 0,
@@ -8,11 +8,14 @@ Init == s = [phase |-> "ready", connection |-> 1, request |-> 0,
              snapshotHost |-> 1, authenticatedHost |-> 1,
              sent |-> FALSE, acknowledged |-> FALSE, down |-> FALSE]
 Ready == s.phase = "ready" /\ ~s.down
-Disconnect == /\ Ready /\ s.connection = 1
-              /\ s' = [s EXCEPT !.phase = "disconnected", !.connection = 2,
-                                 !.acknowledged = FALSE]
+\* A replacement can interrupt any live replay phase, including an outstanding ACK.
+\* Only durable authenticated state survives. A connection ordinal denotes a fresh socket.
+Disconnect == /\ ~s.down /\ s.phase # "disconnected" /\ s.connection < SocketLimit
+              /\ s' = [s EXCEPT !.phase = "disconnected", !.connection = @ + 1,
+                                !.request = 0, !.terminator = 0, !.persisted = FALSE,
+                                !.reconciled = FALSE, !.sent = FALSE, !.acknowledged = FALSE]
 BeginAt(t) == /\ ~s.down /\ s.phase = "disconnected"
-              /\ s' = [s EXCEPT !.phase = "replay", !.request = 1, !.terminator = t]
+              /\ s' = [s EXCEPT !.phase = "replay", !.request = s.connection, !.terminator = t]
 Begin == BeginAt(2)
 \* The verified view comes from the persisted signed prefix, not the snapshot.
 PersistPrefixWith(verifiedHost) ==
@@ -34,9 +37,9 @@ Crash == /\ ~s.down /\ s' = [s EXCEPT !.down = TRUE]
 Restore == /\ s.down /\ s' = [s EXCEPT !.down = FALSE]
 Next == Disconnect \/ Begin \/ PersistPrefix \/ (\E h \in {1, 2} : Snapshot(h))
         \/ (\E t \in {1, 2} : ObserveEnd(t)) \/ SendCompletion
-        \/ (\E c, q, t \in {1, 2} : Acknowledge(c, q, t)) \/ Crash \/ Restore
+        \/ (\E c, q \in 1..SocketLimit, t \in {1, 2} : Acknowledge(c, q, t)) \/ Crash \/ Restore
 Safety == /\ (s.reconciled => s.snapshotHost = s.authenticatedHost)
           /\ (s.sent => s.persisted /\ s.reconciled)
           /\ (s.acknowledged => s.sent /\ s.persisted /\ s.reconciled)
-          /\ (s.phase = "ready" /\ s.connection = 2 => s.acknowledged)
+          /\ (s.phase = "ready" /\ s.connection # 1 => s.acknowledged)
 =============================================================================
