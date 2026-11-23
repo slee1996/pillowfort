@@ -1,4 +1,6 @@
-Evidence edition 3; protocol v4; profile pf-v4-cs1.
+Evidence edition 4; protocol v4; profile pf-v4-cs1.
+
+Editorial revision only. Test and model results, browser runs and latency measurements cited here are retained from edition 3.
 
 Tested implementation and model sources:
 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
@@ -14,8 +16,8 @@ These measurements were not rerun or relabeled as current-revision results.
 Production shutdown verification: c726c5eccafacb6fe6c881be3fcc174287c2f86f; see PRODUCTION_DEPLOYMENT.json and evidence/production-release-fixed-shutdown.json.
 
 Previous edition remains unchanged:
-https://github.com/slee1996/pillowfort/tree/71ed475940ecd33d487e17d4940a0ac60c60f2c4/paper
-New edition tag: protocol-v4-cs1-evidence-2026-11-22-r3
+https://github.com/slee1996/pillowfort/tree/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper
+New edition tag: protocol-v4-cs1-evidence-2026-11-22-r4
 All three local browser fault executions: 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b.
 Full release gate, browser results and pre-fix regressions: evidence/recovery-r3/.
 No wire-version change. Local recovery experiments are not evidence of a production deployment.

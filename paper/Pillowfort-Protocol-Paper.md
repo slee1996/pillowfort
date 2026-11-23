@@ -1,18 +1,18 @@
 # Pillowfort: An MLS-Based Protocol for Ephemeral Rooms
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 3 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 4 · 22 November 2026</div>
 
 ## Abstract {.abstract-heading}
 
-Pillowfort is an encrypted room protocol for human-operated and software-operated devices. Messaging Layer Security (MLS) supplies group cryptographic state; an application coordination layer governs admission, causal ordering, delivery reconciliation, and host authority. A designated host authorizes membership and automatically validates ordinary non-host mutations. Host transfer always requires the recipient's explicit acceptance, including succession after disconnection. A relay orders opaque frames and verifies public authorization metadata without requiring ordinary application plaintext. This paper specifies the coordination model, principal execution paths, persistence boundaries, and implementation limitations. It distinguishes local authentication from global agreement, durable delivery from recipient observation, and recoverable browser state from memory-only hosted identities. The contribution is an implementation-oriented protocol composition, not a new cryptographic primitive or formal security proof.
+Joining a Pillowfort room does not oblige a participant to host it. If the host disconnects, its signed policy lets the relay offer the role, not assign it. Authority changes only when the nominated device signs an acceptance and the relay commits the transfer. If every eligible member declines, the room closes. If a successor disappears before the relay accepts that successor’s own policy, the room closes after the disconnect grace period rather than reuse the former host’s delegation. This choice gives consent priority over room availability. We describe how temporary rooms for people and software agents enforce it over Messaging Layer Security (MLS), and test how members recover when a handoff is interrupted.
 
 **Keywords:** group messaging; MLS; authenticated state machines; crash recovery; admission control.
 
 ## 1. Scope and design objectives
 
-Group encryption does not, by itself, determine who may join a room, whether an application action is legal, how interrupted work is reconciled, or which device may coordinate subsequent operations. Pillowfort assigns these responsibilities to an authenticated application state machine surrounding MLS [1,2].
+MLS protects group traffic, but does not decide which device may admit a member, authorize a room action, or coordinate the next operation after a failure [1,2]. Pillowfort assigns those decisions to an authenticated room state machine.
 
-The design targets bounded, temporary rooms. Its objectives are explicit device admission, authenticated and ordered application transitions, preservation of uncertain outcomes across recoverable interruptions, and authenticated host succession. Progress requires the relay and a current host or an eligible successor under an established delegation. The protocol is not a consensus service and does not provide an externally witnessed transcript.
+The protocol targets small, temporary rooms. The relay orders operations and decides when disconnect deadlines have passed. Peers verify signed authority; they cannot use a signature to establish that a host was actually offline. The protocol neither elects a host by quorum nor supplies an externally witnessed transcript.
 
 ## 2. System model and assumptions
 
@@ -27,6 +27,8 @@ A room's host is an admitted member. It authorizes device admission and executes
 | $x,s,\ell$ | Application event identifier, per-device sequence, and causal order |
 | $g$ | Relay-issued, context-bound ordering grant |
 | $\sigma_d,A_d,O_d$ | Device MLS state, application state, and durable outbox |
+
+: **Table 1.** Room and device notation.
 
 Cryptographic authenticity assumes uncompromised signing keys and the security of the selected MLS ciphersuite. Recovery additionally assumes that the required committed local state remains available. Network messages may be lost, repeated, delayed, or interrupted. Claims of progress require participating parties to remain available and a sufficiently timely interval for expiring protocol steps to complete.
 
@@ -154,44 +156,31 @@ These mechanisms do not provide an offline inbox, exactly-once agent actions, or
 
 ## 10. Evaluation {.page-start}
 
-### 10.1 Specification and implementation evidence
+### 10.1 Claims and evidence
 
-The technical appendix [11] defines the signed fields, domain-separated encodings, public sidecar checks, and guarded transitions for delivery, admission, resume, and succession. Profile `pf-v4-cs1` distinguishes this contract from the earlier host-available design; the transport integer `4` is not a compatibility negotiation. Implementation references identify the tested source revision. The companion artifact supplies commands, lockfiles, raw results, and a claim-to-test matrix.
+| Protocol claim | Supporting observation | Tested revision | Limit |
+|:-----------------------|:-----------------------------------------------|:-----------|:-----------------------|
+| A stale resume ACK cannot unlock sends. | A [browser experiment](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/recovery-r3/second-resume.json) withheld the current ACK. The guest could receive, but could not send until that ACK arrived. Removing the guard made the [two-socket model](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/models/mutation-OldAck.log) ready too early. | [`1ba68f23`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b) | Two replacement sockets; not unbounded reconnects or eventual delivery. |
+| Receiving a signed close does not prove durable retirement. | A [peer saw the close](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/production-close-before.json) while the relay write failed. After the fix, the retired snapshot survived export/import and a [production peer reached the terminal screen](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/production-release-fixed-shutdown.json). | [`c726c5ec`](https://github.com/slee1996/pillowfort/tree/c726c5eccafacb6fe6c881be3fcc174287c2f86f) (fix) | One production shutdown; not proof of disk durability or notice to every peer. |
+| An offer does not make its recipient the host. | In [relay tests](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/test/secure-relay-v4.test.ts#L2469), refusal passed the offer to the next candidate. Only acceptance transferred authority; when both candidates refused, the room closed. | [`1ba68f23`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b) | Device consent is authenticated. The relay’s account of who was online is not. |
+| The former host’s policy cannot authorize a second succession. | In a [three-browser run](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/browser-faults-pinned/browser-results.json), the successor disappeared before its own policy was accepted. At grace expiry the room retired rather than offer another member the role. | [`10fe8f8b`](https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a) | One interrupted succession, not arbitrary chains of host failures. |
+| Roster absence is not a retirement receipt. | A [restart regression](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/test/secure-room-engine.test.ts#L1425) retained the exact request across an unrelated ACK. After [two successor reloads](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/recovery-r3/former-host-removal.json) and a peer socket close just after Remove, encrypted chat resumed both ways. | [`1ba68f23`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b) | One removal and replay schedule; not convergence across divergent MLS epochs. |
+| An invitation permits a request, not admission. | A [real-MLS test](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/test/secure-room-engine.test.ts#L1717) required explicit approval of the exact device request before the host could admit the invitation holder. | [`1ba68f23`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b) | Identifies an approved device, not the person operating it. |
 
-At implementation revision `1ba68f236163`, five protocol suites passed **90 tests and 768 assertions**. The real-MLS engine suite (26 tests, 310 assertions) and the full project gate also passed. Signed fixtures in `examples.json` cover chat, a transfer offer, and acceptance; changing the signed order or expected room invalidates verification. Their deterministic test seeds are not production keys.
+: **Table 2.** Authority and recovery claims. In the shutdown row, the revision is the corrected production build; the earlier failure is a separate observation.
 
-### 10.2 Crash-boundary executions
+At `1ba68f23`, the five protocol suites passed 90 tests (768 assertions) and the real-MLS engine suite passed 26 (310 assertions). TLC found no invariant violation in 11 finite configurations; all 11 deliberately weakened variants produced counterexamples. Two traces reached successful recovery with the guards intact. The largest composition explored 1,202,973 states at a 16-step bound. These checks do not establish implementation refinement, unbounded progress, or cryptographic security. The [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Verification-Matrix.md) gives the property-level results.
 
-Six relay regressions cover successor return and permanent absence at three boundaries: authority committed but result unacknowledged, removal unstarted, and removal completed before the new policy. They check persisted state export/import, exact cleanup, and rejection of predecessor-policy reuse.
+### 10.2 Light-load latency
 
-Four browser fault scenarios at revision `10fe8f8b490c` used the production client, real MLS, WebSockets, and IndexedDB. A successor recovered its original device after the acceptance result was withheld and after its new-policy frame was withheld following removal; encrypted delivery succeeded in both directions afterward. Permanent loss before policy acceptance retired the room at grace expiry. An injected write failure during another peer's incoming Add stopped that peer while remaining members continued. These retained executions use the actual 120-second grace; they do not establish automatic repair of arbitrary epoch disagreement.
-
-The runs exposed two implementation defects: issuing a guest grant before the host's prior delivery ACK, and attempting admission-lifecycle mutation on a resumed device with a pending application but no admission barrier. Both were reproduced before correction and retain regressions. The latter run exercises the successor's previously unspecified unsent-policy boundary.
-
-Cross-host recovery was exercised separately with three browser profiles. A returning guest applied the signed handoff before accepting the new host snapshot. On a second interruption, an ACK from the first connection did not release ordinary sends; the ACK for the current completion did. The original implementation instead stopped at the second terminator because the previous request ID survived the socket change.
-
-The removal experiment interrupted the successor before it received the Remove grant and again after the relay stored the Remove but before its result reached the browser. Roster absence did not establish relay cleanup: the successor had to retain the exact retirement request until its receipt. A third browser received the Remove immediately before close. It applied the membership change before reconnecting and matched the duplicate by its stored delivery digest. The successor published its new policy and encrypted delivery resumed in both directions. These are local executions, not a claim about every crash schedule.
-
-A separate production shutdown execution found retained succession authority after the host was cleared, so the retired snapshot could not be persisted. The corrected path removes that policy before storage. A regression verifies state export/import and exact close-request replay; a production browser run confirms terminal delivery and removal of the composer. This concrete serialization boundary is not represented by the reduced TLC models.
-
-### 10.3 Bounded state analysis
-
-The M1–M4 analysis separates endpoint state, committed storage, relay decisions, and network effects. Eleven finite TLC configurations completed without an invariant violation. Eleven deliberately weakened configurations produced counterexamples. Two unmodified models also reached a recovered guest under the new host: one after handoff during replay, the other after a second interruption with an earlier ACK still in flight. These witnesses establish possibility, not eventual progress.
-
-The largest composed configuration explored **1,202,973 distinct abstract states**, with backlog capacity two and a 16-step bound. The companion report records all configurations and maps their coverage to implementation checks. Cryptography is abstracted; these are safety results for bounded abstractions, not implementation refinement, deadlock freedom, or unbounded liveness. No independent security audit is claimed.
-
-### 10.4 Light-load latency
-
-These measurements are from revision `10fe8f8b490c`. Each profile submits 20 ordinary non-host chat messages and measures UI submission to application in the host's DOM. Runs share one Apple M3 Max machine and a local relay. One message is outstanding at a time, followed by a 500 ms quiet interval outside each latency sample. This is benchmark workload pacing, not a production protocol delay.
-
-| Members | Added preview delay | p50 latency | p95 latency |
+| Members | Added preview delay | Local p50 | Local p95 |
 |---:|---:|---:|---:|
 | 2 | 0 ms | 29.71 ms | 30.74 ms |
 | 3 | 0 ms | 29.60 ms | 30.77 ms |
 | 3 | 100 ms | 130.27 ms | 246.14 ms |
 | 6 | 0 ms | 29.87 ms | 44.95 ms |
 
-Measurements include grants, durable writes, MLS processing, automatic host preview, queueing, and rendering; quantiles use nearest-rank selection. The delayed-host profile measures coordinator sensitivity in the normal UI workload; it does not isolate each contributor to tail latency. Twenty samples per profile do not establish a stable tail-latency estimate, WAN performance, scalability beyond these rooms, or maximum throughput. Raw samples and environment versions accompany the results; no new latency measurements are attributed to the current production revision.
+: **Table 3. Local, light-load chat latency.** Each row covers 20 non-host sends on one Apple M3 Max with a local relay, one message outstanding at a time. Timing runs from UI submission to display at the host; it excludes the 500 ms pause after delivery. Undelayed medians near 30 ms are not WAN or throughput measurements. With 20 observations, nearest-rank p95 is not a stable tail estimate. [Raw samples](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/benchmarks-final/browser-results.json), revision [`10fe8f8b`](https://github.com/slee1996/pillowfort/tree/10fe8f8b490c9e890d5a642bc25568e985c2fe8a).
 
 ## 11. Related designs
 
@@ -213,8 +202,8 @@ Pillowfort composes MLS with explicit admission, context-bound ordering, persist
 8. Pillowfort. *Agent Security and Custody*. [Pinned source](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/agents/security.md).
 9. Model Context Protocol. *Subscriptions*, protocol revision 2026-07-28. [Specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions.md).
 10. Model Context Protocol. *Tasks Extension*. [Overview](https://modelcontextprotocol.io/extensions/tasks/overview.md).
-11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Technical-Appendix.pdf).
+11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Technical-Appendix.pdf).
 12. Matrix. *Megolm Group Ratchet*, specification v1.19. [Specification](https://spec.matrix.org/v1.19/olm-megolm/megolm/).
 13. Signal. *The Signal Private Group System*. [Design](https://signal.org/blog/signal-private-group-system/).
 
-**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).
+**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r4/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).
