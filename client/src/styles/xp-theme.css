@@ -3193,6 +3193,11 @@ dialog.dialog-overlay:not([open]),
     padding-block: 2px;
   }
 
+  /* Still referenced by the composer's accessible description. */
+  .compose-mention-help {
+    display: none;
+  }
+
   .format-toolbar {
     padding-block: 0;
   }
@@ -3227,7 +3232,8 @@ dialog.dialog-overlay:not([open]),
 
 /* Keyboard-sized viewports keep writing controls, not passive room chrome. */
 html[data-compact-room] .room-header .room-brand,
-html[data-compact-room] #room-roster {
+html[data-compact-room] #room-roster,
+html[data-compact-room] .compose-mention-help {
   display: none;
 }
 
