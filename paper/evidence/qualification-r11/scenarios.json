@@ -214,5 +214,47 @@
       }
     ],
     "scope": "Independent Chromium, Firefox and WebKit profiles on one OS, not physical devices."
+  },
+  "verificationHarness": {
+    "productionCodeChanged": false,
+    "failedRun": "https://github.com/slee1996/pillowfort/actions/runs/45250411872/job/137958234334",
+    "failure": "The candidate had already observed the offer when the browser parsed an incompletely written detection timestamp. The qualification job failed; it was not counted as a new measurement.",
+    "correction": "Use one framed process message for the test-only receipt, keep the observed browser timestamp from before waiting for that message, and retain the original independent offer deadline and causal checks.",
+    "supplementAt": "protocol-v4-cs1-evidence-2026-11-23-r11",
+    "qualified": {
+      "silent-host-loss": [
+        {
+          "fault": "silent-host-loss",
+          "lossToRelayDetectionMs": 23051,
+          "relayDetectionToObservedVisibleOfferMs": 326,
+          "forcedClose": false,
+          "direction": "both",
+          "transport": "Dropped application bytes on a still-open loopback path; no FIN/RST at onset.",
+          "maxConsecutiveCancellations": 0,
+          "signedChoices": [
+            "1:reject",
+            "2:accept"
+          ],
+          "distinctNewHosts": 1,
+          "deliveredBothDirections": true
+        }
+      ],
+      "persisted-offer": [
+        {
+          "fault": "persisted-offer",
+          "sameAuthorizationPolicyTargetAndDeadline": true,
+          "originalTtlMs": 30000,
+          "remainingMsWhenVisible": 24699,
+          "sameDeviceResume": true,
+          "maxConsecutiveCancellations": 1,
+          "signedChoices": [
+            "1:reject",
+            "2:accept"
+          ],
+          "distinctNewHosts": 1,
+          "deliveredBothDirections": true
+        }
+      ]
+    }
   }
 }

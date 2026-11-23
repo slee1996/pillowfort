@@ -11,11 +11,6 @@
     "contents": "All tracked release source except paper/."
   },
   "localScenarioAndModelSource": "5a5c66fdc814393b44e555a79d3dae4c23b845fe",
-  "supplementalAgentHarness": {
-    "path": "verification/app/agents.ts",
-    "sha256": "2523f218203829e7cda27f760f71fdc7bdc67358e4d8ca1f4f04bf9960c308a9",
-    "pinnedAt": "protocol-v4-cs1-evidence-2026-11-23-r11"
-  },
   "gates": {
     "application": {
       "command": "npm run check",
@@ -88,7 +83,7 @@
       "bun scripts/protocol-browser-evidence.ts --mode faults --fault natural-idle --production --output \"$OUT/natural-idle\"",
       "bun verification/app/agents.ts hosted \"$OUT/live-hosted.json\" --same-name"
     ],
-    "notes": "Use fresh profiles/rooms. The supplement verification/app/agents.ts is in the tagged edition and in reproduction/; overlay it on the release source for --same-name. PKG is a separate installation of @ontologic/pillowfort-agent@2.1.1. Run local-only cuts only on loopback. The tool refuses to start a hosted session when shared capacity is in use. The pinned TLC JAR is v1.7.4."
+    "notes": "Use fresh profiles/rooms. For reproduction, apply the three files under reproduction/ over the extracted release source, or use the evidence tag. PKG is a separate install of @ontologic/pillowfort-agent@2.1.1; TLA_JAR is pinned tla2tools v1.7.4. Network/storage cuts are loopback-only. The normal hosted smoke requires idle shared capacity, and revokes its own grant."
   },
   "pdf": {
     "Pillowfort-Protocol-Paper": {
@@ -106,5 +101,14 @@
       "pageNumbers": true,
       "publicLinks": 13
     }
+  },
+  "supplementalHarnesses": {
+    "pinnedAt": "protocol-v4-cs1-evidence-2026-11-23-r11",
+    "files": {
+      "verification/app/agents.ts": "2523f218203829e7cda27f760f71fdc7bdc67358e4d8ca1f4f04bf9960c308a9",
+      "scripts/protocol-browser-evidence.ts": "540b733c82ce31f477256d1bd51bc1f2310f55103b40553dd28a0367a739b20b",
+      "scripts/protocol-workerd-evidence.mjs": "8cf0ee8452345fb4370eb877eb9bce6494f26857772903e149ced1a0d9f743dc"
+    },
+    "why": "The MCP journey checks a colliding guest name. The local Worker runner sends its measured timestamp/offer to the browser over process IPC, avoiding a partial evidence file without changing the production detector or its deadline."
   }
 }

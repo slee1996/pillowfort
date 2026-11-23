@@ -9,8 +9,8 @@
     "dependencies.json": "bbf4de1a823d9e4f999d352aa81b2b5648cba73c3ddafa04c39b8adebf0304e7",
     "deployment.json": "f1ad06bc1e0f7e47ae77241996e48fcfdd4c2165cc72bb7cdf234fef44065003",
     "models.json": "316cb87f231212aa8d821ff1c1cc1a7c69e514cb5a8185afb37929dc297cec9b",
-    "qualification.json": "4385ad69278f813cf75b7063b66a1b0b12a37475c6151229660c0d99c34218c0",
-    "scenarios.json": "f32f600ed83d09915b18c7e3502b9dc610c32ce468ca230592fe40ecf652696a"
+    "qualification.json": "b63fbbdf1ecc9b8b96e8651938421aeff7cf4bb3b2a3c6f6749007e9bb825f49",
+    "scenarios.json": "7a813f90d95714a0e36843961f436fb9e79590124e05abdbf812958a4f3d6276"
   },
   "bundle": "Pillowfort-Protocol-v4-CS1-R11.zip",
   "bundleUrl": "https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r11/Pillowfort-Protocol-v4-CS1-R11.zip",
