@@ -290,9 +290,6 @@ function applySecureRoomUiV4(
         events.emit("pf-sound", { kind: "door-close" });
         break;
       }
-      case "host-offered":
-        if (effect.deviceId === ownDeviceId) store.setHostOffer({ oldHost: nameFor(state, state.hostDeviceId) });
-        break;
       case "pillow-tossed":
         store.addSystemMessage(`${nameFor(state, effect.fromDeviceId)} tossed the pillow to ${nameFor(state, effect.targetDeviceId)}.`);
         break;
