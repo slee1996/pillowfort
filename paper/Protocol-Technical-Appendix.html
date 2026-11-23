@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Protocol Technical Appendix — Evidence edition 6</title>
+  <title>Protocol Technical Appendix — Evidence edition 7</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -92,7 +92,7 @@
 id="pillowfort-v4-cs1-wire-contract-and-failure-semantics">Pillowfort
 v4-CS1: Wire Contract and Failure Semantics</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 6 · 22 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 7 · 22 November 2026
 </div>
 <p>This appendix specifies the consent-based succession profile of
 protocol v4. It separates required wire checks, endpoint persistence,
@@ -101,14 +101,16 @@ exact source, executable M1–M4 models, configurations, counterexamples
 for deliberately weakened models, implementation tests, and browser
 measurements. None is an independent security audit or an unbounded
 proof.</p>
-<p><strong>Tested implementation:</strong> <a
+<p><strong>Immediate-offer relay:</strong> <a
+href="https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad"><code>0df3215d9813</code></a>.
+<strong>Earlier recovery and model evidence:</strong> <a
 href="https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b"><code>1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b</code></a>.
 The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>, <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>, and <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
 evidence bundle</a> identify the checked scope. Retained light-load
 latency and browser-fault records identify their earlier measured
 revision separately.</p>
@@ -142,7 +144,8 @@ compatibility.</p>
 <tr>
 <td>Host disappears</td>
 <td>No disconnected-host delegation in that design</td>
-<td>Signed join-order policy permits offers after disconnect grace</td>
+<td>Offer the role immediately on observed host loss if a signed-policy
+candidate is available</td>
 </tr>
 <tr>
 <td>Recipient consent</td>
@@ -649,14 +652,22 @@ application</td>
 </tr>
 <tr>
 <td>Host disconnects</td>
-<td>Owning socket closes</td>
-<td>Preserve authority during 120-second reconnect grace</td>
+<td>Owning socket closes; a signed-policy candidate is active and
+eligible</td>
+<td>Fence old identity, cancel conflicting work, and persist the first
+offer in this transition; no pre-offer timer</td>
 </tr>
 <tr>
-<td>Grace expires</td>
-<td>Current host still absent</td>
-<td>Fence old identity; stop its resume; cancel conflicting pending
-work</td>
+<td>No eligible recipient at disconnect</td>
+<td>No signed policy or no active eligible member</td>
+<td>Keep the host recoverable for at most 120 seconds. A returning
+eligible member starts the offer on exact resume completion; a host that
+resumes first keeps the role</td>
+</tr>
+<tr>
+<td>Recovery expires</td>
+<td>Host still absent; no eligible candidate</td>
+<td>Retire the room; no role is assigned</td>
 </tr>
 <tr>
 <td>Offer candidate</td>
@@ -759,8 +770,9 @@ policy under a fresh valid grant</td>
 <tr>
 <td>New policy accepted</td>
 <td>New host’s signed policy</td>
-<td>Resume normally</td>
-<td>A new consent-based offer may proceed under that policy</td>
+<td>Can resume only if no eligible recipient has triggered fencing</td>
+<td>If a candidate is eligible, make the offer immediately; otherwise
+retire at expiry</td>
 </tr>
 </tbody>
 </table>
@@ -946,8 +958,8 @@ exact retry; production terminal-screen execution</td>
 </table>
 <h2 id="h.-reproduction-and-measurement-interpretation">H. Reproduction
 and measurement interpretation</h2>
-<h3 id="h.1-current-implementation-and-models">H.1 Current
-implementation and models</h3>
+<h3 id="h.1-retained-model-and-recovery-executions">H.1 Retained model
+and recovery executions</h3>
 <pre><code>git clone https://github.com/slee1996/pillowfort.git
 cd pillowfort
 git checkout --detach 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
@@ -959,11 +971,12 @@ bun test ./test/secure-game-reducer.test.ts ./test/secure-relay-v4.test.ts ./tes
 bun test ./test/secure-relay-v4.test.ts --test-name-pattern &#39;persists explicit retirement after a signed succession policy&#39;
 curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar --output /tmp/tla2tools-1.7.4.jar
 python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models</code></pre>
-<p>The recovery experiments use three independent browser profiles and
-the real 120-second disconnect grace. Each output directory contains its
-own result and environment. The observer case checks its roster before
-admitting any replacement-socket replay; receipt of a frame alone is not
-the assertion.</p>
+<p>Those recovery experiments used three independent browser profiles
+and the then-current 120-second delay before an offer. They do not
+measure prompt succession. Each output directory contains its own result
+and environment. The observer case checks its roster before admitting
+any replacement-socket replay; receipt of a frame alone is not the
+assertion.</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> fault <span class="kw">in</span> guest-resume-after-succession second-resume former-host-removal<span class="kw">;</span> <span class="cf">do</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> <span class="st">&quot;</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="at">--output</span> <span class="st">&quot;/tmp/pillowfort-</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span></code></pre></div>
@@ -1000,6 +1013,26 @@ does not report them as capacity evidence.</p>
 index <code>ceil(p*n)-1</code>. The raw report’s <code>medianMs</code>
 is that p50 estimate, not the average of the central pair. Retain the
 full sample arrays when comparing estimators.</p>
+<h3 id="h.3-immediate-offers">H.3 Immediate offers</h3>
+<p>Check out <code>0df3215d98139861831c6e3f68eb0b0997c584ad</code> in
+the clone, install the locked dependencies as above, and run:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> test ./test/secure-relay-v4.test.ts</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> prompt-host-succession <span class="at">--output</span> /tmp/pillowfort-offer</span></code></pre></div>
+<p>The relay tests distinguish immediate offers from the 120-second
+no-recipient recovery window. The browser check closes the host,
+observes the first offer, declines it, accepts the next offer, and
+exchanges encrypted chat. Its duration is one observation, not a
+deadline for detecting a broken connection. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json">local
+result</a> and the <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json">production
+result</a> record the environment and signed choices. To reconstruct
+this revision offline, unpack the baseline source archive and run
+<code>git apply</code> with
+<code>sources/prompt-succession-0df3215d9813.patch</code> from the
+bundle.</p>
 <h2 id="i.-related-designs">I. Related designs</h2>
 <table>
 <colgroup>

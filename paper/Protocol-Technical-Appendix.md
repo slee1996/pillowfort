@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 6 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 7 · 22 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Tested implementation:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
+**Immediate-offer relay:** [`0df3215d9813`](https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad). **Earlier recovery and model evidence:** [`1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Protocol-Verification-Matrix.md), [bounded analysis report](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Formal-State-Machine-Analysis.pdf), and [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r7/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip) identify the checked scope. Retained light-load latency and browser-fault records identify their earlier measured revision separately.
 
 ## A. Profile and interoperability
 
@@ -13,7 +13,7 @@ This appendix specifies the consent-based succession profile of protocol v4. It 
 | Contract | Earlier host-available design | v4-CS1 |
 |---|---|---|
 | Planned transfer | Signed offer and target acceptance; outgoing host validates | Unchanged |
-| Host disappears | No disconnected-host delegation in that design | Signed join-order policy permits offers after disconnect grace |
+| Host disappears | No disconnected-host delegation in that design | Offer the role immediately on observed host loss if a signed-policy candidate is available |
 | Recipient consent | Explicit acceptance | Explicit acceptance or refusal, including after host loss |
 | Public application metadata | Ordinary application content remains inside MLS | Only signed succession policy/response metadata may appear in `authorityEvent` |
 | Strict-schema compatibility | Does not recognize the added event variants and sidecar fields | Requires matching endpoints and relay; no legacy fallback |
@@ -171,8 +171,9 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | State / input | Guard | Persisted outcome / next step |
 |---|---|---|
 | Host connected; policy update | Host signature, exact current admission order, valid ordered application | Retain signed policy and outer frame message ID |
-| Host disconnects | Owning socket closes | Preserve authority during 120-second reconnect grace |
-| Grace expires | Current host still absent | Fence old identity; stop its resume; cancel conflicting pending work |
+| Host disconnects | Owning socket closes; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
+| No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
+| Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
 | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
 | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
@@ -198,7 +199,7 @@ The candidate has no authority merely because its position was selected. Host so
 | Relay switch committed; result not received/ACKed | New relay host; exact accepted result; candidate outbox; former-host removal marker; old policy invalid | Device resume reconciles exact result and retained cleanup, then publishes own policy | No new policy exists: room retires rather than reuse predecessor delegation |
 | Acceptance reconciled; removal unstarted | New host and exact historical removal obligation | Resume, process marker, complete exact Remove and lifecycle notification | Same safe termination; uninterrupted availability is not promised |
 | Removal accepted/completed; new policy not relayed | New host, removal outcome/control; possibly durable unsent policy ciphertext | Resume reconciles old socket-bound grant and retries/recreates the policy under a fresh valid grant | Room retires if no new policy was accepted |
-| New policy accepted | New host's signed policy | Resume normally | A new consent-based offer may proceed under that policy |
+| New policy accepted | New host's signed policy | Can resume only if no eligible recipient has triggered fencing | If a candidate is eligible, make the offer immediately; otherwise retire at expiry |
 
 <figure id="fig-successor-crash">
 <img src="assets/fig-07-successor-crash.svg" alt="Successor crash boundaries: restore the same device and finish cleanup within the grace, or retire the room without reusing the predecessor policy.">
@@ -244,7 +245,7 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 
 ## H. Reproduction and measurement interpretation
 
-### H.1 Current implementation and models
+### H.1 Retained model and recovery executions
 
 ```
 git clone https://github.com/slee1996/pillowfort.git
@@ -260,7 +261,7 @@ curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7
 python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models
 ```
 
-The recovery experiments use three independent browser profiles and the real 120-second disconnect grace. Each output directory contains its own result and environment. The observer case checks its roster before admitting any replacement-socket replay; receipt of a frame alone is not the assertion.
+Those recovery experiments used three independent browser profiles and the then-current 120-second delay before an offer. They do not measure prompt succession. Each output directory contains its own result and environment. The observer case checks its roster before admitting any replacement-socket replay; receipt of a frame alone is not the assertion.
 
 ```sh
 for fault in guest-resume-after-succession second-resume former-host-removal; do
@@ -287,6 +288,18 @@ bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-
 Latency runs submit one message at a time, then wait 500 ms after completed delivery. That quiet interval is outside the latency sample and is not a production protocol delay. Samples include grant exchange, persistence, MLS, host preview, queueing and recipient DOM application. The delayed-host profile adds 100 ms before each host preview. These local, shared-hardware runs characterize light-load latency, not throughput capacity, WAN behavior or mobile performance. Original raw paced-rate fields remain in the retained JSON for provenance; the paper does not report them as capacity evidence.
 
 Quantiles use nearest-rank selection: sort the 20 samples and select index `ceil(p*n)-1`. The raw report's `medianMs` is that p50 estimate, not the average of the central pair. Retain the full sample arrays when comparing estimators.
+
+### H.3 Immediate offers
+
+Check out `0df3215d98139861831c6e3f68eb0b0997c584ad` in the clone, install the locked dependencies as above, and run:
+
+```sh
+bun test ./test/secure-relay-v4.test.ts
+npm run build
+bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --output /tmp/pillowfort-offer
+```
+
+The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
 
 ## I. Related designs
 

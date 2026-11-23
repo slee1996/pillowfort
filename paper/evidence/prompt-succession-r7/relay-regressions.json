@@ -1,0 +1,29 @@
+{
+  "beforeRuntimeCommit": "910f83b019a81137638b0388f44b91da06867366",
+  "testSourceCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad",
+  "beforeCommand": "bun test --test-name-pattern 'offers immediately' ./test/secure-relay-v4.test.ts",
+  "before": {
+    "tests": [
+      "offers immediately on host socket loss, fences the old host, and transfers only on signed acceptance",
+      "offers immediately when an eligible guest completes resume while the host is still absent",
+      "offers immediately despite an outstanding application preview and retains its exact rejection",
+      "offers immediately despite an outstanding commit preview and retains its exact rejection"
+    ],
+    "passed": 0,
+    "failed": 4,
+    "failure": "missing host-transfer-authorized effect"
+  },
+  "afterRuntimeCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad",
+  "afterCommand": "bun test ./test/secure-relay-v4.test.ts",
+  "after": {
+    "passed": 59,
+    "failed": 0,
+    "assertions": 417
+  },
+  "localReleaseGate": {
+    "command": "npm run check",
+    "passed": true,
+    "scope": "App and Worker typechecks, ordinary tests, isolated security suites, OpenMLS artifact check, client build and agent catalog."
+  },
+  "timingScope": "Same relay transition, after observing socket loss. No assertion about the network detecting a silent failure or wall-clock maximum delivery latency."
+}

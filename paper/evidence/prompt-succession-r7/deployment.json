@@ -1,0 +1,49 @@
+{
+  "checkedSourceCommit": "0df3215d98139861831c6e3f68eb0b0997c584ad",
+  "mergeCommit": "b7e7fe177b26b06bd5d455c412a603a1ac205cbe",
+  "pullRequest": "https://github.com/slee1996/pillowfort/pull/14",
+  "checks": [
+    {
+      "name": "check",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107066085/job/137470669330"
+    },
+    {
+      "name": "check",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107062048/job/137470657451"
+    },
+    {
+      "name": "hosted-mcp",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107066085/job/137470669250"
+    },
+    {
+      "name": "hosted-mcp",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107062048/job/137470657672"
+    },
+    {
+      "name": "dependency-audit",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107066085/job/137470669014"
+    },
+    {
+      "name": "dependency-audit",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/slee1996/pillowfort/actions/runs/45107062048/job/137470657637"
+    }
+  ],
+  "application": {
+    "origin": "https://pillowfort.xyz",
+    "worker": "pillowfort",
+    "versionId": "6b669622-6ec9-425b-818c-adfdc50d2b60",
+    "previousVersionId": "adc6769c-e952-4e8c-83a2-d34c9f3f4afd",
+    "deployedAt": "2026-11-23T03:40:59.085777Z",
+    "percentage": 100
+  },
+  "hostedMcpRedeployed": false,
+  "productionBrowser": "production/browser-results.json",
+  "endpointEvidence": "Homepage search identity, robots sitemap directive and query-page noindex retained.",
+  "timingScope": "Client starts the clock before closing the host browser context and stops when the first guest offer is visible. One clean disconnect; not a timeout for a half-open connection or a latency bound."
+}

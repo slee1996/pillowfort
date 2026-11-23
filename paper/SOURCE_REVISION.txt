@@ -1,8 +1,13 @@
-Evidence edition 6; protocol v4; profile pf-v4-cs1.
+Evidence edition 7; protocol v4; profile pf-v4-cs1.
 
-Editorial revision only. Test and model results, browser runs and latency measurements cited here are retained from edition 3.
+Host-loss timing revision. The immediate-offer tests and browser observations are separate from the retained edition 3 model, recovery and latency evidence.
 
-Tested implementation and model sources:
+Immediate-offer application and relay: 0df3215d98139861831c6e3f68eb0b0997c584ad
+https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad
+Offline reconstruction: unpack the baseline archive below, then apply sources/prompt-succession-0df3215d9813.patch with git apply from the extracted root.
+Prompt-offer results: evidence/prompt-succession-r7/.
+
+Baseline tested implementation and model sources:
 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
 https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
 Source archive: sources/pillowfort-source-1ba68f236163.tar.gz
@@ -16,8 +21,8 @@ These measurements were not rerun or relabeled as current-revision results.
 Production shutdown verification: c726c5eccafacb6fe6c881be3fcc174287c2f86f; see PRODUCTION_DEPLOYMENT.json and evidence/production-release-fixed-shutdown.json.
 
 Previous edition remains unchanged:
-https://github.com/slee1996/pillowfort/tree/9372fd3b64459551c7a1bdb2b7f5a37e6f91faa4/paper
-New edition tag: protocol-v4-cs1-evidence-2026-11-22-r6
-All three local browser fault executions: 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b.
-Full release gate, browser results and pre-fix regressions: evidence/recovery-r3/.
-No wire-version change. Local recovery experiments are not evidence of a production deployment.
+https://github.com/slee1996/pillowfort/tree/3bd98397be04ec82e7374296707fab8f03e032d5/paper
+New edition tag: protocol-v4-cs1-evidence-2026-11-22-r7
+Three retained edition 3 local recovery executions: 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b.
+Edition 3 gate, browser results and pre-fix regressions: evidence/recovery-r3/.
+No wire-version change. The production shutdown record is historical; prompt-offer observations are recorded separately.
