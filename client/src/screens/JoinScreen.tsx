@@ -118,7 +118,8 @@ export function JoinScreen() {
     const pw = validation.secret;
     setSecretError("");
     setName(enteredName);
-    const options = { roomId: room, roomSecret: pw, displayName: enteredName };
+    const options = { roomId: room, roomSecret: pw, displayName: enteredName,
+      ...(invitation?.hostPin !== undefined && invitation.roomId === room && { hostPin: invitation.hostPin }) };
     if (recoveryRequired) setRecoveryCredentialLocked(true);
     setConnecting(true);
     joiningRef.current = true;
@@ -153,6 +154,8 @@ export function JoinScreen() {
           ? "This join may already be pending. Retry with these exact details to resolve it."
           : result.status === "busy"
           ? "This secure fort is already open in another tab."
+          : result.status === "failed" && result.reason === "invitation-host-changed"
+            ? "The host has changed. Ask someone in the fort to copy a fresh invite link."
           : result.status === "failed" && result.reason === "authentication-failed"
             ? "Could not join. Check the fort flag and password."
             : result.status === "failed" && result.reason === "rate-limited"

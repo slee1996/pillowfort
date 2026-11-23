@@ -41,6 +41,21 @@ jobs:
       - name: Run release gate
         run: npm run check
 
+      - name: Verify chat remains usable with limited vertical space
+        run: bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts --test-name-pattern 'phone landscape|shrinks only'
+
+      - name: Verify voluntary re-offer, post-transfer admission and game restart
+        run: |
+          npx playwright install --with-deps firefox
+          NODE_ENV=production npm run build
+          bun verification/app/browsers.ts "$RUNNER_TEMP/retoss.json" chromium retoss
+          npm install --prefix "$RUNNER_TEMP/pf-npm" --ignore-scripts --no-audit --no-fund https://registry.npmjs.org/@ontologic/pillowfort-agent/-/pillowfort-agent-2.1.1.tgz
+          pkg="$RUNNER_TEMP/pf-npm/node_modules/@ontologic/pillowfort-agent"
+          node "$pkg/scripts/agent.mjs" install-browser
+          for scenario in fresh-admission saboteur; do
+            node verification/app/game-handoff.ts "$scenario" "$RUNNER_TEMP/$scenario.json" "$pkg"
+          done
+
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 

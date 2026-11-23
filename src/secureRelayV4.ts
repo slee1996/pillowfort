@@ -73,6 +73,8 @@ export interface SecureSetupFrameV4 {
 export interface SecureJoinFrameV4 {
   kind: "join";
   requestId: string;
+  /** An explicit re-invitation; omission means the founding host. Never an authority grant. */
+  expectedHostId?: string;
   /** Joiner credential key; activation must match this immutable declaration. */
   signaturePublicKey: string;
   hello: SecureMemberHelloV4;
@@ -240,6 +242,8 @@ export interface SecureApplicationDecisionFrameV4 {
   requestId: string;
   messageId: string;
   decision: "approve" | "reject";
+  /** Current host's receipt for the target's authenticated, encrypted manual decline. */
+  declinedAuthorizationId?: string;
 }
 
 export interface SecureCommitDecisionFrameV4 {
@@ -599,6 +603,7 @@ export type SecureRelayErrorCodeV4 =
   | "recipient-unavailable"
   | "invalid-route"
   | "invalid-admission"
+  | "invitation-host-changed"
   | "invalid-reference"
   | "pending-cannot-send"
   | "active-member-required"
@@ -762,7 +767,8 @@ export function parseSecureClientFrameV4(input: unknown): SecureClientFrameV4 | 
 
   if (value.kind === "setup" || value.kind === "join") {
     const required = ["kind", "requestId", "signaturePublicKey", "hello", "memberBinding"];
-    if (!hasExactKeys(value, required) || !isMessageId(value.requestId)
+    if (!hasExactKeys(value, required, value.kind === "join" ? ["expectedHostId"] : []) ||
+        (value.expectedHostId !== undefined && !isDeviceId(value.expectedHostId)) || !isMessageId(value.requestId)
       || !isFixedBase64Url(value.signaturePublicKey, SHA256_BYTES)) return null;
     const hello = parseHello(value.hello);
     const memberBinding = parseRoomInvitationMemberBindingV4(value.memberBinding);
@@ -780,7 +786,7 @@ export function parseSecureClientFrameV4(input: unknown): SecureClientFrameV4 | 
     }
     return {
       kind: "join", requestId: value.requestId, signaturePublicKey: value.signaturePublicKey,
-      hello, memberBinding,
+      hello, memberBinding, ...(isDeviceId(value.expectedHostId) && { expectedHostId: value.expectedHostId }),
     };
   }
   if (value.kind === "resume") {
@@ -943,12 +949,18 @@ export function parseSecureClientFrameV4(input: unknown): SecureClientFrameV4 | 
   }
   if (value.kind === "application-decision" || value.kind === "commit-decision") {
     const keys = ["kind", "v", "suite", "roomInstance", "requestId", "messageId", "decision"];
+    if (value.kind === "application-decision" && value.declinedAuthorizationId !== undefined) {
+      if (value.decision !== "approve" || !isMessageId(value.declinedAuthorizationId)) return null;
+      keys.push("declinedAuthorizationId");
+    }
     if (!parseRoomControlBase(value, keys) || !isMessageId(value.messageId)
       || (value.decision !== "approve" && value.decision !== "reject")) return null;
     return {
       kind: value.kind, v: 4, suite: 1,
       roomInstance: value.roomInstance as string, requestId: value.requestId as string,
       messageId: value.messageId, decision: value.decision,
+      ...(value.kind === "application-decision" && isMessageId(value.declinedAuthorizationId) &&
+        { declinedAuthorizationId: value.declinedAuthorizationId }),
     };
   }
   if (value.kind === "resume-complete" || value.kind === "delivery-ack") {
@@ -2861,13 +2873,21 @@ function expireCurrentGrant(
   state.currentGrant = null;
 }
 
+function pendingApplicationDeadline(state: SecureRelayStateV4): number {
+  const pending = state.pendingApplication;
+  if (!pending) return Infinity;
+  const offer = state.pendingHostTransfer;
+  return offer && pending.frame.relayKind === "host-transfer-accept" && pending.frame.authorizationId === offer.authorizationId
+    ? Math.min(pending.decisionExpiresAt, offer.expiresAt) : pending.decisionExpiresAt;
+}
+
 function expirePendingApplication(
   state: SecureRelayStateV4,
   now: number,
   effects: SecureRelayEffectV4[],
 ): boolean {
   const pending = state.pendingApplication;
-  if (!pending || now < pending.decisionExpiresAt) return false;
+  if (!pending || now < pendingApplicationDeadline(state)) return false;
   const record = replayRecord(state, pending.frame.envelope.messageId);
   if (record?.kind === "application-pending") {
     record.kind = "application-rejected";
@@ -3387,6 +3407,10 @@ export async function reduceSecureRelayV4(
       return reject("key-package-limit");
     }
     if (existing) return reject("device-exists");
+    const host = state.hostDeviceId && memberById(state, state.hostDeviceId);
+    if (!host || (frame.expectedHostId === undefined ? host.joinedOrder !== 1 : host.deviceId !== frame.expectedHostId)) {
+      return reject("invitation-host-changed");
+    }
     if (state.pendingHostTransfer) return reject("pending-limit");
     if (state.members.filter((candidate) => candidate.status !== "retired").length >= MAX_SECURE_RELAY_MEMBERS_V4) {
       return reject("member-limit");
@@ -4026,17 +4050,23 @@ export async function reduceSecureRelayV4(
       || transfer.authorizationId !== pending.frame.authorizationId
       || transfer.targetDeviceId !== pending.fromDeviceId
       || transfer.hostDeviceId !== actor.deviceId)) return reject("invalid-state");
+    const offer = state.pendingHostTransfer;
+    if (frame.declinedAuthorizationId !== undefined && pending.frame.relayKind !== "application") return reject("invalid-reference");
+    const staleDecline = frame.declinedAuthorizationId !== undefined && (!offer || offer.policyEventId !== undefined ||
+      offer.authorizationId !== frame.declinedAuthorizationId || offer.targetDeviceId !== pending.fromDeviceId ||
+      offer.hostDeviceId !== actor.deviceId);
     if (state.orderQueue.length > 0 && !validateGrantTokenId(state, options.nextGrantTokenId)) {
       return reject("grant-token-required");
     }
     const applicationRecord = replayRecord(state, pending.frame.envelope.messageId, "application-pending");
     if (!applicationRecord) return reject("invalid-state");
     state.pendingApplication = null;
-    if (frame.decision === "approve") {
+    if (frame.decision === "approve" && !staleDecline) {
       if (state.nextLogicalOrder >= Number.MAX_SAFE_INTEGER) return reject("order-exhausted");
       applicationRecord.kind = "application";
       applicationRecord.rejectionReason = null;
       state.nextLogicalOrder += 1;
+      if (frame.declinedAuthorizationId !== undefined) state.pendingHostTransfer = null;
       if (transfer) {
         state.pendingHostTransfer = null;
         state.hostDeviceId = transfer.targetDeviceId;
@@ -4054,10 +4084,10 @@ export async function reduceSecureRelayV4(
       }
     } else {
       applicationRecord.kind = "application-rejected";
-      applicationRecord.rejectionReason = "host-rejected";
+      applicationRecord.rejectionReason = staleDecline ? "approval-expired" : "host-rejected";
       deliverApplicationResult(
         state, pending.fromDeviceId, pending.frame.envelope.messageId, pending.logicalOrder,
-        "rejected", "host-rejected", now, effects,
+        "rejected", applicationRecord.rejectionReason, now, effects,
       );
       if (transfer) {
         state.pendingHostTransfer = null;
@@ -4393,8 +4423,7 @@ export function advanceSecureRelayV4(
   expireActiveDisconnects(state, options.now, effects);
   if (state.hostDeviceId === null) return { ok: true, state, effects };
   const currentWillClear = !state.currentGrant || options.now >= state.currentGrant.expiresAt;
-  const pendingWillClear = !state.pendingApplication
-    || options.now >= state.pendingApplication.decisionExpiresAt;
+  const pendingWillClear = !state.pendingApplication || options.now >= pendingApplicationDeadline(state);
   const pendingCommitWillClear = !state.pendingCommit
     || options.now >= state.pendingCommit.decisionExpiresAt;
   const willNeedGrant = currentWillClear && pendingWillClear && pendingCommitWillClear
@@ -4403,9 +4432,9 @@ export function advanceSecureRelayV4(
     return reject("grant-token-required");
   }
   expirePendingAdmission(state, options.now, effects);
+  expirePendingApplication(state, options.now, effects);
   expirePendingHostTransfer(state, options.now, effects);
   expireCurrentGrant(state, options.now, effects);
-  expirePendingApplication(state, options.now, effects);
   expirePendingCommit(state, options.now, effects);
   continueHostSuccession(state, options.now, effects);
   const grantError = issueNextGrant(state, options.now, options.nextGrantTokenId, effects);

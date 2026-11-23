@@ -19,6 +19,7 @@ import {
   canonicalBase64UrlByteLength,
 } from "../protocolV4";
 import { deriveCryptoRoomInstanceV4 } from "./cryptoStateStore";
+import { parseInvitationHostPin } from "./roomInvitation";
 import type { SecureLogicalOrderGrantV4 } from "../secureRelayV4";
 
 const UTF8 = new TextEncoder();
@@ -123,6 +124,8 @@ export type SecureRoomPendingOutboxEntryV1 =
       bootstrapMessageId: string | null;
       /** Joiner-only durable binding to the exact Welcome consumed before bootstrap/proof. */
       joinWelcomeMessageId: string | null;
+      /** Local invitation's room/device/key, immutable across retries of this KeyPackage. */
+      joinHostPin?: string;
       /** Null only for a setup/join key package. */
       grant: SecureLogicalOrderGrantV4 | null;
       /** A host add advances to the Welcome send only after its commit ack. */
@@ -232,6 +235,7 @@ type SerializedPendingOutboxEntryV1 =
       addedDeviceId: string | null;
       bootstrapMessageId: string | null;
       joinWelcomeMessageId: string | null;
+      joinHostPin?: string;
       grant: SecureLogicalOrderGrantV4 | null;
       commitAcknowledged: boolean;
       welcomeAcknowledged: boolean;
@@ -508,7 +512,9 @@ function validatePendingOutbox(
     if (candidate.kind !== "admission" || !exactKeys(candidate, [
       "kind", "admissionId", "messageId", "outbound", "welcomeMessageId", "welcome", "ratchetTree",
       "addedDeviceId", "bootstrapMessageId", "joinWelcomeMessageId", "grant", "commitAcknowledged", "welcomeAcknowledged",
-    ]) || canonicalBase64UrlByteLength(candidate.admissionId) !== SECURE_MESSAGE_ID_BYTES ||
+    ], ["joinHostPin"]) || canonicalBase64UrlByteLength(candidate.admissionId) !== SECURE_MESSAGE_ID_BYTES ||
+      (candidate.joinHostPin !== undefined && (candidate.welcomeMessageId !== null ||
+        parseInvitationHostPin(candidate.joinHostPin)?.roomInstance !== roomInstance)) ||
       !(candidate.bootstrapMessageId === null ||
         canonicalBase64UrlByteLength(candidate.bootstrapMessageId) === SECURE_MESSAGE_ID_BYTES) ||
       !(candidate.joinWelcomeMessageId === null ||
@@ -692,6 +698,7 @@ export function cloneSecureRoomPendingOutboxV1(
       addedDeviceId: entry.addedDeviceId,
       bootstrapMessageId: entry.bootstrapMessageId,
       joinWelcomeMessageId: entry.joinWelcomeMessageId,
+      ...(entry.joinHostPin !== undefined && { joinHostPin: entry.joinHostPin }),
       grant: entry.grant === null ? null : cloneGrant(entry.grant),
       commitAcknowledged: entry.commitAcknowledged,
       welcomeAcknowledged: entry.welcomeAcknowledged,
@@ -732,6 +739,7 @@ function serializePendingOutbox(
       addedDeviceId: entry.addedDeviceId,
       bootstrapMessageId: entry.bootstrapMessageId,
       joinWelcomeMessageId: entry.joinWelcomeMessageId,
+      ...(entry.joinHostPin !== undefined && { joinHostPin: entry.joinHostPin }),
       grant: entry.grant === null ? null : cloneGrant(entry.grant),
       commitAcknowledged: entry.commitAcknowledged,
       welcomeAcknowledged: entry.welcomeAcknowledged,
@@ -784,7 +792,8 @@ function parseSerializedPendingOutbox(
     if (candidate.kind !== "admission" || !exactKeys(candidate, [
       "kind", "admissionId", "messageId", "outbound", "welcomeMessageId", "welcome", "ratchetTree",
       "addedDeviceId", "bootstrapMessageId", "joinWelcomeMessageId", "grant", "commitAcknowledged", "welcomeAcknowledged",
-    ]) || typeof candidate.admissionId !== "string" || typeof candidate.commitAcknowledged !== "boolean" ||
+    ], ["joinHostPin"]) || typeof candidate.admissionId !== "string" || typeof candidate.commitAcknowledged !== "boolean" ||
+      (candidate.joinHostPin !== undefined && typeof candidate.joinHostPin !== "string") ||
       typeof candidate.welcomeAcknowledged !== "boolean" ||
       !(candidate.welcomeMessageId === null || typeof candidate.welcomeMessageId === "string") ||
       !(candidate.welcome === null || typeof candidate.welcome === "string") ||
@@ -816,6 +825,7 @@ function parseSerializedPendingOutbox(
       addedDeviceId: candidate.addedDeviceId,
       bootstrapMessageId: candidate.bootstrapMessageId,
       joinWelcomeMessageId: candidate.joinWelcomeMessageId,
+      ...(typeof candidate.joinHostPin === "string" && { joinHostPin: candidate.joinHostPin }),
       grant: candidate.grant as SecureLogicalOrderGrantV4 | null,
       commitAcknowledged: candidate.commitAcknowledged,
       welcomeAcknowledged: candidate.welcomeAcknowledged,

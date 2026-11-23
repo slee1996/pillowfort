@@ -1,0 +1,669 @@
+{
+  "date": "2026-11-23",
+  "disposition": "not signed off",
+  "productionChangedByVerification": false,
+  "baseline": {
+    "product": "5a321c35b9b3866e6a9c3d86969ee8e31933e2d3",
+    "deployedRuntimeSource": "f03fa147f79847dda5dac5b0a8ed37c8d040cee5",
+    "verificationCssRevision": "a0d32b87f217c8ff8869771a0bd001b4e3853696",
+    "privateMarketingTestedSource": "0a604ef39ac64ee6dfd51b80d4616ed3b13f5895",
+    "npm": "@ontologic/pillowfort-agent@2.1.1",
+    "mcpProtocol": "2026-07-28",
+    "productionDeployments": {
+      "app": {
+        "created_on": "2026-11-23T05:56:00.632558Z",
+        "versions": [
+          {
+            "version_id": "130f6019-669a-4b7e-b9a2-8f60de4b754e",
+            "percentage": 100
+          }
+        ]
+      },
+      "hosted": {
+        "created_on": "2026-11-23T05:56:08.589442Z",
+        "versions": [
+          {
+            "version_id": "6e2d4c8d-ed96-48f8-91ce-7ab216cc0e48",
+            "percentage": 100
+          }
+        ]
+      }
+    },
+    "productionWasmSha256": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94",
+    "candidateReleaseAssetsSha256": {
+      "index-CFbBtpFv.js": "515dd3339f39932c2dd96ecafd8b6e2fc6bb92cd2d157afb55a58756852e4d2a",
+      "index-DZeI2l0x.css": "09c00245cfb53f5580da79bfcd23bfbf109467d642c33af5b3b21f76696ec4d6",
+      "pillowfort_openmls_bg-BxD-mDtq.wasm": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94"
+    },
+    "priorProtocolModelsNotRerunLocally": "https://github.com/slee1996/pillowfort/tree/protocol-v4-cs1-evidence-2026-11-22-r8/paper"
+  },
+  "environment": {
+    "os": "macOS arm64",
+    "node": "24.22.2",
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "mcpClient": "2.4.0",
+    "rust": "1.94.1"
+  },
+  "regressionGates": {
+    "release": {
+      "passed": 583,
+      "failed": 0,
+      "bunPassed": 567,
+      "nodePassed": 16
+    },
+    "mobile": {
+      "passed": 23,
+      "failed": 2
+    },
+    "quad-view": {
+      "passed": 5,
+      "failed": 0
+    },
+    "demo-reel": {
+      "passed": 0,
+      "failed": 8
+    },
+    "full-tour": {
+      "passed": 0,
+      "failed": 10
+    },
+    "game-night": {
+      "passed": 0,
+      "failed": 5
+    },
+    "design-snapshots": {
+      "passed": 0,
+      "failed": 5
+    },
+    "functional-demo-reel": {
+      "passed": 8,
+      "failed": 0
+    },
+    "functional-full-tour": {
+      "passed": 10,
+      "failed": 0
+    },
+    "functional-game-night": {
+      "passed": 5,
+      "failed": 0
+    },
+    "mobile-all-fixed": {
+      "passed": 25,
+      "failed": 0
+    },
+    "hostedWorker": {
+      "passed": 14,
+      "failed": 0
+    },
+    "openmlsArtifacts": {
+      "matched": 4,
+      "sourceInputs": 51
+    },
+    "rustProvider": {
+      "passed": 5,
+      "failed": 0
+    },
+    "marketing": {
+      "telemetryPassed": 10,
+      "renderedRoutesPassed": 8,
+      "editor": {
+        "passed": [
+          "sign in through the editor",
+          "draft hidden from reader and sitemap",
+          "edit the draft",
+          "published article visible anonymously",
+          "remove the local article",
+          "sign out and revisit the private editor"
+        ],
+        "failed": null
+      },
+      "patchedEditor": {
+        "passed": [
+          "sign in through the editor",
+          "draft hidden from reader and sitemap",
+          "edit the draft",
+          "published article visible anonymously",
+          "remove the local article",
+          "sign out and revisit the private editor"
+        ],
+        "failed": null
+      }
+    }
+  },
+  "mixedBrowserRooms": [
+    {
+      "host": "chromium",
+      "guest": "firefox",
+      "retoss": false,
+      "versions": [
+        "158.0.8127.18",
+        "159.0"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "catch a deliberate handoff without evicting the host",
+        "new host retires the room on both devices"
+      ],
+      "errors": []
+    },
+    {
+      "host": "firefox",
+      "guest": "webkit",
+      "retoss": false,
+      "versions": [
+        "159.0",
+        "27.2"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "catch a deliberate handoff without evicting the host",
+        "new host retires the room on both devices"
+      ],
+      "errors": []
+    },
+    {
+      "host": "webkit",
+      "guest": "chromium",
+      "retoss": false,
+      "versions": [
+        "27.2",
+        "158.0.8127.18"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "catch a deliberate handoff without evicting the host",
+        "new host retires the room on both devices"
+      ],
+      "errors": []
+    }
+  ],
+  "regressions": {
+    "manualRetoss": {
+      "issue": "https://github.com/slee1996/pillowfort/issues/18",
+      "runs": [
+        {
+          "host": "chromium",
+          "guest": "firefox",
+          "retoss": true,
+          "versions": [
+            "158.0.8127.18",
+            "159.0"
+          ],
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy",
+            "reopen stored guest and exchange fresh chat"
+          ],
+          "errors": [
+            "send as former host: TimeoutError: fill: Timeout 20000ms exceeded. (host: invalid-lifecycle)"
+          ]
+        },
+        {
+          "host": "firefox",
+          "guest": "webkit",
+          "retoss": true,
+          "versions": [
+            "159.0",
+            "27.2"
+          ],
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy",
+            "reopen stored guest and exchange fresh chat"
+          ],
+          "errors": [
+            "send as former host: TimeoutError: fill: Timeout 20000ms exceeded. (host: invalid-lifecycle)"
+          ]
+        },
+        {
+          "host": "webkit",
+          "guest": "chromium",
+          "retoss": true,
+          "versions": [
+            "27.2",
+            "158.0.8127.18"
+          ],
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy",
+            "reopen stored guest and exchange fresh chat"
+          ],
+          "errors": [
+            "send as former host: TimeoutError: fill: Timeout 20000ms exceeded. (host: invalid-lifecycle)"
+          ]
+        }
+      ]
+    },
+    "postSuccessionAdmission": {
+      "issue": "https://github.com/slee1996/pillowfort/issues/19",
+      "run": {
+        "game": "fresh-admission",
+        "checks": [
+          "JSONL founder",
+          "admit independent SDK participants",
+          "observed founder disconnect and voluntary catch"
+        ],
+        "errors": [
+          "admission with the successor-exported invite / Delta observes decision: Delta did not observe admission with the successor-exported invite / Delta observes decision; screen=join; approval=false; host=false; display=connection-ended; error=null"
+        ]
+      }
+    }
+  },
+  "activitiesDuringSuccession": {
+    "rps": {
+      "game": "rps",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "mute and unmute",
+        "active rps",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "ttt": {
+      "game": "ttt",
+      "checks": [
+        "JSONL founder",
+        "exact rejection",
+        "admit independent SDK participants",
+        "active ttt",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "koth": {
+      "game": "koth",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active koth",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "vote": {
+      "game": "vote",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active vote",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "saboteur": {
+      "game": "saboteur",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active saboteur",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    },
+    "breakout": {
+      "game": "breakout",
+      "checks": [
+        "JSONL founder",
+        "admit independent SDK participants",
+        "active breakout",
+        "observed founder disconnect and voluntary catch",
+        "post-change game semantics",
+        "surviving room delivers fresh encrypted chat",
+        "successor-authorized closure"
+      ],
+      "errors": []
+    }
+  },
+  "mobileFix": {
+    "812x375": {
+      "transcriptPixels": 83,
+      "mentionHelpInAccessibilityTree": true
+    },
+    "375x667-visible320": {
+      "transcriptPixels": 90,
+      "mentionHelpInAccessibilityTree": true
+    }
+  },
+  "visualComparisons": {
+    "threshold": 0.005,
+    "updatedBaselines": 0,
+    "failed": 28,
+    "observedDiffRatios": {
+      "design-snapshots": [
+        0.10318204001952172,
+        0.036108670896372215,
+        0.03899788514722629,
+        0.03304050756466569,
+        0.09259630574796451
+      ],
+      "demo-reel": [
+        0.9969376929012346,
+        0.735014949845679,
+        0.9998066165123457,
+        0.7303250385802469,
+        0.7732093942901235,
+        0.7709688464506173,
+        0.7358000578703704,
+        0.9996735146604938
+      ],
+      "full-tour": [
+        0.7371928047839507,
+        0.7388411458333334,
+        0.9997632137345679,
+        0.007701581790123457,
+        0.7537147955246913,
+        0.7799739583333334,
+        0.7752073688271605,
+        0.7680314429012346,
+        0.7357687114197531,
+        0.9996735146604938
+      ],
+      "game-night": [
+        0.7437070794753087,
+        0.7535913387345679,
+        0.9997429591049383,
+        0.7680314429012346,
+        0.9996735146604938
+      ]
+    }
+  },
+  "agentTransports": {
+    "stdio": {
+      "mode": "stdio",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "subscribe and reconcile baseline",
+        "notification-driven private read and reply",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 65
+      }
+    },
+    "hosted": {
+      "mode": "hosted",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "subscribe and reconcile baseline",
+        "cancel independent Task",
+        "notification-driven private read and reply",
+        "independent Task fan-out and cursor read",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed",
+        "grant revoked"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 61
+      }
+    }
+  },
+  "liveOwnerIdle": {
+    "secondsIdle": 125,
+    "status": 404,
+    "identityRestorable": false,
+    "recreate": 404,
+    "quotaAfter": 0,
+    "revoked": true
+  },
+  "publicWebAndMcp": {
+    "production web shell and asset identity": {
+      "status": "pass",
+      "observed": {
+        "assetsSha256": {
+          "/assets/index-BWFJNoC2.js": "515dd3339f39932c2dd96ecafd8b6e2fc6bb92cd2d157afb55a58756852e4d2a",
+          "/assets/index-CxCIS32T.css": "f59b50ffe0504d165cb7bd88d57113975df4c4aa9a6946805db10adc08d93c3d"
+        },
+        "rootFramePolicy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://checkout.stripe.com; navigate-to 'self' https://checkout.stripe.com; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'none'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; require-trusted-types-for 'script'; trusted-types 'none'",
+        "activityFramePolicy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors https://discord.com https://canary.discord.com https://ptb.discord.com; form-action 'self' https://checkout.stripe.com; navigate-to 'self' https://checkout.stripe.com; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'none'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; require-trusted-types-for 'script'; trusted-types 'none'"
+      }
+    },
+    "https://pillowfort.xyz sitemap and canonical pages": {
+      "status": "pass",
+      "observed": {
+        "pages": 1,
+        "paths": [
+          "/"
+        ]
+      }
+    },
+    "https://pillowfort.xyz robots advertises sitemap": {
+      "status": "pass",
+      "observed": [
+        "https://pillowfort.xyz/sitemap.xml"
+      ]
+    },
+    "https://about.pillowfort.xyz sitemap and canonical pages": {
+      "status": "pass",
+      "observed": {
+        "pages": 7,
+        "paths": [
+          "/",
+          "/technology",
+          "/articles",
+          "/agents",
+          "/private-group-chat",
+          "/agents/collaboration",
+          "/articles/local-mcp-shared-drawing"
+        ]
+      }
+    },
+    "https://about.pillowfort.xyz robots advertises sitemap": {
+      "status": "pass",
+      "observed": [
+        "https://about.pillowfort.xyz/sitemap.xml?v=2"
+      ]
+    },
+    "npm, Registry and marketing mirror integrity": {
+      "status": "pass",
+      "observed": {
+        "version": "2.1.1",
+        "npmSri": "sha512-8pqNK7xVNfdRv7a3ttdBJg+mkZ97mIRwvKzk2ZV1/oGPDa6CfWbtzOvtCftVfAIwbQtDDUGQMkPguiSiIPWeug==",
+        "mirrorBytes": 53573,
+        "registryIconTitleWebsite": true
+      }
+    },
+    "release manifests and full/focused catalogs": {
+      "status": "pass",
+      "observed": {
+        "version": "2.1.1",
+        "fullToolNames": 65,
+        "focusedToolNames": 25
+      }
+    },
+    "anonymous MCP discovery, protected calls and OAuth metadata": {
+      "status": "pass",
+      "observed": {
+        "protocol": "2026-07-28",
+        "anonymousToolCount": 61,
+        "anonymousCall": 401,
+        "oauthPkce": true
+      }
+    },
+    "public CMS discovery and private editor landing": {
+      "status": "pass",
+      "observed": {
+        "publicCapabilities": 6,
+        "editorServesLogin": true
+      }
+    },
+    "Fort Pass availability (not fulfillment)": {
+      "status": "pass",
+      "observed": {
+        "checkoutConfigured": true,
+        "priceLabel": "$5"
+      }
+    },
+    "public index guide": {
+      "status": "pass",
+      "observed": 22959
+    },
+    "public workflows guide": {
+      "status": "pass",
+      "observed": 27839
+    },
+    "public security guide": {
+      "status": "pass",
+      "observed": 24339
+    },
+    "public reference guide": {
+      "status": "fail",
+      "reason": "/agents/reference.md: HTTP 404"
+    },
+    "https://pillowfort.xyz telemetry health": {
+      "status": "fail",
+      "reason": "/.well-known/telemetry-health: HTTP 404"
+    },
+    "https://about.pillowfort.xyz telemetry health": {
+      "status": "pass",
+      "observed": "no-store"
+    },
+    "https://mcp.pillowfort.xyz telemetry health": {
+      "status": "fail",
+      "reason": "/.well-known/telemetry-health: HTTP 404"
+    }
+  },
+  "curatedGuides": {
+    "hosted": {
+      "guides": [
+        "pillowfort://agents/index",
+        "pillowfort://agents/reference",
+        "pillowfort://agents/workflows",
+        "pillowfort://agents/security"
+      ],
+      "prompts": [
+        "autonomous_host",
+        "join_room",
+        "shared_drawing_game"
+      ]
+    },
+    "npm": {
+      "guides": [
+        "pillowfort://agents/index",
+        "pillowfort://agents/workflows",
+        "pillowfort://agents/security"
+      ],
+      "prompts": [
+        "autonomous_host",
+        "join_room",
+        "shared_drawing_game"
+      ]
+    }
+  },
+  "archive": {
+    "version": "2.1.1",
+    "publishedSriVerified": true,
+    "publishedIntegrity": "sha512-8pqNK7xVNfdRv7a3ttdBJg+mkZ97mIRwvKzk2ZV1/oGPDa6CfWbtzOvtCftVfAIwbQtDDUGQMkPguiSiIPWeug==",
+    "members": 15,
+    "allDifferences": [
+      "docs/agents/index.md",
+      "docs/agents/reference.md",
+      "docs/agents/security.md",
+      "package.json",
+      "scripts/agent-guidance.mjs"
+    ]
+  },
+  "dependencyDatabases": {
+    "productNpm": {
+      ".": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "client": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "hosted-mcp": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    "cryptoRust": {
+      "advisories": 0,
+      "warnings": 0,
+      "databaseCommit": "43b5554d9d64ca91c8d0839b7150d4f8ee490cdc",
+      "checkedDependencies": 119
+    },
+    "privateWebsite": "Audited and patched separately. Local audit and site gate passed for the patch; this is not evidence of deployment."
+  },
+  "notCertified": [
+    "provider purchase, refund and dispute",
+    "backgrounded physical phones, system IME and actual assistive technology",
+    "authenticated third-party Discord Activity",
+    "unsolicited idle-model turn in an independent harness",
+    "all cryptographic or distributed executions",
+    "production CMS write access or operator paging delivery"
+  ]
+}

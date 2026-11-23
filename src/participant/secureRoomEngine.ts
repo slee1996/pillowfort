@@ -55,6 +55,7 @@ import {
   type MlsTransitionKind,
 } from "./mlsCrypto";
 import type { RoomCryptoLockLease } from "./roomCryptoLock";
+import { parseInvitationHostPin } from "./roomInvitation";
 import { verifyRoomInvitationMemberBindingWithSecretV4 } from "./secureInvitationAuth";
 import {
   MAX_SECURE_ROOM_PENDING_OUTBOX_BYTES,
@@ -158,7 +159,7 @@ export interface SecureRoomJoinResult {
   roster: SecureRoomRosterEntry[];
 }
 
-interface ExpectedJoinFounderV4 {
+interface ExpectedJoinHostV4 {
   deviceId: string;
   signaturePublicKey: string;
 }
@@ -251,6 +252,7 @@ export interface SecureRoomInboundApplicationInspection {
   senderDeviceId: string;
   eventId: string;
   logicalOrder: number;
+  declinedAuthorizationId?: string;
 }
 
 export interface SecureRoomInboundCommitInspection {
@@ -444,7 +446,7 @@ export class SecureRoomEngine {
   private unavailable = false;
   private retired = false;
   /** Re-established from the server-forwarded invitation binding on every pending-join connection. */
-  private expectedJoinFounder: ExpectedJoinFounderV4 | null = null;
+  private expectedJoinHost: ExpectedJoinHostV4 | null = null;
   /**
    * Zombie-expiration hints are transient, but each device/id pair must match
    * the durable invitation-signed membership admission ledger. The server
@@ -874,6 +876,21 @@ export class SecureRoomEngine {
     }));
   }
 
+  /** Export only an established host from signed state and the authenticated MLS roster. */
+  invitationHostPin(): string {
+    this.assertUsable();
+    this.assertLease();
+    const state = this.durable.applicationState;
+    const rollback = this.durable.pendingApplicationRollback;
+    if (!this.isActive() || !state.hostDeviceId || state.closedReason !== null || state.pendingHostDeviceId !== null ||
+        (rollback && rollback.applicationState.hostDeviceId !== state.hostDeviceId)) {
+      throw new SecureRoomEngineError("transition-invalid", "wait for host transfer to settle before sharing an invitation");
+    }
+    const host = this.roster().find(entry => entry.deviceId === state.hostDeviceId);
+    if (!host) throw new SecureRoomEngineError("unauthorized", "host is not in the authenticated roster");
+    return `${this.roomInstance}.${host.deviceId}.${host.signaturePublicKey}`;
+  }
+
   get currentRetirementBarrier(): SecureRoomRetirementBarrierV4 | null {
     this.assertUsable();
     const current = this.retirementBarriers.entries().next().value as [string, string] | undefined;
@@ -963,7 +980,10 @@ export class SecureRoomEngine {
     }
   }
 
-  async createKeyPackage(): Promise<SecureRoomKeyPackageResult> {
+  async createKeyPackage(joinHostPin?: string): Promise<SecureRoomKeyPackageResult> {
+    if (joinHostPin !== undefined && (this.isActive() || parseInvitationHostPin(joinHostPin)?.roomInstance !== this.roomInstance)) {
+      throw new SecureRoomEngineError("invalid-input", "invitation host pin does not name this pending room");
+    }
     const messageId = this.allocatePendingMessageId();
     return this.runMlsMutation(
       () => this.requireSession().keyPackage(),
@@ -975,6 +995,7 @@ export class SecureRoomEngine {
           admissionId: messageId,
           messageId,
           outbound: keyPackage,
+          ...(joinHostPin !== undefined && { joinHostPin }),
           welcomeMessageId: null,
           welcome: null,
           ratchetTree: null,
@@ -1125,15 +1146,15 @@ export class SecureRoomEngine {
         (retained.joinWelcomeMessageId !== null && retained.joinWelcomeMessageId !== relayMessageId)) {
       throw new SecureRoomEngineError("transition-invalid", "Welcome does not match the retained authenticated admission");
     }
-    if (!this.expectedJoinFounder) {
-      throw new SecureRoomEngineError("unauthorized", "Welcome arrived before an invitation-authorized founder binding");
+    if (!this.expectedJoinHost) {
+      throw new SecureRoomEngineError("unauthorized", "Welcome arrived before an invitation-authorized host binding");
     }
     const deliveryDigest = await this.digestRelayDelivery(
       relayMessageId,
       encodeSecureAdmissionBundleV4(welcome, ratchetTree),
     );
     if (deliveryDigest.alreadyProcessed) {
-      this.assertExpectedFounderInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
+      this.assertExpectedHostInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
       return { kind: "already-processed", relayMessageId: deliveryDigest.messageId };
     }
     if (this.requireSession().isActive()) {
@@ -1147,7 +1168,7 @@ export class SecureRoomEngine {
         if (!this.requireSession().isActive() || !roster.some((entry) => entry.deviceId === this.deviceId)) {
           throw new SecureRoomEngineError("transition-invalid", "MLS join did not activate the durable device identity");
         }
-        this.assertExpectedFounderInRoster(roster);
+        this.assertExpectedHostInRoster(roster);
         const pendingOutbox = cloneSecureRoomPendingOutboxV1(this.durable.pendingOutbox);
         const retainedIndex = pendingOutbox.findIndex((entry) => entry.kind === "admission" &&
           entry.admissionId === admissionId && entry.welcomeMessageId === null);
@@ -1179,7 +1200,7 @@ export class SecureRoomEngine {
     );
   }
 
-  async authorizeJoinFounder(roomId: string, bindingValue: RoomInvitationMemberBindingV4): Promise<void> {
+  async authorizeJoinHost(roomId: string, bindingValue: RoomInvitationMemberBindingV4): Promise<void> {
     this.assertUsable();
     this.assertLease();
     const binding = parseRoomInvitationMemberBindingV4(bindingValue);
@@ -1192,12 +1213,18 @@ export class SecureRoomEngine {
         })) {
       throw new SecureRoomEngineError("unauthorized", "founder binding is not authorized by this room invitation");
     }
-    this.expectedJoinFounder = {
-      deviceId: binding.deviceId,
-      signaturePublicKey: binding.signaturePublicKey,
-    };
+    const admission = this.durable.pendingOutbox.find(entry => entry.kind === "admission" && entry.welcomeMessageId === null);
+    if (admission?.kind !== "admission") throw new SecureRoomEngineError("unauthorized", "no retained join KeyPackage");
+    // A share link may select a later host. Only the local, encrypted admission
+    // carries that pin: neither the relay nor a retry can replace the inviting credential.
+    const anchor = admission.joinHostPin === undefined ? binding : parseInvitationHostPin(admission.joinHostPin);
+    if (!anchor || anchor.roomInstance !== this.roomInstance || anchor.deviceId === this.deviceId ||
+        (anchor.deviceId === binding.deviceId && anchor.signaturePublicKey !== binding.signaturePublicKey)) {
+      throw new SecureRoomEngineError("unauthorized", "invitation host pin does not match the room credential");
+    }
+    this.expectedJoinHost = { deviceId: anchor.deviceId, signaturePublicKey: anchor.signaturePublicKey };
     if (this.requireSession().isActive()) {
-      this.assertExpectedFounderInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
+      this.assertExpectedHostInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
     }
   }
 
@@ -1670,6 +1697,15 @@ export class SecureRoomEngine {
         );
       }
       this.assertInboundApplicationRelayMatch(validated.event, validated.senderDeviceId, expectedRelayContext);
+      let declinedAuthorizationId: string | undefined;
+      if (validated.event.content.type === "host-transfer" && validated.event.content.action === "reject") {
+        const offer = this.durable.pendingRelayControls.find(control => control.kind === "transfer-host" &&
+          control.targetDeviceId === expectedSenderDeviceId && control.policyEventId === undefined);
+        if (offer?.kind !== "transfer-host" || !offer.authorizationId || offer.acceptMessageId !== null) {
+          throw new SecureRoomEngineError("unauthorized", "manual decline has no current authorization");
+        }
+        declinedAuthorizationId = offer.authorizationId;
+      }
       this.assertLease();
       return {
         kind: "inbound-application",
@@ -1677,6 +1713,7 @@ export class SecureRoomEngine {
         senderDeviceId: validated.senderDeviceId,
         eventId: validated.event.eventId,
         logicalOrder: validated.event.logicalOrder,
+        ...(declinedAuthorizationId !== undefined && { declinedAuthorizationId }),
       };
     } catch (error) {
       throw engineError(error, "transition-invalid", "inbound application inspection rejected the ciphertext");
@@ -2075,7 +2112,7 @@ export class SecureRoomEngine {
     }
     this.session?.dispose();
     this.session = null;
-    this.expectedJoinFounder = null;
+    this.expectedJoinHost = null;
     this.retirementBarriers.clear();
     this.retired = true;
   }
@@ -2083,7 +2120,7 @@ export class SecureRoomEngine {
   dispose(): void {
     this.session?.dispose();
     this.session = null;
-    this.expectedJoinFounder = null;
+    this.expectedJoinHost = null;
     this.retirementBarriers.clear();
     this.unavailable = true;
   }
@@ -2214,14 +2251,14 @@ export class SecureRoomEngine {
     }
     if (relayContext.kind === "bootstrap" &&
         this.durable.applicationState.hostDeviceId === null && this.durable.applicationState.members.length === 0) {
-      const expectedFounder = this.expectedJoinFounder;
-      if (!expectedFounder || senderDeviceId !== expectedFounder.deviceId) {
+      const expectedHost = this.expectedJoinHost;
+      if (!expectedHost || senderDeviceId !== expectedHost.deviceId) {
         throw new SecureRoomEngineError(
           "unauthorized",
-          "bootstrap signer is not the invitation-authorized founder",
+          "bootstrap signer is not the invitation-authorized host",
         );
       }
-      this.assertExpectedFounderInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
+      this.assertExpectedHostInRoster(SecureRoomEngine.normalizeRoster(this.requireSession().roster()));
       const retained = this.durable.pendingOutbox.find((entry) => entry.kind === "admission" &&
         entry.welcomeMessageId === null && entry.admissionId === relayContext.admissionId);
       if (!retained || retained.kind !== "admission" ||
@@ -2706,7 +2743,7 @@ export class SecureRoomEngine {
     const admission = this.pendingAdmissionBarrier;
     if (!admission) return;
     const expectedBootstrapSender = this.durable.applicationState.hostDeviceId ??
-      this.expectedJoinFounder?.deviceId ?? null;
+      this.expectedJoinHost?.deviceId ?? null;
     const allowed = relayContext.kind === "bootstrap"
       ? relayContext.admissionId === admission.admissionId &&
         fromDeviceId === expectedBootstrapSender
@@ -3311,17 +3348,17 @@ export class SecureRoomEngine {
     }
   }
 
-  private assertExpectedFounderInRoster(roster: NormalizedRosterEntry[]): void {
-    const expected = this.expectedJoinFounder;
+  private assertExpectedHostInRoster(roster: NormalizedRosterEntry[]): void {
+    const expected = this.expectedJoinHost;
     if (!expected) {
-      throw new SecureRoomEngineError("unauthorized", "pending join has no invitation-authorized founder");
+      throw new SecureRoomEngineError("unauthorized", "pending join has no invitation-authorized host");
     }
     const matches = roster.filter((entry) => entry.deviceId === expected.deviceId &&
       entry.signaturePublicKey === expected.signaturePublicKey);
     if (matches.length !== 1) {
       throw new SecureRoomEngineError(
         "unauthorized",
-        "Welcome roster does not contain the exact invitation-authorized founder credential",
+        "Welcome roster does not contain the exact invitation-authorized host credential",
       );
     }
   }

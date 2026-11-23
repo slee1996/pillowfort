@@ -4,7 +4,7 @@ import { copyTextWithFallback } from "../../services/clipboard";
 import { track } from "../../services/analytics";
 import { showToast } from "../xp/Toast";
 import { PeriodIcon } from "../xp/PeriodIcon";
-import { createRoomInvitationUrl } from "../../../../src/participant/roomInvitation";
+import { participantController } from "../../services/ws";
 import { Input } from "../xp/Input";
 import { Button } from "../xp/Button";
 
@@ -73,7 +73,7 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
     const secret = state.password;
     try {
       const text = format === "link"
-        ? createRoomInvitationUrl(window.location.origin, roomId, secret)
+        ? participantController.exportInvitationUrl(window.location.origin)
         : `${link}\npassword: ${secret}`;
       const copied = await copyTextWithFallback(text, controller.signal);
       const current = useGameStore.getState();
@@ -133,7 +133,7 @@ function InviteDialogContent({ roomId, onClose }: { roomId: string; onClose: () 
         <p className="invite-privacy"><PeriodIcon kind="lock" size={18} /><span>Anyone with this link can ask to join. The host still decides who gets in.</span></p>
         <details className="entry-details invite-manual" onToggle={(event) => { if (!event.currentTarget.open) setShowSecret(false); }}>
           <summary>Use a code and password instead</summary>
-          <p>Only needed for manual joining. The one-link invite includes these details automatically.</p>
+          <p>Code and password alone verify the founding host. If the pillow has changed hands, share a freshly copied invite link instead.</p>
           <Input id="invite-link" label="Room address only — needs the password below" type="url" readOnly value={link} />
           <Input id="invite-room-id" label="Fort code" type="text" readOnly value={roomId} />
           <Input
