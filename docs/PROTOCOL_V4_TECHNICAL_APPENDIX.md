@@ -203,6 +203,8 @@ Standalone models explore their finite reachable graphs with up to two operation
 
 The runner also weakens seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
 
+`ResumeAcrossSuccession.tla` checks a narrower interaction beyond those staged runs: an ordinary guest reconnects across one accepted host change. The guest's signed replay evidence is distinct from the relay's host snapshot. At activation, the relay must still have the backlog end that the guest acknowledged. Two weakened configurations omit the evidence check or accept a superseded backlog end; a separate unmodified configuration must reach a guest ready under the new host after cleanup. This last trace demonstrates a possible recovery, not eventual recovery. [Focused reproduction commands](../verification/README.md).
+
 | Plan property / failure | Concrete evidence | Limit |
 |---|---|---|
 | M1.1, M1.2, M1.3, M1.5 | M1 model; engine persistence/restart/CAS test; relay fingerprint and cancellation tests | Two bounded operations, not unlimited replay retention |

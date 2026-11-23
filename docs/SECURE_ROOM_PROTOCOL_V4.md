@@ -341,8 +341,8 @@ when its backlog is empty. The order is authoritative:
    the phase to the resume request ID.
 2. It replays the device's durable backlog in original chronology. A historical
    removal marker is inserted before the associated Remove commit.
-3. The client processes and durably persists each entry, then sends a
-   `delivery-ack` for exactly the acknowledged backlog prefix.
+3. The client authenticates and durably persists each replayed entry. It does
+   not send ordinary `delivery-ack` frames during replay.
 4. The relay sends one authoritative `room-state-snapshot` covering relay
    membership, host authority, admissions, removals, and transfer state.
 5. The relay sends `backlog-end`. Its `lastMessageId` is the final backlog
@@ -350,8 +350,10 @@ when its backlog is empty. The order is authoritative:
 6. The client refuses the terminator unless it has reconciled the snapshot with
    its MLS roster and signed application state. It then sends `resume-complete`
    bound to the exact terminator.
-7. The relay activates the member only after that exact completion frame. The
-   client resumes durable outbound work only after the relay acknowledges it.
+7. The relay compares that terminator with the **current** backlog end before
+   activating the member. If a handoff appended a delivery after replay began,
+   the old terminator no longer matches. The client resumes ordinary work only
+   after the relay acknowledges its exact `resume-complete` request.
 
 An ACK can remove only the exact front of the persisted backlog. A snapshot
 cannot authorize a relay-only member, silently retire an MLS member without a

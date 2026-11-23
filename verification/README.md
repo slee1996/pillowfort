@@ -7,6 +7,7 @@ The executable models implement the M1–M4 planning decomposition. The source-g
 - `M3Resume.tla`: replay persistence, authenticated snapshot reconciliation and exact connection/request/terminator completion.
 - `M4Succession.tla`: internal join-order offers, explicit acceptance/refusal, old-host fencing, durable authority, former-host removal, successor policy refresh and safe termination without a new policy.
 - `Coordination.tla`: staged composition with admission, resume and host-availability interlocks and explicit 12/16-step bounds.
+- `ResumeAcrossSuccession.tla`: M3 replay and M4 consent joined by a signed acceptance in a returning guest's backlog. The relay can change host before or during replay; completion is checked against its current backlog end.
 
 Run Java 21 or compatible with pinned `tla2tools` v1.7.4:
 
@@ -17,7 +18,18 @@ python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output
 
 The runner checks the JAR SHA-256 before execution. It writes source copies, exact configurations, raw TLC logs, deliberate-mutant counterexamples, commands and per-configuration state counts to the output directory. It fails if a normal model violates its invariant or any deliberately weakened model does not produce a counterexample.
 
-Nine safe configurations and seven mutation configurations are required. The preview-readiness mutation reproduces the abstract form of a separately confirmed relay bug: a new guest grant could race the host's ACK of the prior delivery. The concrete fix waits for host backlog drain and wakes the queued request on host ACK/resume completion. This is progress coordination, not a cryptographic primitive.
+The default run requires ten safe configurations, nine deliberate mutations and one reachability witness. The original preview-readiness mutation corresponds to a separately reproduced relay scheduling bug. A model counterexample by itself is not an implementation bug.
+
+To check just the cross-host resume:
+
+```sh
+python3 scripts/check-protocol-models.py --model ResumeAcrossSuccession --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-resume-model
+bun test ./test/secure-relay-v4.test.ts --test-name-pattern 'fresh replay boundary when succession'
+npm --prefix client run build
+bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-resume-after-succession --output /tmp/pillowfort-resume-browser
+```
+
+The model checks one ordinary guest, one consenting successor and one replacement connection. The endpoint's replayed signature, the relay's snapshot and the relay's current backlog end are distinct inputs. A stale completion cannot activate the guest; the check records the host **at activation**, not the host indefinitely afterward. With all guards intact, the `NoRecoveredGuest` probe must produce a trace in which the guest receives its completion ACK and the successor finishes removal. This guards against a model that passes simply by blocking every return. The browser scenario exercises that successful path using separate browser profiles and the real disconnect grace.
 
 ## Bounds and exclusions
 

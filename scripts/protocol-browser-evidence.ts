@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page, type WebSocket as BrowserSocket } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cpus, platform, release, totalmem } from "node:os";
@@ -18,7 +18,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 await mkdir(output, { recursive: true });
@@ -287,6 +287,82 @@ async function faultScenario(browser: Browser, fault: Fault) {
   } finally { await closeRoom(room); }
 }
 
+async function guestResumeAfterSuccession(browser: Browser) {
+  let successorSocket: BrowserSocket | undefined;
+  let policyId: string | undefined, newHost: string | undefined;
+  let joined: string | undefined, resumed: string | undefined, signer: string | undefined, snapshotHost: string | undefined;
+  let end: string | undefined, completion: string | undefined;
+  const replay: string[] = [];
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    if (index === 0) return;
+    page.on("websocket", socket => {
+      if (index === 1) successorSocket = socket;
+      socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (index === 1 && f.authorityEvent?.content.type === "host-succession-policy") {
+          policyId = f.envelope.messageId;
+          newHost = f.authorityEvent.deviceId;
+        }
+        if (index !== 2 || !resumed) return;
+        if (f.kind === "resume-complete" && end && f.lastMessageId === end) {
+          completion = f.requestId;
+          replay.push("exact completion");
+        }
+        if (f.kind === "relay" && f.relayKind === "application" && !replay.includes("completion ACK")) {
+          replay.push("early application");
+        }
+      });
+      if (index !== 2) return;
+      socket.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (f.type === "authenticated" && f.mode === "join") joined ??= f.deviceId;
+        if (f.type === "authenticated" && f.mode === "resume") resumed = f.deviceId;
+        if (!resumed) return;
+        const authority = f.frame?.authorityEvent;
+        if (f.type === "relay" && authority?.content.type === "host-succession" && authority.content.action === "accept") {
+          signer = authority.deviceId;
+          replay.push("signed acceptance");
+        } else if (f.type === "room-state-snapshot") {
+          snapshotHost = f.hostDeviceId;
+          replay.push("snapshot");
+        } else if (f.type === "backlog-end") {
+          end = f.lastMessageId;
+          replay.push("terminator");
+        } else if (f.type === "frame-accepted" && completion && f.messageId === completion) {
+          replay.push("completion ACK");
+        }
+      });
+    });
+  });
+  const [host, successor, guest] = room.participants;
+  try {
+    await deliver(guest.page, host.page, "before guest recovery");
+    await host.page.goto("about:blank");
+    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+    // Leave after the offer so the observer's own disconnect grace stays live.
+    await guest.page.goto("about:blank");
+    if (!successorSocket) throw new Error("Successor socket not observed");
+    await Promise.all([
+      successorSocket.waitForEvent("framereceived", { timeout: 20_000, predicate: ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        return !!policyId && f.type === "application-result" && f.result === "accepted" && f.messageId === policyId;
+      } }),
+      successor.page.locator("#btn-catch").click(),
+    ]);
+    await guest.page.goto(room.invitation);
+    await guest.page.locator("#join-name").fill(room.names[2]);
+    await guest.page.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
+    await guest.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 20_000 });
+    await deliver(guest.page, successor.page, "guest message after recovery");
+    await deliver(successor.page, guest.page, "new host reply after recovery");
+    if (!joined || resumed !== joined || !newHost || signer !== newHost || snapshotHost !== newHost ||
+        replay.join(",") !== "signed acceptance,snapshot,terminator,exact completion,completion ACK") {
+      throw new Error(`Guest identity, authority or replay boundary mismatch: ${replay.join(", ")}`);
+    }
+    return { fault: "guest-resume-after-succession", restoredSameDevice: true, replay, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
 async function peerStorageFailure(browser: Browser) {
   const room = await setupRoom(browser, 3);
   const [host, sender, failingPeer] = room.participants;
@@ -350,6 +426,7 @@ try {
     const results: unknown[] = await Promise.all(faults.filter(fault => selectedFault === null || fault === selectedFault)
       .map(fault => faultScenario(browser!, fault)));
     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
+    if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;
