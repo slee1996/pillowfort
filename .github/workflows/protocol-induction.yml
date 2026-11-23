@@ -1,0 +1,39 @@
+name: Protocol induction
+on:
+  push:
+    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
+  pull_request:
+    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proofs:
+    # The pinned TLAPM build requires glibc >= 2.42.
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.4'
+      - name: Install the locked TypeScript parser
+        run: npm ci --prefix client --ignore-scripts --no-audit --no-fund
+      - name: Install the pinned proof manager and native solver in a temporary directory
+        working-directory: ${{ runner.temp }}
+        run: |
+          name=tlapm-1.6.0-pre-x86_64-linux-gnu.tar.gz
+          curl --fail --location --silent --show-error "https://api.github.com/repos/tlaplus/tlapm/releases/assets/772760828" -H 'Accept: application/octet-stream' -o "$name"
+          echo "79c3d888352e96afd5e00aea623f5ce9dce2ee6d7bafa82ea8d2bc73d936211a  $name" | sha256sum -c -
+          tar -xf "$name"
+          python3 -m pip install --target "$PWD/solver" --no-deps 'https://files.pythonhosted.org/packages/b6/f2/036f6501d3a2835cd4a17fd67364cd56337a5183e20b063d3d8a005f7288/z3_solver-4.13.3.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl#sha256=794843e4946ade1561e40a75ffc1163b45d36b493fd6cc269ad1d6a65bddb8e5'
+          ln -sf "$PWD/solver/bin/z3" "$PWD/tlapm/lib/tlapm/backends/bin/z3"
+          "$PWD/solver/bin/z3" -version
+      - name: Prove the production guards and the five model theorems
+        run: |
+          node scripts/check-protocol-guards.mjs "$RUNNER_TEMP/results/guards" "$RUNNER_TEMP/solver/bin/z3"
+          python3 scripts/check-protocol-proofs.py --tlapm "$RUNNER_TEMP/tlapm/bin/tlapm" --output "$RUNNER_TEMP/results/proofs"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protocol-induction-and-guards
+          path: ${{ runner.temp }}/results
