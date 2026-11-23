@@ -1,0 +1,72 @@
+{
+  "proofManager": "961e909",
+  "strict": true,
+  "reusedFingerprints": false,
+  "modules": [
+    {
+      "module": "M1Delivery",
+      "obligations": 87,
+      "source": {
+        "verification/M1Delivery.tla": "5fa1287c19832cb8daace7d0070fe90361e070a29f758bd9a8edec121f902f78",
+        "verification/M1DeliveryProof.tla": "77ade50c38ec9b4b6aabc90834f545639db0214a440fe05a806d3406d6909e86"
+      }
+    },
+    {
+      "module": "M2Admission",
+      "obligations": 54,
+      "source": {
+        "verification/M2Admission.tla": "f5f2ce3fc5523a1b54d5e088064bc91098cc06b9ba800c27f014a0e6d92e7d86",
+        "verification/M2AdmissionProof.tla": "9675a33f07f37bfa68d142709cb27b0848b0e370ac9f753a2f910979e192ea7f"
+      }
+    },
+    {
+      "module": "M3Resume",
+      "obligations": 45,
+      "source": {
+        "verification/M3Resume.tla": "c6dae4cebe7ce3ac9b37e3c2d5f4f3c20dc103a285e7ab52d602430ef36f5267",
+        "verification/M3ResumeProof.tla": "37038130bf5e0b6a029311ced241960e9eff81bc7ecf94f4047af9b7297bea3b"
+      }
+    },
+    {
+      "module": "M4Succession",
+      "obligations": 253,
+      "source": {
+        "verification/M4Succession.tla": "898b34d8d8d4a8fd84948621e1218f1cfd04cfa146debac2b3776ae963aef76f",
+        "verification/M4SuccessionProof.tla": "8398a5691427159f70beddb0cb5213a3f82c4eef679ae6c9f3102dc4b2fc4602"
+      }
+    },
+    {
+      "module": "RepeatedResume",
+      "obligations": 54,
+      "source": {
+        "verification/RepeatedResume.tla": "18d967694c4027bf959458b7431c526d79b0c63280bd972a3d028cce2ceca42d",
+        "verification/RepeatedResumeProof.tla": "0459a3113ae1bfac3b5876d72ef204af07611e1f26270c0aaf58ef2b4e3c1af2"
+      }
+    },
+    {
+      "module": "Coordination",
+      "obligations": 80,
+      "source": {
+        "verification/Coordination.tla": "3d5a0f9473da5858447e899e77eb209448f46ef0c6a585f85802b45edca17d7a",
+        "verification/CoordinationProof.tla": "14c1508a46fab1f35a3b1dd27f21b071d0fdf6646b779bdb91190aaa2f589428"
+      }
+    }
+  ],
+  "theorem": "Init /\\ [][Next]_vars => []Safety for the intact modeled transitions, for all natural backlog and operation bounds, positive finite admission-rank and socket bounds, and all trace lengths.",
+  "scope": "Arbitrary finite admission ranks and socket incarnations; M4 models fresh joins, withdrawals and repeated disconnect-driven transfers. The repeated-resume channel retains old completions and receipts. State and per-transfer safety under abstract signatures and storage, not arbitrary JavaScript control flow or unconditional liveness.",
+  "verificationSource": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "totalObligations": 573,
+  "combinedTheorem": "Init /\\ [][Next]_vars implies []Safety and [][H!ConsentAtSwitch]_<<succession>> under the theorem parameters. No transition to a different live host without stored consent from the selected target.",
+  "offerBudget": "For a nonempty eligible set each fresh nomination selects the least eligible admission ordinal and decreases the finite count of untried policy entries by exactly one. No scheduler fairness follows.",
+  "linuxReproduction": {
+    "run": "https://github.com/slee1996/pillowfort/actions/runs/45277550976",
+    "job": "https://github.com/slee1996/pillowfort/actions/runs/45277550976/job/138053154107",
+    "source": "3e7acb452eae3d1936f8beba624486ac82652c71",
+    "conclusion": "success",
+    "runner": "GitHub-hosted ubuntu-26.04 x86_64",
+    "local": "macOS arm64",
+    "method": "Fresh independent runs; proof modules, obligations and source digests agree; all scalar verdicts, sequence steps and SMT file digests agree; all publication sites, reachable masks and negative-control results agree.",
+    "solver": "Native Z3 4.13.3",
+    "tlapmArchiveLinuxSha256": "79c3d888352e96afd5e00aea623f5ce9dce2ee6d7bafa82ea8d2bc73d936211a"
+  }
+}

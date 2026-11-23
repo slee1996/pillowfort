@@ -1,3 +1,14 @@
+Evidence edition 14; protocol v4; profile pf-v4-cs1.
+Runtime and previously deployed Workers: ccc195d8c069eeec5ff7190009837c6b93039deb
+Verification source: 3e7acb452eae3d1936f8beba624486ac82652c71
+https://github.com/slee1996/pillowfort/tree/3e7acb452eae3d1936f8beba624486ac82652c71
+Proofs, full model configurations, source decisions, publication paths, trace conformance, private five-device run and fresh public artifact digests: evidence/qualification-r14/qualification.json
+The release archive contains sources/method-3e7acb452e.tar.gz (complete tracked checkout apart from paper/, no enclosing directory) and the original runtime archive (pillowfort/ prefix). Extract them separately. Full experiment logs and SMT formulas: evidence/qualification-r14/raw/.
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-23-r14
+The 24 original detector trials retain their original revisions. No detector setting or production Worker changed in this edition. Physical laptop sleep and resume were not tested.
+
+Historical edition 13 provenance (unchanged):
+
 Evidence edition 13; protocol v4; profile pf-v4-cs1.
 Release source, production participants and both runtime regression tests: ccc195d8c069eeec5ff7190009837c6b93039deb
 https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb

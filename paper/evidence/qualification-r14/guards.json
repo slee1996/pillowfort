@@ -1,0 +1,192 @@
+{
+  "loops": [
+    {
+      "label": "M4-first-eligible-scan",
+      "source": "src/secureRelayV4.ts",
+      "line": 3043,
+      "verdicts": [
+        "unsat",
+        "unsat",
+        "unsat",
+        "unsat",
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "4504d16cafe22b5da905b50410166a5f4e3ef0c3d27c3481a115498b66901209"
+    }
+  ],
+  "method": "TypeScript AST decision equivalence; unsatisfiable disagreement and positive/negative satisfiable witnesses for each expression.",
+  "scope": "Local guards on parsed inputs. No proof of caller reachability, cryptographic validity, all mutation sites or full TypeScript refinement.",
+  "typescript": "5.9.3",
+  "z3": "Z3 version 4.13.3 - 64 bit",
+  "sources": {
+    "src/secureRelayV4.ts": "1a18f9388b7ebb53d79d7dc19a47e7d1b2f5579371b45307f9eb1eb6d48611b8",
+    "src/participant/secureRoomController.ts": "b5f78e3853b798d132ff79df0a0c0af731cbfd2cf75b581977ce11651ab4ff2a",
+    "src/secureGameReducer.ts": "4c75b7501ebdaa6ee7628f84091721990e079fc10c6700a8295cf0d3ce4e224f",
+    "src/hostPathWatch.ts": "7eef39c4c341a608beb8e29b336f3b2b87eccca7e61c9aae647bd503f98b85cd"
+  },
+  "results": [
+    {
+      "label": "M1-exact-grant",
+      "source": "src/secureRelayV4.ts",
+      "line": 2770,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "d2053f0876f223afd45211f8f9b66acf28b29ee3e6d7d9e15506f89ad957ef42"
+    },
+    {
+      "label": "M2-activation-proof",
+      "source": "src/secureRelayV4.ts",
+      "line": 4114,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "a3bb1bad0c13d288b5fd7f8e53b809dc79fca1f02eb219abccb56c6c9c52491b"
+    },
+    {
+      "label": "M3-resume-eligibility",
+      "source": "src/secureRelayV4.ts",
+      "line": 3466,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "3a1008aaf1b3d98f52c3d4df932d6c96bb4d2ebd7c169f1de4fcff87a4c1cfc8"
+    },
+    {
+      "label": "M3-participant-completion-receipt",
+      "source": "src/participant/secureRoomController.ts",
+      "line": 2005,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "03378e348307db3432ecc85f440355043288394a03da6b03a16b254b7018c0b6"
+    },
+    {
+      "label": "M4-ranked-candidate",
+      "source": "src/secureRelayV4.ts",
+      "line": 3045,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "3faf6e4834f3639cd3c429affa991a4affd4ba8792240513757509af94f314b1"
+    },
+    {
+      "label": "M4-tenure-policy",
+      "source": "src/secureRelayV4.ts",
+      "line": 3042,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "462cd81afb40202489809dd5095265a657fbadbd93cdf33ba9d4b928f27f98b7"
+    },
+    {
+      "label": "M4-relay-authorization",
+      "source": "src/secureRelayV4.ts",
+      "line": 3554,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "8522ab3f39e28b3600be963a2df504508a277043b7f349508ce08650f9dc02c1"
+    },
+    {
+      "label": "M4-verified-sidecar",
+      "source": "src/secureRelayV4.ts",
+      "line": 3809,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "b637f9940f26e77d2c00a5c719b3b8fbb7f074b04ba452391b685d420f2fdbda"
+    },
+    {
+      "label": "M4-relay-acceptance",
+      "source": "src/secureRelayV4.ts",
+      "line": 3845,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "17d22fdf7411cfbdb7c94b1ffeb78791b457df793ecd4c2c0d65656dfe5cba56"
+    },
+    {
+      "label": "M4-peer-policy-binding",
+      "source": "src/secureGameReducer.ts",
+      "line": 963,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "66190e0bf5a15459e68cc57b9c733b283d66a6f32f9753d076ee41a7e28342bb"
+    },
+    {
+      "label": "M4-current-probe",
+      "source": "src/hostPathWatch.ts",
+      "line": 51,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "fd8143e5ec8b4172cc2ec7b5c3d1caef607e07cf09ef4c0bb99859263fd0af07"
+    },
+    {
+      "label": "M4-author-policy-list",
+      "source": "src/participant/secureRoomController.ts",
+      "line": 3348,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "484c086b52a4b24cb7221cab2e6a4ddea691ca61bffaa7b85c58aafd6e1f03f9"
+    },
+    {
+      "label": "M4-receiver-policy-list",
+      "source": "src/secureGameReducer.ts",
+      "line": 954,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "484c086b52a4b24cb7221cab2e6a4ddea691ca61bffaa7b85c58aafd6e1f03f9"
+    },
+    {
+      "label": "M4-exact-signed-list",
+      "source": "src/secureGameReducer.ts",
+      "line": 956,
+      "verdicts": [
+        "unsat",
+        "sat",
+        "sat"
+      ],
+      "formulaSha256": "d478972bbf31a66ed0e3d4e1aa3ca2c1356912db88f658b4a3aa855a621a6e3f"
+    }
+  ],
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "verificationSource": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "implementationAssumptions": [
+    "Parsed strict inputs, ECMAScript iteration of ordinary dense arrays, lookup by authenticated device identity, and opaque signature-verification results.",
+    "The host produces the filtered list in membership order and participants compare every index. The relay scans the signed list; it does not independently establish the honesty of the author or connectivity."
+  ],
+  "linuxReproduction": "https://github.com/slee1996/pillowfort/actions/runs/45277550976"
+}

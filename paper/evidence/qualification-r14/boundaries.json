@@ -1,0 +1,188 @@
+{
+  "method": "Nondeterministic path analysis of selected released TypeScript call sites. Receipts accrue only on normal returns; rejected promises take exceptional edges.",
+  "scope": "Same-invocation ordering, not a model of all aliases, cryptography, disk persistence, scheduler fairness, WebSocket receipt or all TypeScript behavior.",
+  "typescript": "5.9.3",
+  "sources": {
+    "src/room.ts": "e24245c5c86afcaa11f03c5db3f3fb6754ffec84911d183ee7d811c424995890",
+    "src/participant/secureRoomEngine.ts": "28b6083516ee896a9952bff024aa9b5bc6918dcf703a63e84f7fd91a685b79c7",
+    "src/participant/cryptoStateStore.ts": "4a98496981d3b9d7f6c9185cba66baeebd2c7ad52e01ad5813253f0b45f6b79f"
+  },
+  "sites": [
+    {
+      "label": "relay/handleSecureAuthenticate/effects",
+      "source": "src/room.ts",
+      "line": 1006,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/handleSecureAuthenticate/authenticated",
+      "source": "src/room.ts",
+      "line": 1039,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/handleSecureAuthenticate/authenticated",
+      "source": "src/room.ts",
+      "line": 1048,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/handleSecureAuthenticate/effects",
+      "source": "src/room.ts",
+      "line": 1056,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/handleSecureFrame/effects",
+      "source": "src/room.ts",
+      "line": 1099,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/commitSecureDisconnect/effects",
+      "source": "src/room.ts",
+      "line": 1118,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/alarm/effects",
+      "source": "src/room.ts",
+      "line": 2125,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/publish this.secureRelayState=relayState",
+      "source": "src/room.ts",
+      "line": 683,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/publish this.secureRelayManifest=prepared.manifest",
+      "source": "src/room.ts",
+      "line": 681,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/transaction includes current-manifest comparison and next manifest write",
+      "source": "src/room.ts",
+      "line": 640,
+      "reachableFactMasks": [
+        3
+      ]
+    },
+    {
+      "label": "relay/each entered chunk iteration writes its generation and index",
+      "source": "src/room.ts",
+      "line": 655,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/idle this.broadcastSecureTerminal",
+      "source": "src/room.ts",
+      "line": 2741,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/idle this.notifyIdleSockets",
+      "source": "src/room.ts",
+      "line": 2747,
+      "reachableFactMasks": [
+        1
+      ]
+    },
+    {
+      "label": "relay/idle commit deletes disposable records and records nonempty notice recipients",
+      "source": "src/room.ts",
+      "line": 2714,
+      "reachableFactMasks": [
+        15
+      ]
+    },
+    {
+      "label": "participant/prepared result follows the selected durable operation",
+      "source": "src/participant/secureRoomEngine.ts",
+      "line": 2452,
+      "reachableFactMasks": [
+        7,
+        11
+      ]
+    },
+    {
+      "label": "participant/publish this.durable=cloneSecureRoomDurableStateV1(next)",
+      "source": "src/participant/secureRoomEngine.ts",
+      "line": 2485,
+      "reachableFactMasks": [
+        15
+      ]
+    },
+    {
+      "label": "participant/publish this.revision=result.revision",
+      "source": "src/participant/secureRoomEngine.ts",
+      "line": 2486,
+      "reachableFactMasks": [
+        15
+      ]
+    },
+    {
+      "label": "participant/retirement follows an acknowledged erase of this revision",
+      "source": "src/participant/secureRoomEngine.ts",
+      "line": 2109,
+      "reachableFactMasks": [
+        3
+      ]
+    },
+    {
+      "label": "IndexedDB/compareAndSetOpaqueState: strict transaction, same revision, write request, then oncomplete",
+      "source": "src/participant/cryptoStateStore.ts",
+      "line": 666,
+      "reachableFactMasks": [
+        31
+      ]
+    },
+    {
+      "label": "IndexedDB/compareAndDeleteOpaqueState: strict transaction, same revision, write request, then oncomplete",
+      "source": "src/participant/cryptoStateStore.ts",
+      "line": 928,
+      "reachableFactMasks": [
+        31
+      ]
+    }
+  ],
+  "negativeControls": [
+    "dispatch after an unawaited write",
+    "dispatch after a caught write rejection",
+    "persist a different transition before dispatch",
+    "publish at request success without transaction completion",
+    "take a normal branch that skips the write"
+  ],
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "verificationSource": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "negativeControlsExecuted": 5,
+  "linuxReproduction": "https://github.com/slee1996/pillowfort/actions/runs/45277550976",
+  "platformAssumptions": [
+    "Atomic Durable Object transactions with rejected promises on abort; strict-mode IndexedDB oncomplete and onabort semantics. Does not inspect hardware durability.",
+    "Covering every direct transition-effect dispatch in the production Worker is not a result about arbitrary callbacks, out-of-band replays, or every consumer of a delivered event."
+  ]
+}

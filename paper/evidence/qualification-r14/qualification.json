@@ -1,0 +1,190 @@
+{
+  "edition": 14,
+  "protocol": "v4 / pf-v4-cs1",
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "verificationSource": "3e7acb452eae3d1936f8beba624486ac82652c71",
+  "verificationPr": "https://github.com/slee1996/pillowfort/pull/32",
+  "previous": "protocol-v4-cs1-evidence-2026-11-23-r13",
+  "evidenceTag": "protocol-v4-cs1-evidence-2026-11-23-r14",
+  "change": "Verification only. The public runtime, failure detector, approval policy and timeouts were not changed.",
+  "sourceArchives": [
+    {
+      "file": "sources/runtime-ccc195d8c0.tar.gz",
+      "sha256": "2ce38e0d3ae807124d136a1b1fe8482b7b34464f5231f7b201b88827bd5ea482",
+      "revision": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+      "contents": "Complete tracked runtime and test tree, omitting paper/."
+    },
+    {
+      "file": "sources/method-3e7acb452e.tar.gz",
+      "sha256": "e18a98def911fd9bd421377896d4c9d47249df3e19a7041a5fb6932e2578119f",
+      "revision": "3e7acb452eae3d1936f8beba624486ac82652c71",
+      "contents": "Complete tracked method, runtime and test checkout excluding paper/. Root has no enclosing directory."
+    }
+  ],
+  "dataRevisions": {
+    "current": "Five-device browser chain, concrete relay trace, strict proof modules, 67 TLC configurations and production-source path checks: 3e7acb452eae3d1936f8beba624486ac82652c71",
+    "liveArtifactIdentity": "provenance.json",
+    "priorRuntimeDeployment": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json",
+    "pairedDetectorStudy": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json"
+  },
+  "gates": {
+    "induction": {
+      "strict": true,
+      "freshFingerprints": true,
+      "modules": 6,
+      "obligations": 573,
+      "crossPlatform": {
+        "run": "https://github.com/slee1996/pillowfort/actions/runs/45277550976",
+        "job": "https://github.com/slee1996/pillowfort/actions/runs/45277550976/job/138053154107",
+        "source": "3e7acb452eae3d1936f8beba624486ac82652c71",
+        "conclusion": "success",
+        "runner": "GitHub-hosted ubuntu-26.04 x86_64",
+        "local": "macOS arm64",
+        "method": "Fresh independent runs; proof modules, obligations and source digests agree; all scalar verdicts, sequence steps and SMT file digests agree; all publication sites, reachable masks and negative-control results agree.",
+        "solver": "Native Z3 4.13.3",
+        "tlapmArchiveLinuxSha256": "79c3d888352e96afd5e00aea623f5ce9dce2ee6d7bafa82ea8d2bc73d936211a"
+      }
+    },
+    "finiteModels": {
+      "configurations": 67,
+      "normal": 20,
+      "sensitivity": 34,
+      "reachability": 13,
+      "fullFiniteProductStates": 6544512,
+      "compositionCutoff": null
+    },
+    "sourceDecisions": {
+      "equivalences": 14,
+      "satisfiableDecisionWitnesses": 28,
+      "firstEligibleInduction": true,
+      "productionPublicationObligations": 20,
+      "negativePublicationControls": 5
+    },
+    "relay": {
+      "tests": 72,
+      "assertions": 484,
+      "accepted": 2152,
+      "rejected": 40
+    },
+    "compoundRoom": {
+      "fault": "changing-tenures",
+      "admittedIdentities": 5,
+      "distinctFormerPolicies": 3,
+      "explicitChoices": 3,
+      "lateAdmissionUnderSuccessor": true,
+      "sameDeviceCompletionReceipts": 4,
+      "bidirectionalExchanges": 4,
+      "bothObservedRetirement": true
+    },
+    "releaseCI": {
+      "methodPullRequest": "https://github.com/slee1996/pillowfort/pull/32",
+      "methodCommit": "3e7acb452eae3d1936f8beba624486ac82652c71",
+      "checks": "https://github.com/slee1996/pillowfort/commit/3e7acb452eae3d1936f8beba624486ac82652c71/checks",
+      "verifiedIndependentInduction": "https://github.com/slee1996/pillowfort/actions/runs/45277550976/job/138053154107",
+      "scope": "Release check exercises the locked application, private browser and Worker scenarios, hosted adapter, dependency audit and finite models. See the immutable conclusion, head SHA and job URLs in the separate release receipt.",
+      "publishedReceipt": "https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r14/Release-Verification.json",
+      "offlineReceipt": "evidence/qualification-r14/raw/release-verification.json"
+    }
+  },
+  "evidenceMap": [
+    {
+      "claim": "A new disconnect-driven host must consent; an offer neither appoints the nominee nor preserves the old host after fencing.",
+      "proof": "induction.json: M4Succession, Coordination, AuthorityStep, ConsentAtSwitch",
+      "source": "guards.json: relay-authorization, relay-acceptance and verified-sidecar decisions; relay-conformance.json: policy and manual consent",
+      "execution": "participants.json: three explicit choices across four holders in one room",
+      "assumes": "Honest verifying endpoints and a current signed policy. Connectivity and deadlines are relay judgments; unnecessary offers are possible."
+    },
+    {
+      "claim": "Each fresh offer uses the first eligible untried rank and consumes a policy entry.",
+      "proof": "induction.json: NewOffer and FiniteOfferBudget for arbitrary finite rank bounds",
+      "source": "guards.json: host and receiver ordered lists and first-eligible scan",
+      "execution": "participants.json: fresh admission under a successor, then two further transfers",
+      "assumes": "Membership order and eligibility inputs. A declining or permanently offline member is not obliged to make progress."
+    },
+    {
+      "claim": "An older completion/ACK cannot release a newer socket in the repeated-resume model.",
+      "proof": "induction.json: M3Resume, RepeatedResume; models.json: four-replacement witness",
+      "source": "guards.json: participant-completion-receipt; relay-conformance.json: activated-exact-replay",
+      "execution": "participants.json: four fresh same-device completions and two-way chat after each; the separate edition-13 held-ACK test checked blocked draft behavior",
+      "assumes": "Unique authenticated incarnations and endpoint replay phases. Not global agreement across contradictory peer histories."
+    },
+    {
+      "claim": "An effect made visible by the checked publication sites follows the corresponding stored transition.",
+      "proof": "induction.json: abstract M1/M2/M3/M4 safety under atomic writes",
+      "source": "boundaries.json: five Worker dispatches, two positive authentication publications, relay transaction and idle paths, participant mutation/erase, browser transaction completion",
+      "execution": "relay-conformance.json, participants.json; workerd eviction and storage failure runs retain earlier source revisions",
+      "assumes": "The platform honors its transaction/receipt contract. Not crash-proof disk persistence or proof that every peer observed a commit."
+    },
+    {
+      "claim": "Increasing the reply deadline trades fewer premature offers for slower recovery under continuing absence.",
+      "execution": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json",
+      "observation": "24 original controlled local trials; six recoverable 18-second trials offered on the released detector and none on the longer comparison. Recovery with continuing absence: 15.57–15.58 s versus 45.20–45.24 s.",
+      "assumes": "Clock begins at the first fresh challenge; in temporary holds consent was deliberately delayed until restoration. Process suspension is not physical laptop sleep or an estimate of real-world incidence."
+    }
+  ],
+  "limits": [
+    "Abstract signatures, MLS and atomic storage, not a proof or independent audit of the complete TypeScript, Rust/Wasm, browser or Worker stack.",
+    "Host and relay may deny progress. Connectivity, ordering and deadlines are not independently witnessed. No guarantee of availability after a permanent failure, or a hard bound on wall-clock detection.",
+    "Distinct modeled states and proof obligations are not counts of app configurations, users, vulnerabilities or failure rates. The model product does not establish global peer/epoch agreement.",
+    "The compound browser execution is one private schedule. It does not exercise a physical laptop sleeping, traffic over a WAN, all interleavings or permanent loss of storage."
+  ],
+  "reproduce": {
+    "checkout": "git clone https://github.com/slee1996/pillowfort.git && cd pillowfort && git checkout --detach 3e7acb452eae3d1936f8beba624486ac82652c71",
+    "offline": "In an empty directory extract sources/method-3e7acb452e.tar.gz (no --strip-components); the public R13 runtime archive is separately preserved for comparison. Do not overlay older sources.",
+    "dependencies": [
+      "npm ci",
+      "npm --prefix client ci",
+      "npm --prefix hosted-mcp ci",
+      "npx playwright install chromium firefox webkit",
+      "export OUT=\"$(mktemp -d)\""
+    ],
+    "release": [
+      "PILLOWFORT_RELAY_CONFORMANCE_REPORT=\"$OUT/relay.json\" npm run check",
+      "npm --prefix hosted-mcp run check",
+      "NODE_ENV=production npm run build"
+    ],
+    "verification": [
+      "python3 scripts/check-protocol-models.py --jar \"$TLC_JAR\" --output \"$OUT/models\"",
+      "python3 scripts/check-protocol-proofs.py --tlapm \"$TLAPM\" --output \"$OUT/induction\"",
+      "node scripts/check-protocol-guards.mjs \"$OUT/guards\" \"$Z3\"",
+      "node scripts/check-protocol-boundaries.mjs \"$OUT/boundaries\"",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault changing-tenures --output \"$OUT/room\""
+    ],
+    "versions": "Use the pinned Node, Bun, TypeScript, Playwright, TLC, TLAPM and solver versions in the two CI workflows and per-method results. For earlier detector timings use the study revision in the linked record. No fault script against production."
+  },
+  "records": {
+    "boundaries.json": "b5c65dd665785083fd156f106e95c828c0ac5b768ec2bd988abd453ecc64512c",
+    "guards.json": "e58f57f51d13a1548caa568db819ce0db444dfccbed57b360a9da2b31166be6a",
+    "induction.json": "8934ab086b848f7cdec2d3b021f9b1e58e73f7e8bb828491b581525d083df5c6",
+    "models.json": "d6a353cee4e5194dd0d3a75fd35d7bd89a0eabbd76dbcd7569093844b933b70b",
+    "participants.json": "51f0519179f02acb45cf9d1c8cbe317e3033b87eb66205a7bf67a98129264d4d",
+    "provenance.json": "0dae83620604e505a0570852c26647efc272ebb188cdbb658ecb1a012f64fcaf",
+    "relay-conformance.json": "292ad1052eb03ae6823a79f96a174ef4d877bea1063c056b140428571466e577"
+  },
+  "pdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 12,
+      "pageNumbers": true,
+      "publicLinks": 62
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 14,
+      "pageNumbers": true,
+      "publicLinks": 16
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 8,
+      "pageNumbers": true,
+      "publicLinks": 15
+    }
+  },
+  "offlineVerification": {
+    "checkedBeforePublication": true,
+    "regions": [
+      "Each abstract model and proof SHA-256 equals the member of the archived method source.",
+      "Each guard and publication checker input SHA-256 equals both archived runtime and method source.",
+      "Each of 15 SMT files has its recorded digest. All 67 configurations and corresponding TLC transcripts are present.",
+      "Formal, finite and execution results are separate; the browser output contains no room identifier, invitation, keys, encrypted frames or plaintext content."
+    ]
+  }
+}

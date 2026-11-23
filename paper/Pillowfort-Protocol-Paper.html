@@ -29,27 +29,27 @@ Rooms</title>
 id="pillowfort-host-succession-by-consent-in-encrypted-rooms">Pillowfort:
 Host Succession by Consent in Encrypted Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 13 · 23 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 14 · 23 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
-<p>Pillowfort is a protocol for temporary encrypted rooms in which one
-participant, the host, admits members and validates their actions. The
-relay can offer another member the right to validate the room; it cannot
-make that member host by itself. Authority transfers only when the
-nominated device signs a response accepting the offer and the relay
-records it. Those signatures establish consent, not host failure. A
-mistaken or dishonest relay can trigger an unnecessary offer.</p>
-<p>A host may hand off the role directly and stay in the room. After a
-detected disconnect, the relay instead acts under that host’s signed
-policy. If an eligible guest is ready, the relay immediately records an
-offer and prevents the old host from reclaiming the role by
-reconnecting, before anyone accepts. If no guest is ready, the host has
-up to 120 seconds to reconnect; a guest that becomes eligible first can
-receive the offer during that window. Once offers begin, exhausting the
-candidates closes the room. In an implementation over Messaging Layer
-Security (MLS), we show both costs: a host still validating chat can
-lose the role when its probe replies are delayed; waiting longer to
-replace it delays ordinary traffic when it really is unavailable.</p>
+<p>Pillowfort is a protocol for temporary encrypted rooms shared by
+people and software agents. One participant, the host, admits devices
+and validates actions. The relay may offer that authority to another
+member, but it cannot appoint a host unilaterally: a valid transfer
+requires the nominated device’s signed acceptance and a relay commit.
+Consent does not establish that replacement was necessary. A mistaken or
+dishonest relay can trigger an unnecessary offer.</p>
+<p>A host can hand off the role directly and remain a member. After a
+detected disconnect, the relay acts under that host’s signed policy. If
+an eligible guest is ready, the relay immediately offers the role. From
+that point the old host cannot reclaim authority by reconnecting, even
+before anyone accepts. Otherwise the host has up to 120 seconds to
+reconnect; a guest that becomes eligible first can receive the offer
+during that window. If all eligible members decline, the room closes. In
+six controlled, recoverable 18-second interruptions the released
+detector made six avoidable offers. Waiting 30 seconds longer avoided
+all six, but delayed the return of ordinary traffic under sustained loss
+by roughly 30 seconds.</p>
 <p><strong>Keywords:</strong> participant consent; host succession;
 failure detection; group messaging; MLS.</p>
 <h2 id="scope-and-design-objectives">1. Scope and design objectives</h2>
@@ -649,25 +649,36 @@ guarantee of physical erasure.</td>
 </tbody>
 </table>
 <p>The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json">deployed
-revision</a> passed 594 application and 14 hosted-adapter tests. On the
-preceding release, an <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/relay-conformance.json">independent
-transition observer</a> checked 2,152 accepted and 40 rejected relay
-steps. TLC checked 18 intact configurations, exposed all 34 deliberate
-mutations, and reached 11 target states. The smallest composed model
-exhausted 6,544,512 reachable states without a depth cutoff. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/models.json">Bounds
-and configurations</a>.</p>
-<p>Separate from these release checks, an <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/induction.json">inductive
-proof</a> establishes the safety predicates of the four abstract
-machines and their composition for arbitrary execution lengths and
-capacity and operation limits. The succession model still has three
-identities. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/guards.json">Eleven
-production decisions</a> also match their specified predicates; these
-local results do not prove the entire program.</p>
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json">released
+runtime</a> passed 594 application and 14 hosted-adapter tests. An <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/relay-conformance.json">independent
+observer</a> checked 2,152 accepted and 40 rejected relay steps. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/models.json">Finite
+exploration</a> found no safety violation in 20 intact configurations,
+detected all 34 deliberate mutations and reached all 13 target states.
+The smallest composed configuration exhausted 6,544,512 reachable states
+without a depth cutoff.</p>
+<p>The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/induction.json">combined
+model</a> preserves a stronger property: at <strong>every</strong>
+disconnect-driven switch, the incoming host is the nominated member that
+accepted; the old policy cannot authorize the next switch. This holds
+for any finite bound on admission ranks and connection replacements, not
+just for the rooms enumerated above. Separate <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/guards.json">source
+checks</a> establish how the released code orders candidates, and <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/boundaries.json">publication
+checks</a> distinguish storage completion from a promised write. None
+proves the cryptography or the entire program.</p>
+<p>In <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/participants.json">one
+encrypted room</a>, three different guests chose to take the role in
+turn. The first successor admitted a fifth device using a fresh
+invitation. That device later reconnected four times and exchanged
+encrypted messages in both directions after each matching completion
+receipt. Both remaining participants observed retirement. This checks
+that the mechanisms work together on one schedule, not all
+schedules.</p>
 <p>An <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/participants.json">interrupted
 departure</a> tested whether a visible choice could actually be
@@ -905,15 +916,15 @@ href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/su
 <li>Model Context Protocol. <em>Tasks Extension</em>. <a
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
 <li>Pillowfort. <em>Protocol v4-CS1.</em> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Technical-Appendix.pdf">Wire
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Technical-Appendix.pdf">Wire
 contract</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Formal-State-Machine-Analysis.pdf">state
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf">state
 machines</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md">claim
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md">claim
 matrix</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/qualification.json">results</a>,
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json">results</a>,
 <a
-href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r13/Pillowfort-Protocol-v4-CS1-R13.zip">replication
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r14/Pillowfort-Protocol-v4-CS1-R14.zip">replication
 archive</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>

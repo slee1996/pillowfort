@@ -1,8 +1,8 @@
 # Pillowfort: Safety of the Room State Machines
 
-*Induction and finite exploration · Protocol v4-CS1 · Evidence edition 13 · 23 November 2026*
+*Induction and finite exploration · Protocol v4-CS1 · Evidence edition 14 · 23 November 2026*
 
-For each of the four model machines, we prove that its initial state satisfies an invariant and that each permitted step preserves it. A product step either takes the corresponding component step or leaves that component unchanged. Along with the product’s own send interlock, this establishes **safety at every step**, not a promise that any particular step will occur. [Proof record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/induction.json).
+For each of the four model machines, we prove that its initial state satisfies an invariant and that each permitted step preserves it. A product step either takes the corresponding component step or leaves that component unchanged. Along with the product’s own send interlock, this establishes **safety at every step**, not a promise that any particular step will occur. [Proof record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/induction.json).
 
 | Machine | What the induction preserves |
 |:--|:--|
@@ -12,7 +12,9 @@ For each of the four model machines, we prove that its initial state satisfies a
 | M4: succession | An offer fences rather than promotes. A switch consumes the nominated member’s stored acceptance, discards the old policy and initiates removal. |
 | Composition | Every product transition projects to a permitted action or stutter in each component; ordinary sends obey the enabled interlocks. |
 
-The proof quantifies over all natural operation and backlog bounds and all trace lengths. It does **not** turn three modeled succession identities into an arbitrary roster or one modeled replacement into unbounded socket churn. [Concrete guard equivalence](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/guards.json) covers selected decisions in the source. Storage, cryptography and unexamined control flow are not proved by that equivalence.
+The induction quantifies over all trace lengths, natural operation and backlog bounds, and arbitrary positive finite bounds on admission ranks and socket incarnations. New ranks are never recycled. On each live change of authority the combined model requires a stored acceptance from the nominee. The selected rank is the least eligible and each offer removes one rank from the current policy’s untried set. Finite depletion bounds the number of offers under that policy; it does not require a participant to answer or prove a deadline will fire.
+
+`RepeatedResume` retains completion requests and acknowledgments from previous sockets, including those naming the same backlog end. Only the current authenticated socket can activate, and only the corresponding receipt can release the endpoint. [Concrete decision checks](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/guards.json) and [publication-path checks](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/boundaries.json) connect selected source expressions and storage boundaries to these claims. Neither result establishes agreement between arbitrary divergent MLS histories.
 
 ## Finite exploration and reachable failure schedules
 
@@ -22,22 +24,24 @@ The proof quantifies over all natural operation and backlog bounds and all trace
 | M2 admission | 251 | 122 |
 | Re-offer and re-invitation | 24 | 19 |
 | M3 resume | 24 | 16 |
-| M4 succession | 499 | 201 |
-| Guest resume during handoff | 492 | 214 |
-| Two guest replacement sockets after handoff | 41 | 38 |
+| M4 succession | 507 | 201 |
+| Changing membership, four ranks | 10,386 | 2,929 |
+| Guest resume during handoff | 524 | 214 |
+| Two guest replacement sockets after handoff | 42 | 38 |
+| Four replacements, earlier receipts retained | 394 | 336 |
 | Racing resumes and replay of an undelivered offer | 601 | 370 |
 | Watched host, two socket incarnations | 157 | 96 |
 | Idle retirement, two original connections and one restart | 7,597 | 2,014 |
 | Composed M1, 12 steps | 15,297 | 670 |
 | Composed M1+M2, 12 steps | 36,889 | 3,772 |
 | Composed M1+M2+M3, 12 steps | 37,869 | 18,191 |
-| Composed M1–M4, 12 steps | 989,902 | 350,246 |
-| Composed M1–M4, backlog 2, 16 steps | 6,969,032 | 2,223,390 |
+| Composed M1–M4, 12 steps | 991,138 | 350,246 |
+| Composed M1–M4, backlog 2, 16 steps | 6,987,480 | 2,223,390 |
 | Outcome, rejection and atomic restoration | 601 | 205 |
 | Historical markers, close and two retirements | 2,445 | 736 |
-| Full finite M1–M4 product, no depth cutoff | 27,037,625 | 6,544,512 |
+| Full finite M1–M4 product, no depth cutoff | 27,343,801 | 6,544,512 |
 
-Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. The full finite composition explores all reachable states for one operation, one KeyPackage token and one backlog slot, with no limit on path length; larger domains still use the stated cutoffs. Counts are per configuration; they must not be interpreted as disjoint implementation states.
+These finite configurations use at most two operation/KeyPackage tokens and backlog capacity two. The two new component profiles explore four admission ranks and five socket incarnations respectively. Time appears as relevant deadline regions. The full finite composition explores all reachable states for one operation, one KeyPackage token and one backlog slot, with no limit on path length; larger domains still use the stated cutoffs. Counts are per configuration; they must not be interpreted as disjoint implementation states.
 
 The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Four further mutations delay the first offer, accept a stale socket close, nominate a guest before it completes replay, or renew the deadline during restart. Each produced its expected counterexample. The `Reinvite` model adds three checks: consuming a second offer with the first refusal receipt, replacing the stored invitation anchor on restore, and accepting a bootstrap from another admitted signer. Its positive witness activates a restored guest under the successor after a delayed refusal receipt.
 
@@ -45,9 +49,9 @@ The seven original sensitivity checks cover persistence ordering, grant and tran
 
 `IdleRetirement` separates deletion, dispatch and observation. It allows an interruption at any dispatch position, a disappearing peer, and a socket with the wrong device, connection or authentication state. Five weakened variants lose the retry record, suppress wakeup or relax one binding. Each violates the expected property. With fair dispatch and at most one restart, a continuously attached original socket gets a send attempt; observation is not guaranteed. A separate trace reaches both observations after a mid-dispatch restart.
 
-Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
+Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. Two further witnesses reach a fourth host after removal and policy renewal, and a fourth replacement with old receipts still in flight. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
 
-Exact model sources, configurations and traces are included in the [evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r13/Pillowfort-Protocol-v4-CS1-R13.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact model sources, configurations and traces are included in the [evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r14/Pillowfort-Protocol-v4-CS1-R14.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
 Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 
@@ -200,7 +204,7 @@ Begin with a host, an existing member and a joiner; two connections per reconnec
 
 Represent time as relevant deadline regions—before, at, and after expiry—and preserve monotonic clock constraints. Add configurations with larger bounds, multiple queued operations, and competing admission/removal/handoff work. Small-model success is evidence within those configurations, not a proof for arbitrary room size or unbounded execution.
 
-Check that the model is sensitive to the failures it claims to cover. Deliberately remove one safeguard at a time and require a counterexample: persist-before-ACK, exact grant binding, snapshot reconciliation, single-use KeyPackage tracking, or transfer-target binding. These are proposed model mutations, not known implementation vulnerabilities.
+Check that the model is sensitive to the failures it claims to cover. Deliberately remove one safeguard at a time and require a counterexample: persist-before-ACK, exact grant binding, snapshot reconciliation, single-use KeyPackage tracking, or transfer-target binding. These mutations test the sensitivity of the model, not the exploitability of the implementation.
 
 For each trace, distinguish model error, implementation error and an explicit limit. Map the sequence to storage and network boundaries. Turn a reproducible implementation fault into a regression and rerun the affected models.
 
