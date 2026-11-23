@@ -1,4 +1,5 @@
 import type { Env } from "./index";
+import { acknowledgeHostPath, advanceHostPath, reconcileHostPath, validHostPathWatch, type HostPathWatch } from "./hostPathWatch";
 import { recordRoomActivity } from "./telemetry";
 import { firstDueRoomAlarm, nextRoomAlarmDeadline, normalizeRoomAlarmSchedule, type RoomAlarmKind, type RoomAlarmSchedule } from "./alarms";
 import {
@@ -55,6 +56,7 @@ import {
   type SecureRelayStateV4,
 } from "./secureRelayV4";
 import {
+  isHostPathReply,
   parseSecureAuthChallengeFrameV4,
   parseSecureAuthenticateFrameV4,
   parseSecurePostAuthClientFrameV4,
@@ -90,6 +92,7 @@ interface WSData {
   secureConnectionId?: string;
   secureDeviceId?: string;
   secureAuthenticated?: boolean;
+  hostProbe?: true;
   secureAuthentication?: "invitation" | "device";
   secureChallenge?: string;
   secureChallengeExpiresAt?: number;
@@ -135,6 +138,7 @@ const SAB_BOMB_SECONDS = Math.max(1, Math.ceil(SAB_BOMB_MS / 1000));
 const MAX_ENC_B64_LEN = 4096;
 const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
 const ALARM_SCHEDULE_KEY = "alarmSchedule";
+const HOST_PATH_KEY = "secureHostPathV1";
 const SAB_BOMB_KEY = "sabBomb";
 const FORT_PASS_ENTITLEMENT_KEY = "fortPassEntitlement";
 const FORT_PASS_REDEMPTION_KEY = "fortPassRedemption";
@@ -491,6 +495,7 @@ export class Room implements DurableObject {
   private legacyAuthBlocked = false;
   private setupInProgress = false;
   private authQueue: Promise<void> = Promise.resolve();
+  private hostPath: HostPathWatch | null = null;
   private secureQueue: Promise<void> = Promise.resolve();
   private paymentQueue: Promise<void> = Promise.resolve();
   private secureRoomFrameTimestamps: number[] = [];
@@ -591,6 +596,12 @@ export class Room implements DurableObject {
       this.secureStateCorrupt = true;
       return;
     }
+    const watch = await this.state.storage.get<unknown>(HOST_PATH_KEY);
+    if (watch !== undefined && !validHostPathWatch(watch)) {
+      this.secureStateCorrupt = true;
+      return;
+    }
+    this.hostPath = watch ?? null;
     this.roomId = restored.manifest.roomId;
     this.secureRelayManifest = restored.manifest;
     this.secureRoomAuthPublicKey = restored.manifest.roomAuthPublicKey;
@@ -601,7 +612,7 @@ export class Room implements DurableObject {
   private async persistSecureRelayState(
     relayState: SecureRelayStateV4,
     roomAuthPublicKey: string,
-    options: { touchIdle?: boolean } = {},
+    options: { touchIdle?: boolean; probeConnection?: string } = {},
   ): Promise<void> {
     const previous = this.secureRelayManifest;
     const previousLifecycle = this.secureRelayState?.lifecycle;
@@ -616,6 +627,11 @@ export class Room implements DurableObject {
       state: relayState,
       generation,
     });
+    const nextWatch = reconcileHostPath(this.hostPath, relayState, Date.now(), (device, connection) =>
+      options.probeConnection === connection || this.state.getWebSockets().some(socket => {
+        const a = this.att(socket);
+        return a.hostProbe === true && a.secureAuthenticated && a.secureDeviceId === device && a.secureConnectionId === connection;
+      }));
     await this.state.storage.transaction(async (transaction) => {
       const currentRaw = await transaction.get<unknown>(SECURE_RELAY_MANIFEST_KEY_V4);
       const current = currentRaw === undefined ? null : parseSecureRelayPersistenceManifestV4(currentRaw);
@@ -653,15 +669,10 @@ export class Room implements DurableObject {
       if (options.touchIdle) {
         schedule.idle = Date.now() + fortPassIdleMs(this.fortPassEntitlement, IDLE_MS);
       }
-      const nextDeadline = nextRoomAlarmDeadline(schedule);
-      if (nextDeadline === null) {
-        await transaction.delete(ALARM_SCHEDULE_KEY);
-        await transaction.deleteAlarm();
-      } else {
-        await transaction.put(ALARM_SCHEDULE_KEY, schedule);
-        await transaction.setAlarm(nextDeadline);
-      }
+      await this.storeHostPath(transaction, schedule, nextWatch);
+      await this.saveAlarmSchedule(schedule, transaction);
     });
+    this.hostPath = nextWatch;
     this.secureRelayManifest = prepared.manifest;
     this.secureRoomAuthPublicKey = roomAuthPublicKey;
     this.secureRelayState = relayState;
@@ -972,7 +983,8 @@ export class Room implements DurableObject {
           return;
         }
         try {
-          await this.persistSecureRelayState(transition.state, roomAuthPublicKey!, { touchIdle: true });
+          await this.persistSecureRelayState(transition.state, roomAuthPublicKey!, { touchIdle: true,
+            probeConnection: authenticate.hostProbe ? connectionId : undefined });
         } catch {
           this.rejectSecureAuthentication(ws, "persistence-failed");
           return;
@@ -1001,6 +1013,7 @@ export class Room implements DurableObject {
         current.isHost = false;
         current.protocol = "v4";
         current.secureAuthenticated = true;
+        if (authenticate.hostProbe) current.hostProbe = true;
         current.secureAuthentication = actor.authentication;
         current.secureDeviceId = deviceId;
         current.secureConnectionId = connectionId;
@@ -1083,32 +1096,52 @@ export class Room implements DurableObject {
     });
   }
 
+  // Caller holds the room's secure lock. A timeout may outlive its physical socket.
+  private async commitSecureDisconnect(actor: SecureRelayActorV4, ws?: WebSocket) {
+    const state = this.secureRelayState;
+    if (!state || state.lifecycle !== "open") return false;
+    const transition = disconnectSecureRelayDeviceV4(state, actor, {
+      now: Date.now(), nextGrantTokenId: generateSecureRelayIdV4(),
+    });
+    if (!transition.ok) return false;
+    await this.persistSecureRelayState(transition.state, this.secureRoomAuthPublicKey!);
+    if (ws) {
+      const a = this.att(ws);
+      a.secureAuthenticated = false;
+      ws.serializeAttachment(a);
+    }
+    this.dispatchSecureEffects(transition.effects);
+    if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets(ws);
+    return true;
+  }
+
   private async onSecureDisconnect(ws: WebSocket) {
     await this.withSecureLock(async () => {
-      const attachment = this.att(ws);
-      const state = this.secureRelayState;
-      if (!state || state.lifecycle !== "open" || !attachment.secureAuthenticated
-        || !attachment.secureDeviceId || !attachment.secureConnectionId
-        || !attachment.secureAuthentication) return;
-      const actor: SecureRelayActorV4 = {
-        deviceId: attachment.secureDeviceId,
-        connectionId: attachment.secureConnectionId,
-        authentication: attachment.secureAuthentication,
-      };
-      const transition = disconnectSecureRelayDeviceV4(state, actor, {
-        now: Date.now(),
-        nextGrantTokenId: generateSecureRelayIdV4(),
-      });
-      if (!transition.ok) return;
-      // A close callback cannot be retried by the client. Surface storage
-      // failure to the platform instead of silently leaving the durable member
-      // marked connected forever and blocking its authenticated resume.
-      await this.persistSecureRelayState(transition.state, this.secureRoomAuthPublicKey!);
-      attachment.secureAuthenticated = false;
-      ws.serializeAttachment(attachment);
-      this.dispatchSecureEffects(transition.effects);
-      if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets(ws);
+      const a = this.att(ws);
+      if (!a.secureAuthenticated || !a.secureDeviceId || !a.secureConnectionId || !a.secureAuthentication) return;
+      await this.commitSecureDisconnect({ deviceId: a.secureDeviceId, connectionId: a.secureConnectionId,
+        authentication: a.secureAuthentication }, ws);
     });
+  }
+
+  private async storeHostPath(tx: DurableObjectTransaction, schedule: RoomAlarmSchedule, next: HostPathWatch | null) {
+    if (next !== this.hostPath) {
+      if (next) await tx.put(HOST_PATH_KEY, next);
+      else await tx.delete(HOST_PATH_KEY);
+    }
+    if (next) schedule["host-path"] = next.dueAt;
+    else delete schedule["host-path"];
+  }
+
+  // Probe traffic updates only this small record and the alarm, never MLS
+  // storage, room activity, the order cursor or the hosted session lifetime.
+  private async persistHostPath(next: HostPathWatch | null) {
+    await this.state.storage.transaction(async tx => {
+      const schedule = normalizeRoomAlarmSchedule(await tx.get(ALARM_SCHEDULE_KEY));
+      await this.storeHostPath(tx, schedule, next);
+      await this.saveAlarmSchedule(schedule, tx);
+    });
+    this.hostPath = next;
   }
 
   private closeRetiredRoomSockets(except?: WebSocket) {
@@ -1902,6 +1935,14 @@ export class Room implements DurableObject {
         return;
       }
       if (a.secureAuthenticated) {
+        if (isHostPathReply(msg)) {
+          await this.withSecureLock(async () => {
+            if (!a.hostProbe || !a.secureDeviceId || !a.secureConnectionId) return;
+            const next = acknowledgeHostPath(this.hostPath, a.secureDeviceId, a.secureConnectionId, msg.nonce, Date.now());
+            if (next !== this.hostPath) await this.persistHostPath(next);
+          });
+          return;
+        }
         const secureFrame = parseSecurePostAuthClientFrameV4(msg);
         if (!secureFrame) {
           this.sendSecureError(ws, "invalid-frame");
@@ -2020,6 +2061,27 @@ export class Room implements DurableObject {
         }
         if (nextExpiry !== null) schedule["auth-sockets"] = nextExpiry;
         await this.saveAlarmSchedule(schedule);
+        return;
+      }
+
+      if (due === "host-path") {
+        const w = this.hostPath;
+        const member = this.secureRelayState?.members.find(m => m.deviceId === w?.deviceId);
+        if (!w || this.secureRelayState?.hostDeviceId !== w.deviceId || member?.connectionId !== w.connectionId) {
+          await this.persistHostPath(null);
+          return;
+        }
+        const next = advanceHostPath(w, now, generateSecureRelayIdV4);
+        const ws = this.secureSocketForDevice(w.deviceId);
+        if (next) {
+          await this.persistHostPath(next);
+          if (next !== w && ws && next.nonce) this.sendSecure(ws, { kind: "secure-server", v: 4, suite: 1, type: "host-path-probe", nonce: next.nonce });
+        } else {
+          if (!await this.commitSecureDisconnect({ deviceId: w.deviceId, connectionId: w.connectionId, authentication: "device" }, ws ?? undefined)) {
+            throw new Error("host path expiry could not be committed"); // Preserve the socket; let the platform retry the alarm.
+          }
+          try { ws?.close(4001, "host path timeout"); } catch {}
+        }
         return;
       }
 
@@ -2555,17 +2617,17 @@ export class Room implements DurableObject {
     return normalizeRoomAlarmSchedule(await this.state.storage.get<RoomAlarmSchedule>(ALARM_SCHEDULE_KEY));
   }
 
-  private async saveAlarmSchedule(schedule: RoomAlarmSchedule) {
+  private async saveAlarmSchedule(schedule: RoomAlarmSchedule, storage: DurableObjectStorage | DurableObjectTransaction = this.state.storage) {
     const clean = normalizeRoomAlarmSchedule(schedule);
     const nextDeadline = nextRoomAlarmDeadline(clean);
     if (nextDeadline === null) {
-      await this.state.storage.delete(ALARM_SCHEDULE_KEY);
-      await this.state.storage.deleteAlarm();
+      await storage.delete(ALARM_SCHEDULE_KEY);
+      await storage.deleteAlarm();
       return;
     }
 
-    await this.state.storage.put(ALARM_SCHEDULE_KEY, clean);
-    await this.state.storage.setAlarm(nextDeadline);
+    await storage.put(ALARM_SCHEDULE_KEY, clean);
+    await storage.setAlarm(nextDeadline);
   }
 
   private async setAlarmDeadline(kind: RoomAlarmKind, deadline: number) {
@@ -2608,6 +2670,17 @@ export class Room implements DurableObject {
       || (rawPreGrantRevocation !== undefined && !preGrantRevocation)) {
       throw new Error("room payment state is corrupt");
     }
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.deleteAlarm();
+      const stored = await transaction.list();
+      const disposableKeys = [...stored.keys()].filter((key) => key !== FORT_PASS_REDEMPTION_KEY
+        && key !== FORT_PASS_PREGRANT_REVOCATION_KEY);
+      if (disposableKeys.length) await transaction.delete(disposableKeys);
+      if (redemption) await transaction.put(FORT_PASS_REDEMPTION_KEY, redemption);
+      if (preGrantRevocation) {
+        await transaction.put(FORT_PASS_PREGRANT_REVOCATION_KEY, preGrantRevocation);
+      }
+    });
     this.log("destroying room");
     if (this.sabVote) {
       clearTimeout(this.sabVote.timer);
@@ -2628,22 +2701,12 @@ export class Room implements DurableObject {
     for (const w of this.state.getWebSockets()) {
       try { w.close(1000, reason); } catch {}
     }
-    await this.state.storage.transaction(async (transaction) => {
-      await transaction.deleteAlarm();
-      const stored = await transaction.list();
-      const disposableKeys = [...stored.keys()].filter((key) => key !== FORT_PASS_REDEMPTION_KEY
-        && key !== FORT_PASS_PREGRANT_REVOCATION_KEY);
-      if (disposableKeys.length) await transaction.delete(disposableKeys);
-      if (redemption) await transaction.put(FORT_PASS_REDEMPTION_KEY, redemption);
-      if (preGrantRevocation) {
-        await transaction.put(FORT_PASS_PREGRANT_REVOCATION_KEY, preGrantRevocation);
-      }
-    });
     if (this.secureRelayState?.lifecycle === "open") {
       recordRoomActivity(this.env, this.state, "room.retired");
     }
     this.authPublicKey = null;
     this.secureRelayState = null;
+    this.hostPath = null;
     this.secureRelayManifest = null;
     this.secureRoomAuthPublicKey = null;
     this.secureRoomFrameTimestamps = [];

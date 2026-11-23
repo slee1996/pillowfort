@@ -5,9 +5,20 @@ import { Room as ProductionRoom } from "../src/room.ts";
 export class Room extends ProductionRoom {
   instance = crypto.randomUUID();
   report(event) {
-    this.state.waitUntil(this.env.EVIDENCE.fetch("https://evidence.invalid/", {
-      method: "POST", body: JSON.stringify({ ...event, instance: this.instance, room: this.roomId }),
-    }));
+    this.state.waitUntil((async () => {
+      if (this.env.CUT === "probe-restart") event.idle = (await this.state.storage.get("alarmSchedule"))?.idle;
+      await this.env.EVIDENCE.fetch("https://evidence.invalid/", {
+        method: "POST", body: JSON.stringify({ ...event, instance: this.instance, room: this.roomId }),
+      });
+    })());
+  }
+  sendSecure(ws, frame) {
+    if (this.env.CUT === "probe-restart" && frame.type === "host-path-probe" && this.hostPath?.phase === "retry" && !this.cutProbe) {
+      this.cutProbe = true;
+      // Lose the original emission; a restored retry must not be lost again.
+      if (!this.restoredProbe) { this.report({ kind: "cut", offer: this.hostPath }); return; }
+    }
+    super.sendSecure(ws, frame);
   }
   dispatchSecureEffects(effects) {
     const offer = effects.find(e => e.type === "host-transfer-authorized");
@@ -20,16 +31,21 @@ export class Room extends ProductionRoom {
     }
     super.dispatchSecureEffects(effects);
   }
-  async webSocketClose(ws, ...args) {
-    const a = ws.deserializeAttachment();
-    const h = this.secureRelayState?.members.find(m => m.deviceId === this.secureRelayState.hostDeviceId);
-    if (h && a?.secureDeviceId === h.deviceId && a.secureConnectionId === h.connectionId) {
-      this.report({ kind: "detected", at: Date.now() });
+  async commitSecureDisconnect(actor, ws) {
+    const host = this.secureRelayState?.members.find(m => m.deviceId === this.secureRelayState.hostDeviceId);
+    const tracked = host?.deviceId === actor.deviceId && host.connectionId === actor.connectionId;
+    const at = Date.now();
+    const committed = await super.commitSecureDisconnect(actor, ws);
+    if (committed && tracked && !this.secureRelayState?.members.some(m => m.deviceId === actor.deviceId && m.connectionId === actor.connectionId)) {
+      this.report({ kind: "detected", at });
     }
-    return super.webSocketClose(ws, ...args);
+    return committed;
   }
   async alarm() {
-    if (this.secureRelayState?.pendingHostTransfer) this.report({ kind: "awoke", at: Date.now() });
+    if (this.env.CUT === "probe-restart" && this.hostPath?.phase === "retry") {
+      this.restoredProbe = true;
+      this.report({ kind: "awoke", at: Date.now(), nonce: this.hostPath.nonce });
+    } else if (this.secureRelayState?.pendingHostTransfer) this.report({ kind: "awoke", at: Date.now() });
     return super.alarm();
   }
 }

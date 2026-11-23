@@ -1,3 +1,4 @@
+import { acknowledgeHostPath, advanceHostPath, reconcileHostPath, type HostPathWatch } from "./src/hostPathWatch";
 import { isRpsPick, rpsWinner, tttWinner, voteHasMajority, type RpsPick } from "./src/game";
 import { analyticsLogLine, readAnalyticsEvent } from "./src/analytics";
 import { constantTimeFortPassClaimHashEqual, customRoomCodeAvailability, FORT_PASS_RESERVATION_MS, fortPassAllowsCustomRoomCode, fortPassAllowsRoomTheme, fortPassClaimHash, fortPassIdleMs, fortPassRedemptionMatches, isFortPassActive, isGeneratedFreeRoomId, normalizeCustomRoomCode, normalizeFortPassCheckoutRequest, normalizeFortPassEntitlement, normalizeRoomId, normalizeRoomTheme, type FortPassEntitlement, type RoomTheme } from "./src/entitlements";
@@ -38,6 +39,7 @@ import {
   type SecureRelayStateV4,
 } from "./src/secureRelayV4";
 import {
+  isHostPathReply,
   parseSecureAuthChallengeFrameV4,
   parseSecureAuthenticateFrameV4,
   parseSecurePostAuthClientFrameV4,
@@ -100,6 +102,7 @@ interface WSData {
   secureConnectionId?: string;
   secureDeviceId?: string;
   secureAuthenticated?: boolean;
+  hostProbe?: true;
   secureAuthentication?: "invitation" | "device";
   protocol?: "legacy" | "v4";
   secureOperationTimestamps?: number[];
@@ -114,6 +117,7 @@ interface SecureLocalRoom {
   roomAuthPublicKey: string;
   connections: Map<string, any>;
   transitionQueue: Promise<void>;
+  hostPath: HostPathWatch | null;
   relayTimer: ReturnType<typeof setTimeout> | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
   fortPassEntitlement: FortPassEntitlement | null;
@@ -709,13 +713,35 @@ function dispatchLocalSecureEffects(room: SecureLocalRoom, effects: readonly Sec
 function syncLocalSecureRelayTimer(room: SecureLocalRoom) {
   if (room.relayTimer) clearTimeout(room.relayTimer);
   room.relayTimer = null;
-  const deadline = nextSecureRelayDeadlineV4(room.state);
-  if (deadline === null || room.state.lifecycle !== "open") return;
+  room.hostPath = reconcileHostPath(room.hostPath, room.state, Date.now(), (device, connection) => {
+    const data = room.connections.get(device)?.data as WSData | undefined;
+    return data?.hostProbe === true && data.secureAuthenticated === true && data.secureConnectionId === connection;
+  });
+  const relayDue = nextSecureRelayDeadlineV4(room.state);
+  const deadline = Math.min(relayDue ?? Infinity, room.hostPath?.dueAt ?? Infinity);
+  if (!Number.isFinite(deadline) || room.state.lifecycle !== "open") return;
   const timer = setTimeout(() => {
     void withLocalSecureLock(room, async () => {
       if (secureRooms.get(room.id) !== room || room.state.lifecycle !== "open"
         || room.relayTimer !== timer) return;
       room.relayTimer = null;
+      const now = Date.now(), w = room.hostPath;
+      if (w && w.dueAt <= now && w.dueAt < (relayDue ?? Infinity)) {
+        const next = advanceHostPath(w, now, generateSecureRelayIdV4);
+        const ws = secureSocket(room, w.deviceId);
+        if (!next) {
+          if (!commitLocalSecureDisconnect(room, { deviceId: w.deviceId, connectionId: w.connectionId, authentication: "device" }, ws)) {
+            syncLocalSecureRelayTimer(room);
+            return;
+          }
+          try { ws?.close(4001, "host path timeout"); } catch {}
+        } else {
+          room.hostPath = next;
+          syncLocalSecureRelayTimer(room);
+          if (ws && next.nonce) sendSecure(ws, { kind: "secure-server", v: 4, suite: 1, type: "host-path-probe", nonce: next.nonce });
+        }
+        return;
+      }
       const transition = advanceSecureRelayV4(room.state, {
         now: Date.now(),
         nextGrantTokenId: generateSecureRelayIdV4(),
@@ -731,7 +757,7 @@ function syncLocalSecureRelayTimer(room: SecureLocalRoom) {
       dispatchLocalSecureEffects(room, transition.effects);
       if (room.state.lifecycle === "retired") destroyLocalSecureRoom(room, false);
     });
-  }, Math.max(0, deadline - Date.now()));
+  }, Math.max(0, Math.max(deadline, room.state.clockHighWater) - Date.now()));
   room.relayTimer = timer;
 }
 
@@ -1529,7 +1555,9 @@ function markLocalSecureAuthenticated(
   d: WSData,
   room: SecureLocalRoom,
   actor: SecureRelayActorV4,
+  hostProbe: true | undefined,
 ) {
+  d.hostProbe = hostProbe;
   d.name = "";
   d.isHost = false;
   d.authenticated = true;
@@ -1635,6 +1663,7 @@ async function onLocalSecureAuthenticate(ws: any, d: WSData, authenticate: Secur
         roomAuthPublicKey: parsedAuth.publicKey,
         connections: new Map(),
         transitionQueue: Promise.resolve(),
+        hostPath: null,
         relayTimer: null,
         idleTimer: null,
         fortPassEntitlement: entitlement,
@@ -1649,7 +1678,7 @@ async function onLocalSecureAuthenticate(ws: any, d: WSData, authenticate: Secur
       const timestamps = roomCreationByIP.get(d.ip) || [];
       timestamps.push(Date.now());
       roomCreationByIP.set(d.ip, timestamps);
-      markLocalSecureAuthenticated(ws, d, room, actor);
+      markLocalSecureAuthenticated(ws, d, room, actor, authenticate.hostProbe);
       resetLocalSecureIdle(room);
       syncLocalSecureRelayTimer(room);
       sendSecure(ws, {
@@ -1750,7 +1779,7 @@ async function onLocalSecureAuthenticate(ws: any, d: WSData, authenticate: Secur
       else syncLocalSecureRelayTimer(room);
       return;
     }
-    markLocalSecureAuthenticated(ws, d, room, actor);
+    markLocalSecureAuthenticated(ws, d, room, actor, authenticate.hostProbe);
     if (replacedSocket && replacedSocket !== ws) {
       try { replacedSocket.close(4001, "connection replaced"); } catch {}
     }
@@ -1811,28 +1840,30 @@ async function onLocalSecureFrame(ws: any, d: WSData, frame: SecureClientFrameV4
   });
 }
 
+function commitLocalSecureDisconnect(room: SecureLocalRoom, actor: SecureRelayActorV4, ws: any) {
+  const transition = disconnectSecureRelayDeviceV4(room.state, actor, {
+    now: Date.now(), nextGrantTokenId: generateSecureRelayIdV4(),
+  });
+  if (!transition.ok) return false;
+  room.state = transition.state;
+  if (ws) {
+    if (room.connections.get(actor.deviceId) === ws) room.connections.delete(actor.deviceId);
+    (ws.data as WSData).secureAuthenticated = false;
+  }
+  syncLocalSecureRelayTimer(room);
+  dispatchLocalSecureEffects(room, transition.effects);
+  if (room.state.lifecycle === "retired") destroyLocalSecureRoom(room, false);
+  return true;
+}
+
 async function onLocalSecureDisconnect(ws: any, d: WSData) {
   const room = d.roomId ? secureRooms.get(d.roomId) : null;
   if (!room || !d.secureAuthenticated || !d.secureDeviceId || !d.secureConnectionId
     || !d.secureAuthentication || room.state.lifecycle !== "open") return;
   await withLocalSecureLock(room, async () => {
-    if (secureRooms.get(room.id) !== room || room.state.lifecycle !== "open") return;
-    const actor: SecureRelayActorV4 = {
-      deviceId: d.secureDeviceId!,
-      connectionId: d.secureConnectionId!,
-      authentication: d.secureAuthentication!,
-    };
-    const transition = disconnectSecureRelayDeviceV4(room.state, actor, {
-      now: Date.now(),
-      nextGrantTokenId: generateSecureRelayIdV4(),
-    });
-    if (!transition.ok) return;
-    room.state = transition.state;
-    if (room.connections.get(actor.deviceId) === ws) room.connections.delete(actor.deviceId);
-    d.secureAuthenticated = false;
-    syncLocalSecureRelayTimer(room);
-    dispatchLocalSecureEffects(room, transition.effects);
-    if (room.state.lifecycle === "retired") destroyLocalSecureRoom(room, false);
+    if (secureRooms.get(room.id) === room) commitLocalSecureDisconnect(room, {
+      deviceId: d.secureDeviceId!, connectionId: d.secureConnectionId!, authentication: d.secureAuthentication!,
+    }, ws);
   });
 }
 
@@ -3506,6 +3537,18 @@ export function startLocalServer(port = PORT, options: LocalServerOptions = {}) 
           return;
         }
         if (d.secureAuthenticated) {
+          if (isHostPathReply(msg)) {
+            const room = d.roomId ? secureRooms.get(d.roomId) : null;
+            if (room && d.hostProbe && d.secureDeviceId && d.secureConnectionId) {
+              await withLocalSecureLock(room, async () => {
+                const next = acknowledgeHostPath(room.hostPath, d.secureDeviceId!, d.secureConnectionId!, msg.nonce, Date.now());
+                if (next === room.hostPath) return;
+                room.hostPath = next;
+                syncLocalSecureRelayTimer(room);
+              });
+            }
+            return;
+          }
           const secureFrame = parseSecurePostAuthClientFrameV4(msg);
           if (!secureFrame) {
             sendSecureError(ws, "invalid-frame");

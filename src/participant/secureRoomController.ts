@@ -38,6 +38,7 @@ import {
   parseSecureAuthenticateFrameV4,
   parseSecurePostAuthClientFrameV4,
   parseSecureServerFrameV4,
+  type HostPathReply,
   type SecureAuthChallengeFrameV4,
   type SecureAuthenticateFrameV4,
   type SecureServerFrameV4,
@@ -1282,6 +1283,7 @@ export class SecureRoomController {
   }
 
   private sendAuthentication(frame: SecureAuthenticateFrameV4): void {
+    frame.hostProbe = true;
     if (!parseSecureAuthenticateFrameV4(frame)) throw new Error("constructed authentication frame is invalid");
     this.sendWire(frame);
   }
@@ -1297,6 +1299,9 @@ export class SecureRoomController {
     handshake?: PendingHandshake,
   ): Promise<void> {
     switch (frame.type) {
+      case "host-path-probe":
+        this.sendWire({ kind: "host-path-reply", nonce: frame.nonce });
+        return;
       case "authenticated":
         await this.handleAuthenticated(frame, handshake);
         return;
@@ -1732,6 +1737,17 @@ export class SecureRoomController {
       logicalOrder: delivery.logicalOrder,
       relayContext,
     });
+    // Group delivery of a join proof is emitted only by a *committed* host
+    // activation, never by proof preview. An offline peer may not see the
+    // subsequent live lifecycle broadcast. Release only the matching barrier,
+    // after receive() verified the signed proof (or its exact stored digest)
+    // and before ACKing it or processing the next ordered delivery.
+    if (relayContext.kind === "join-proof") {
+      const barrier = engine.pendingAdmissionBarrier;
+      if (barrier?.admissionId === relayContext.admissionId && barrier.deviceId === delivery.fromDeviceId) {
+        await engine.completeAdmissionLifecycle(delivery.fromDeviceId, "active");
+      }
+    }
     if (result.kind !== "already-processed") {
       this.ui.applySecureRoomUiV4(result.state, result.effects, engine.deviceId, this.replayingBacklog);
       if (result.kind === "inbound-commit" && relayContext.kind === "commit" &&
@@ -2890,7 +2906,7 @@ export class SecureRoomController {
     this.sendWire(frame);
   }
 
-  private sendWire(frame: SecureAuthenticateFrameV4 | SecureClientFrameV4): void {
+  private sendWire(frame: SecureAuthenticateFrameV4 | SecureClientFrameV4 | HostPathReply): void {
     const socket = this.socket;
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) throw new Error("secure socket is not open");
     const wire = JSON.stringify(frame);
