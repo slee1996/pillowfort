@@ -615,7 +615,9 @@ describe("protocol-v4 durable secure room engine", () => {
         roomInstance: randomId(),
       }));
 
-      const bobPackage = await bob.createKeyPackage();
+      const invitationHost = host.invitationHostPin();
+      const wrongRoomPinCode = await code(() => bob.createKeyPackage(`${randomId()}.${host.deviceId}.${host.signaturePublicKey}`));
+      const bobPackage = await bob.createKeyPackage(invitationHost);
       const keyPackageWire = base64Url(bobPackage.keyPackage);
       const bobBinding = await invitationModule.createRoomInvitationMemberBindingV4({
         mode: "admission",
@@ -638,6 +640,7 @@ describe("protocol-v4 durable secure room engine", () => {
       bob.dispose();
       bob = await engineModule.SecureRoomEngine.restore({ roomInstance, roomSecret, store: bobStore, lease: bobLease });
       const restartedKeyPackage = bob.pendingOutbox.find((entry) => entry.messageId === bobPackage.messageId);
+      const invitationPinRestored = restartedKeyPackage?.kind === "admission" && restartedKeyPackage.joinHostPin === invitationHost;
       const keyPackageRetryStable = restartedKeyPackage?.kind === "admission" &&
         restartedKeyPackage.welcomeMessageId === null && base64Url(restartedKeyPackage.outbound) === keyPackageWire;
       // The relay binds admissionId to the joiner's durable KeyPackage request
@@ -697,7 +700,7 @@ describe("protocol-v4 durable secure room engine", () => {
         base64Url(restartedAdmission.welcome!) === base64Url(addition.welcome) &&
         base64Url(restartedAdmission.ratchetTree!) === base64Url(addition.ratchetTree);
       await step("Welcome ack", () => host.acknowledgeOutbound(addition.welcomeMessageId));
-      await bob.authorizeJoinFounder(roomId, founderBinding);
+      await bob.authorizeJoinHost(roomId, founderBinding);
       const joined = await step(
         "join",
         () => bob.join(addition.welcome, addition.ratchetTree, addition.welcomeMessageId, admissionId),
@@ -709,7 +712,7 @@ describe("protocol-v4 durable secure room engine", () => {
         store: bobStore,
         lease: bobLease,
       });
-      await bob.authorizeJoinFounder(roomId, founderBinding);
+      await bob.authorizeJoinHost(roomId, founderBinding);
       const retainedJoinAdmission = bob.pendingOutbox.find((entry) => entry.kind === "admission" &&
         entry.admissionId === admissionId && entry.welcomeMessageId === null);
       const durableJoinWelcomeRetained = retainedJoinAdmission?.kind === "admission" &&
@@ -1501,7 +1504,7 @@ describe("protocol-v4 durable secure room engine", () => {
         substitutedSignatureKeyCode,
         substitutedDeviceIdCode,
         substitutedAdmissionIdCode,
-        keyPackageRetryStable,
+        keyPackageRetryStable, invitationPinRestored, wrongRoomPinCode,
         addArtifactsPersisted,
         commitAckRetainedAdmission,
         admissionRetryStable,
@@ -1615,6 +1618,8 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.substitutedDeviceIdCode).toBe("unauthorized");
     expect(result.substitutedAdmissionIdCode).toBe("unauthorized");
     expect(result.keyPackageRetryStable).toBe(true);
+    expect(result.invitationPinRestored).toBe(true);
+    expect(result.wrongRoomPinCode).toBe("invalid-input");
     expect(result.addArtifactsPersisted).toBe(true);
     expect(result.commitAckRetainedAdmission).toBe(true);
     expect(result.admissionRetryStable).toBe(true);

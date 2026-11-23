@@ -152,7 +152,8 @@ async function openGame(owner: string) {
     await see("Gamma", (s) => s.games.vote?.target === "Beta");
   } else if (game === "saboteur") {
     await act(owner, "saboteur_start");
-    await see("Beta", (s) => !!s.games.saboteur.myRole);
+    for (const name of ["Alpha", "Beta", "Gamma", "Fourth"])
+      await see(name, (s) => !!s.games.saboteur.myRole && s.legalActions.canAct);
   } else {
     await act("Beta", "breakout_start");
     await see("Beta", (s) => s.breakout != null);
@@ -212,8 +213,22 @@ try {
       ? "admission with the successor-exported invite"
       : "post-change game semantics";
   if (game === "fresh-admission") {
+    await sdk.createSession("OldInvite");
+    const attempt = await sdk.execute("OldInvite", "room_join_link", { invitationUrl: invite, displayName: "Visitor", confirm: true });
+    assert(attempt.ok);
+    await see("OldInvite", s => s.operations.some((op: any) => op.error?.code === "invitation-host-changed"));
+    const current = await read("Alpha");
+    assert(!current.room.pendingAdmissions.length && !current.room.members.some((m: any) => m.name === "Visitor"));
+    await sdk.closeSession("OldInvite");
+    checks.push("old founder invite refused before asking anyone to approve");
+    await act("Alpha", "chat_send", { text: "before Delta joined" });
+    await see("Beta", s => s.messages.some((m: any) => m.text === "before Delta joined"));
     invite = (await act("Alpha", "invitation_export", { confirm: true })).invitationUrl;
     await enter("Delta", "Alpha");
+    assert(!(await read("Delta")).messages.some((m: any) => m.text === "before Delta joined"));
+    await act("Delta", "chat_send", { text: "newcomer under successor" });
+    await see("Alpha", s => s.messages.some((m: any) => m.from === "Delta" && m.text === "newcomer under successor"));
+    checks.push("newcomer has no prior chat and its new encrypted message reaches the successor");
   } else if (game === "breakout") {
     await act("Beta", "breakout_move", { x: 0.75 });
     await act("Beta", "breakout_stop", { confirm: true });
@@ -224,6 +239,7 @@ try {
         (s) =>
           !s.games.queue.current && !s.games.vote && !s.games.ttt && !s.games.rps && !s.games.saboteur.myRole,
       );
+    at = "restart " + game + " under successor";
     await openGame("Alpha");
   }
   checks.push(at);

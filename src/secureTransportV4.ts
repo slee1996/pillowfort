@@ -273,7 +273,7 @@ const SERVER_ERROR_CODES = new Set<SecureServerErrorCodeV4>([
   "invalid-frame", "invalid-state", "invalid-actor", "wrong-room", "downgrade", "room-retired",
   "device-mismatch", "connection-mismatch", "authentication-required", "duplicate-id",
   "duplicate-key-package", "key-package-limit", "device-exists", "unknown-device", "invalid-lifecycle", "member-limit",
-  "pending-limit", "host-required", "recipient-unavailable", "invalid-route", "invalid-admission",
+  "pending-limit", "host-required", "recipient-unavailable", "invalid-route", "invalid-admission", "invitation-host-changed",
   "invalid-reference", "pending-cannot-send", "active-member-required", "order-already-pending",
   "order-queue-full", "delivery-pending", "invalid-grant", "grant-expired", "grant-token-required",
   "admission-pending", "removal-pending", "fresh-admission-required", "order-exhausted", "authentication-expired", "authentication-failed",

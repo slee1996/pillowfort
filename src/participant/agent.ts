@@ -188,6 +188,7 @@ export function createParticipantAgent({ store, controller, events: participantE
     state.setName(displayName);
     operations.push({ id, name: recovery ? "room_recover" : `room_${mode}`, status: "connecting", at: Date.now() });
     const options = { roomId, displayName, roomSecret: checked.secret,
+      ...(input.hostPin !== undefined && { hostPin: input.hostPin }),
       ...(pass ? { fortPassSessionId: pass.sessionId, fortPassClaimSecret: pass.claimSecret } : {}),
       ...(input.takeover ? { lock: { takeover: true } } : {}) };
     const promise = mode === "setup" ? controller.setup(options) : controller.join(options);
@@ -204,8 +205,9 @@ export function createParticipantAgent({ store, controller, events: participantE
         const code = result.reason;
         const message = code === "held-in-another-context" || code === "held-in-this-context"
           ? "This browser profile already owns the room identity. A second tab is not an independent participant. Use a separate browser context/profile or a named local/hosted MCP session. Do not use takeover to create a peer: it replaces the owning tab."
+          : code === "invitation-host-changed" ? "Ask an admitted member to export a fresh invite link for the current host."
           : `Connection ${code}. Observe recovery; retain the exact room credentials. Resolve the reported condition before retrying.`;
-        if (operation) { operation.status = "failed"; operation.error = { code, message, retryable: !["invalid-input", "unsupported", "authentication-failed"].includes(code) }; }
+        if (operation) { operation.status = "failed"; operation.error = { code, message, retryable: !["invalid-input", "unsupported", "authentication-failed", "invitation-host-changed"].includes(code) }; }
         record("connection-result", { operationId: id, status: "failed", code, message });
       }
     }).catch(() => {
@@ -229,7 +231,7 @@ export function createParticipantAgent({ store, controller, events: participantE
     if (state.activitySource || await browser?.invitationContextBlocked()) {
       fail("incompatible-context", "Open invitations in a regular browser tab, separately from Discord Activities or payment returns.");
     }
-    return startConnection("join", { roomId: invitation.roomId, roomSecret: invitation.roomSecret, displayName: input.displayName, takeover: input.takeover, confirm: input.confirm });
+    return startConnection("join", { roomId: invitation.roomId, roomSecret: invitation.roomSecret, hostPin: invitation.hostPin, displayName: input.displayName, takeover: input.takeover, confirm: input.confirm });
   });
   add("room_recover", "Resume the exact pending setup/join identity, never mint a replacement. May take over another tab only when takeover:true.", object({ roomSecret: secretSchema, takeover: { type: "boolean" }, confirm }, ["roomSecret", "confirm"]), true, input => startConnection(getSecureRoomRecovery()?.mode ?? "join", input, true));
   add("room_cancel", "Cancel pending connection through secure cancellation; ambiguous authentication may require recovery and is not silently erased.", object({ confirm }), true, async () => {
@@ -243,7 +245,7 @@ export function createParticipantAgent({ store, controller, events: participantE
   add("invitation_export", "Explicitly export the current room invitation link and password (sensitive bearer credentials). Anyone with the link can request admission; the host must still approve. Never include either credential in generic observations or logs.", object({ roomId: roomIdSchema, confirm }), true, input => {
     const state = room(input);
     if (!state.password) fail("credential-unavailable", "This participant does not have an invitation password to export.");
-    return { roomId: state.roomId, roomSecret: state.password, invitationUrl: createRoomInvitationUrl(origin, state.roomId!, state.password) };
+    return { roomId: state.roomId, roomSecret: state.password, invitationUrl: controller.exportInvitationUrl(origin) };
   });
   for (const action of ["approve", "reject"] as const) sendAction(`admission_${action}`, `${action === "approve" ? "Approve" : "Reject"} precisely the selected pending admission using its exact admissionId and invitation-bound deviceFingerprint from pendingAdmissions. Approval requires host authority and caller policy, never automatic admission. Out-of-band comparison with the guest's current pendingJoinFingerprint is optional extra assurance; if chosen, compare over a trusted channel and do not approve a mismatch.`, { admissionId: text(128), deviceFingerprint: text(256) }, ["admissionId", "deviceFingerprint"], true, `admission-${action}`, (state, input) => {
     requireHost(state);

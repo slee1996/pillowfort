@@ -1434,6 +1434,52 @@ async function completeHostTransfer(
 }
 
 describe("protocol-v4 atomic host transfer", () => {
+  it("consumes a previewed manual decline without transferring the host or reviving it on retry", async () => {
+    const { ids, clock, host, state: initial } = await setupRoom();
+    const admitted = await admitMember(initial, host, ids, clock);
+    const first = await createTransferOffer(admitted.state, host, admitted.guest, ids, clock);
+    const order = await requestGrant(first.state, admitted.guest, ids, clock);
+    const decline = applicationFrame(order.state, order.grant, ids);
+    const preview = accepted(await reduceSecureRelayV4(order.state, admitted.guest, decline, { now: tick(clock) }));
+    const receipt = {
+      kind: "application-decision", v: 4, suite: 1, roomInstance: initial.roomInstance,
+      requestId: ids(), messageId: decline.envelope.messageId, decision: "approve",
+      declinedAuthorizationId: first.authorizationId,
+    } as const;
+    const applied = accepted(await reduceSecureRelayV4(preview.state, host, receipt, { now: tick(clock) }));
+    const restored = importSecureRelayStateV4(exportSecureRelayStateV4(applied.state))!;
+    expect(restored.pendingHostTransfer).toBeNull();
+    expect(restored.hostDeviceId).toBe(host.deviceId);
+    const second = await createTransferOffer(await ackAll(restored, ids, clock), host, admitted.guest, ids, clock);
+    const retried = accepted(await reduceSecureRelayV4(second.state, host, receipt, { now: tick(clock) }));
+    expect(second.authorizationId).not.toBe(first.authorizationId);
+    expect(retried.state.pendingHostTransfer?.authorizationId).toBe(second.authorizationId);
+    expect(retried.state.hostDeviceId).toBe(host.deviceId);
+  });
+
+  it("expires an undecided manual catch at its offer deadline and restores a usable room", async () => {
+    const { ids, clock, host, state: initial } = await setupRoom();
+    const admitted = await admitMember(initial, host, ids, clock);
+    const offered = await createTransferOffer(admitted.state, host, admitted.guest, ids, clock);
+    const deadline = offered.state.pendingHostTransfer!.expiresAt;
+    clock.now = deadline - 4;
+    const order = await requestGrant(offered.state, admitted.guest, ids, clock);
+    const frame: SecureHostTransferAcceptRelayFrameV4 = {
+      kind: "relay", relayKind: "host-transfer-accept", grant: order.grant, authorizationId: offered.authorizationId,
+      envelope: envelope(initial.roomInstance, ids(), "group", ids(8)),
+    };
+    const preview = accepted(await reduceSecureRelayV4(order.state, admitted.guest, frame, { now: deadline - 1 }));
+    expect(preview.state.pendingApplication?.frame.envelope.messageId).toBe(frame.envelope.messageId);
+    clock.now = deadline;
+    const timed = accepted(advanceSecureRelayV4(preview.state, { now: clock.now, nextGrantTokenId: ids() }));
+    expect(effect(timed.effects, "application-rejected").messageId).toBe(frame.envelope.messageId);
+    const restored = importSecureRelayStateV4(exportSecureRelayStateV4(timed.state))!;
+    expect(restored.hostDeviceId).toBe(host.deviceId);
+    expect(restored.pendingHostTransfer).toBeNull();
+    const next = await createTransferOffer(await ackAll(restored, ids, clock), host, admitted.guest, ids, clock);
+    expect(next.authorizationId).not.toBe(offered.authorizationId);
+  });
+
   it("does not redeliver an authorization after its exact durable backlog entry was ACKed", async () => {
     const { ids, clock, host, state: initial } = await setupRoom();
     const admitted = await admitMember(initial, host, ids, clock);
@@ -2053,14 +2099,20 @@ describe("protocol-v4 bounded persistence", () => {
     const admissionId = setup.ids();
     const signaturePublicKey = setup.ids(32);
     const keyPackage = setup.ids(8);
-    const joined = accepted(await reduceSecureRelayV4(state, joining, {
-      kind: "join", requestId: admissionId, signaturePublicKey,
+    const join = {
+      kind: "join" as const, requestId: admissionId, signaturePublicKey,
       hello: hello(state.roomInstance, joining.deviceId, keyPackage),
       memberBinding: await memberBinding(
         "admission", state.roomInstance, joining.deviceId, admissionId,
         signaturePublicKey, keyPackage, setup.ids,
       ),
-    }, { now: tick(setup.clock), nextGrantTokenId: setup.ids() }));
+    };
+    const submit = (expectedHostId?: string) => reduceSecureRelayV4(state, joining, {
+      ...join, ...(expectedHostId === undefined ? {} : { expectedHostId }),
+    }, { now: tick(setup.clock), nextGrantTokenId: setup.ids() });
+    rejected(await submit(), "invitation-host-changed");
+    rejected(await submit(syntheticDeviceIds[0]), "invitation-host-changed");
+    const joined = accepted(await submit(admitted.guest.deviceId));
     const restored = importSecureRelayStateV4(exportSecureRelayStateV4(joined.state));
     expect(restored).not.toBeNull();
     expect(restored!.members.filter((member) => member.memberBinding.mode === "founder"))

@@ -71,8 +71,7 @@ socket. Only an `order-request` consumes the operation budget because every
 mutation-bearing MLS/application frame is causally preceded by one. Required
 delivery ACKs, host decisions, admission controls, and granted relay frames
 still consume the raw budgets, but are not charged a second time as initiated
-operations. This bounds abuse without disconnecting passive recipients merely
-for completing mandatory protocol fanout.
+operations. On authenticated rate-limit closure the participant waits out the five-second window and uses ordinary same-device recovery; it does not discard a pending ciphertext or start a new identity. In Saboteur, first-party participants submit automatic commitments and reveals in the signed roster order to avoid competing for the same grant. This scheduling choice is not a validity constraint on other implementations.
 
 Drawing producers have a bounded ordered queue of 32 pending batches, each at
 most 128 points, plus the existing single in-flight batch. Separate stroke starts
@@ -188,6 +187,8 @@ transcript that includes the mode, room, room instance, device, connection,
 request, challenge, and device public key. Challenges are random, expire, and
 are consumed by the authentication attempt. Setup establishes the room's
 invitation public key; later join attempts must verify under that stored key.
+
+After a handoff, an admitted member can export a new private link. Its fragment adds `host=<roomInstance>.<deviceId>.<signaturePublicKey>` (canonical unpadded base64url; 16, 16 and 32 bytes). The sharer reads the current host from settled signed room state and its credential from the MLS roster. Without this field a new join trusts only the invitation-authorized founder. With it the joiner retains the exact pin with its encrypted KeyPackage, still verifies the founder binding, and checks the pinned device and key against the Welcome roster and signed bootstrap sender. It never learns its trust anchor from the relay. The optional `join.expectedHostId` lets the relay refuse an obsolete link before Add (`invitation-host-changed`); it is a routing guard, not proof of authority. An existing admitted device resumes with its own identity, not a new invitation.
 
 The founder becomes the first active member. A later join follows this exact
 admission sequence:

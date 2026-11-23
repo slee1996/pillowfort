@@ -16,8 +16,11 @@ const pairs: [Engine, Engine][] = [
 ];
 const retoss = process.argv[4] === "retoss";
 const runs: object[] = [];
-const server = startLocalServer(0),
-  origin = `http://127.0.0.1:${server.port}`;
+const production = process.argv[5] === "--production";
+if (production && (process.argv[3] !== "chromium" || !retoss))
+  throw Error("Production smoke uses one Chromium/Firefox room with a manual handoff");
+const server = production ? null : startLocalServer(0);
+const origin = server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz";
 const messages = (p: Page, text: string) =>
   p.locator("#messages .chat-content").getByText(text, { exact: true });
 async function send(page: Page, text: string) {
@@ -55,6 +58,7 @@ try {
     guest.setDefaultTimeout(20_000);
     host.setDefaultNavigationTimeout(45_000);
     guest.setDefaultNavigationTimeout(45_000);
+    let newcomer: Page | undefined;
     const relayErrors: string[] = [];
     for (const [role, p] of [
       ["host", host],
@@ -234,10 +238,28 @@ try {
           await messages(guest, "handoff complete").first().waitFor();
         },
       );
-      await step("new host retires the room on both devices", async () => {
+      if (retoss && a === "chromium") await step("new host admits from a fresh member-exported link", async () => {
+        // The former host is still a member. Its share control must no longer designate itself.
+        await host.getByRole("button", { name: "Invite", exact: true }).click();
+        await host.locator("#btn-copy-invite").click();
+        await host.getByText("Link copied. Paste it in a message to your friend.").waitFor();
+        const shared = await host.evaluate(() => navigator.clipboard.readText());
+        assert(shared !== invite && new URL(shared).hash.includes("&host="));
+        await host.locator("#btn-close-invite").click();
+        newcomer = await (await hostBrowser.newContext()).newPage();
+        await newcomer.goto(shared, { waitUntil: "domcontentloaded" });
+        await newcomer.locator("#join-name").fill("Cedar");
+        await newcomer.locator("#btn-enter").click();
+        await guest.locator("#btn-approve-admission").click();
+        await untilVisible(newcomer, "#msg-input");
+        await send(newcomer, "new guest reached successor");
+        await messages(guest, "new guest reached successor").first().waitFor();
+        assert.equal(await messages(newcomer, "handoff complete").count(), 0);
+      });
+      await step("new host retires the room for all participants", async () => {
         await end(guest);
         await Promise.all(
-          [host, guest].map((p) => p.getByText("Fort has been knocked down.", { exact: true }).waitFor()),
+          (newcomer ? [host, guest, newcomer] : [host, guest]).map((p) => p.getByText("Fort has been knocked down.", { exact: true }).waitFor()),
         );
       });
     } catch (e) {
@@ -252,7 +274,7 @@ try {
     console.log(a, b, passed.length, errors);
   }
 } finally {
-  server.stop(true);
+  server?.stop(true);
   await writeFile(target, JSON.stringify(runs, null, 2) + "\n");
 }
 process.exit(!runs.length || runs.some((r) => (r as { errors: string[] }).errors.length) ? 1 : 0);

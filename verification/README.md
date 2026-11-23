@@ -3,6 +3,7 @@
 The executable models implement the M1–M4 planning decomposition. The source-grounded protocol contract is in `docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md`; the property-by-property coverage and exclusions are in `docs/PROTOCOL_V4_VERIFICATION_MATRIX.md`.
 
 - `M1Delivery.tla`: sender persistence, connection-bound grants, host preview readiness, delivery/result separation, replay and prefix ACKs.
+- `Reinvite.tla`: delayed receipt of a manual refusal versus the next offer, and independent invitation/roster/bootstrap checks after migration and reload. Three weakened guards must fail; an unweakened witness reaches active membership. It abstracts authenticated keys and storage, not the cryptography itself.
 - `M2Admission.tla`: host approval, Add/Welcome/bootstrap/proof/activation, partial-admission expiry, single-use KeyPackages and retained identity ambiguity.
 - `M3Resume.tla`: replay persistence, authenticated snapshot reconciliation and exact connection/request/terminator completion.
 - `M4Succession.tla`: internal join-order offers, explicit acceptance/refusal, old-host fencing, durable authority, former-host removal, successor policy refresh and safe termination without a new policy.

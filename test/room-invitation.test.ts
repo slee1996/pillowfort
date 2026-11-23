@@ -20,6 +20,15 @@ describe("fragment room invitations", () => {
     }
   });
 
+  test("carries the exact inviter-selected host in the fragment without changing the password", () => {
+    const hostPin = `${"A".repeat(22)}.${"B".repeat(21)}A.${"C".repeat(42)}A`;
+    const url = createRoomInvitationUrl(origin, roomId, generated, hostPin);
+    expect(parseRoomInvitationUrl(url, origin)).toEqual({ roomId, roomSecret: generated, hostPin });
+    expect(new URL(url).search).toBe("");
+    expect(parseRoomInvitationUrl(`${url}&host=${hostPin}`, origin)).toBeNull();
+    expect(parseRoomInvitationUrl(url.slice(0, -1), origin)).toBeNull();
+  });
+
   test("encodes custom delimiters and Unicode as one exact credential, never form-decodes plus", () => {
     const roomSecret = "Café +&=/%?# 漢字";
     const url = createRoomInvitationUrl(origin, "cozy-fort", roomSecret);

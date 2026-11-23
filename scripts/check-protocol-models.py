@@ -51,6 +51,10 @@ def main():
                  [(race, "None"), ("mutation-StaleClose", "StaleClose"),
                   ("mutation-RenewOffer", "RenewOffer"), ("mutation-EarlyCandidate", "EarlyCandidate")] +
                  [("witness-" + w, "None") for w in ("HostReturned", "GuestWon", "ReplayedOffer", "RefusalAdvanced")]]
+    witnesses["witness-ReinvitedGuest"] = "NoReinvitedGuest"
+    profiles += [(name, "Reinvite", 1, 2, mutation, None, None) for name, mutation in
+                 [("Reinvite", "None"), ("mutation-CancelNew", "CancelNew"), ("mutation-ReplacePin", "ReplacePin"),
+                  ("mutation-OtherSigner", "OtherSigner"), ("witness-ReinvitedGuest", "None")]]
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:

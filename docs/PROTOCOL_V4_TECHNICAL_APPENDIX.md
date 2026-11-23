@@ -107,6 +107,8 @@ The relay validates socket ownership, active membership, empty sender delivery b
 | Expiry/cancellation | Exact pending request at any phase | Never activate; post-Add cancellation schedules exact historical MLS removal |
 | Authentication transmission/reload | A frame may have committed remotely | Retain `authentication-ambiguous` identity; reconcile the same artifact, never silently replace it |
 
+After a handoff, an admitted member can export a new private link. Its fragment adds `host=<roomInstance>.<deviceId>.<signaturePublicKey>` (canonical unpadded base64url; 16, 16 and 32 bytes). The sharer reads the current host from settled signed room state and its credential from the MLS roster. Without this field a new join trusts only the invitation-authorized founder. With it the joiner retains the exact pin with its encrypted KeyPackage, still verifies the founder binding, and checks the pinned device and key against the Welcome roster and signed bootstrap sender. It never learns its trust anchor from the relay. The optional `join.expectedHostId` lets the relay refuse an obsolete link before Add (`invitation-host-changed`); it is a routing guard, not proof of authority. An existing admitted device resumes with its own identity, not a new invitation.
+
 The first-party host approval window is 180 seconds; relay admission expires at 185 seconds from joining. Delay consumes the five-second completion margin. Expiry does not authorize reuse of the old approval, fingerprint, KeyPackage, or invitation-bound request.
 
 ## E. M3 resume and peer disagreement
@@ -132,6 +134,8 @@ If one endpoint rejects an incoming commit, its engine restores its last valid c
 Storage failure during incoming commit processing likewise withholds acknowledgment and stops that receiver. A storage-failure experiment can establish isolation of that failed path, not agreement among arbitrary MLS forks. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
 
 ## F. M4 host transfer and public sidecars
+
+For a planned handoff, a refusal is an ordinary signed, encrypted `host-transfer` application event. Only after the outgoing host validates the target’s refusal may its authenticated `application-decision` carry `decision:"approve"` and `declinedAuthorizationId`. The relay consumes the matching outstanding manual offer in the same decision; it does not change authority. Duplicate decisions retain the original outcome and cannot cancel a later offer. A pending catch expires at the earlier of its normal decision deadline and the offer expiry; it cannot transfer authority after either. This receipt is not the signed succession response used after disconnection.
 
 ### F.1 Exact application content
 

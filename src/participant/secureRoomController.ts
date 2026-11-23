@@ -80,6 +80,8 @@ import {
   validateRoomSecret,
 } from "./roomSecret";
 
+import { createRoomInvitationUrl, parseInvitationHostPin } from "./roomInvitation";
+
 const UTF8 = new TextEncoder();
 const WEBSOCKET_OPEN = 1;
 const RECOVERY_SESSION_KEY = "pillowfort:secure-room-recovery:v1";
@@ -100,10 +102,11 @@ export const SECURE_PCS_UPDATE_INTERVAL_MS = 15 * 60_000;
 export type SecureRoomConnectResult =
   | { status: "connected"; roomInstance: string }
   | Exclude<RoomCryptoLockAcquireResult, { status: "acquired" }>
-  | { status: "failed"; reason: "invalid-input" | "authentication-failed" | "rate-limited" | "unavailable" | "recovery-required" | "recovery-credential-mismatch" | "socket-failed" | "aborted" };
+  | { status: "failed"; reason: "invalid-input" | "authentication-failed" | "invitation-host-changed" | "rate-limited" | "unavailable" | "recovery-required" | "recovery-credential-mismatch" | "socket-failed" | "aborted" };
 
 export interface SecureRoomStartOptions {
   roomId: string;
+  hostPin?: string;
   roomSecret: string;
   displayName: string;
   fortPassSessionId?: string;
@@ -118,6 +121,7 @@ interface SessionConfig {
   roomId: string;
   roomSecret: string;
   roomSecretResolvedFor: string | null;
+  hostPin?: string;
   displayName: string;
   fortPassSessionId?: string;
   fortPassClaimSecret?: string;
@@ -319,6 +323,7 @@ export class SecureRoomController {
   private resumeCompleteRequestId: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
+  private reconnectNotBefore = 0;
   private serialQueue: Promise<void> = Promise.resolve();
   private executingGeneration: number | null = null;
   private pendingHandshake: PendingHandshake | null = null;
@@ -369,6 +374,17 @@ export class SecureRoomController {
 
   get currentEngine(): SecureRoomEngine | null {
     return this.engine;
+  }
+
+  exportInvitationUrl(origin: string): string {
+    const { roomId, password } = this.store.getState();
+    if (!roomId || !password || !this.authenticated || this.replayingBacklog || this.terminal) {
+      throw new Error("wait for the room to finish connecting before sharing an invitation");
+    }
+    const pin = this.requireEngine().invitationHostPin();
+    const founder = this.founderBinding;
+    const isFounder = founder && pin === `${founder.roomInstance}.${founder.deviceId}.${founder.signaturePublicKey}`;
+    return createRoomInvitationUrl(origin, roomId, password, isFounder ? undefined : pin);
   }
 
   get pendingRecovery(): SecureRoomRecoveryHint | null {
@@ -548,6 +564,9 @@ export class SecureRoomController {
     const roomSecret = mode === "setup" && !exactRecovery && !isGeneratedRoomSecret(options.roomSecret)
       ? validateCustomRoomSecret(options.roomSecret, { context: [roomId || "", displayName] })
       : validateRoomSecret(options.roomSecret);
+    if (options.hostPin !== undefined && (mode !== "join" || !parseInvitationHostPin(options.hostPin))) {
+      return { status: "failed", reason: "invalid-input" };
+    }
     const hasFortPassSession = options.fortPassSessionId !== undefined;
     const hasFortPassClaim = options.fortPassClaimSecret !== undefined;
     if (!roomId || roomId !== options.roomId || !roomSecret.valid || !isSecureDisplayNameV4(displayName) ||
@@ -579,6 +598,7 @@ export class SecureRoomController {
       roomId,
       roomSecret: roomSecret.secret,
       roomSecretResolvedFor: null,
+      ...(options.hostPin !== undefined && { hostPin: options.hostPin }),
       displayName,
       ...(options.fortPassSessionId && { fortPassSessionId: options.fortPassSessionId }),
       ...(options.fortPassClaimSecret && { fortPassClaimSecret: options.fortPassClaimSecret }),
@@ -820,6 +840,7 @@ export class SecureRoomController {
     }
     const roomInstance = isBrandNewSetup ? config.setupRoomInstance : challenge.roomInstance;
     if (!roomInstance ||
+        (config.hostPin !== undefined && parseInvitationHostPin(config.hostPin)?.roomInstance !== roomInstance) ||
         (isBrandNewSetup && config.initialMode !== "setup") ||
         (this.engine !== null && this.engine.roomInstance !== roomInstance)) {
       await this.protocolClose("room instance mismatch");
@@ -1200,7 +1221,7 @@ export class SecureRoomController {
 
     let keyPackageEntry = this.retainedJoinAuthEntry();
     if (!keyPackageEntry) {
-      const created = await engine.createKeyPackage();
+      const created = await engine.createKeyPackage(mode === "join" ? config.hostPin : undefined);
       keyPackageEntry = engine.pendingOutbox.find(
         (entry): entry is Extract<SecureRoomPendingOutboxEntryV1, { kind: "admission" }> =>
           entry.kind === "admission" && entry.messageId === created.messageId && entry.welcomeMessageId === null,
@@ -1208,6 +1229,9 @@ export class SecureRoomController {
     }
     if (!keyPackageEntry || keyPackageEntry.kind !== "admission") {
       throw new Error("durable KeyPackage outbox entry is unavailable");
+    }
+    if (mode === "join" && config.hostPin !== undefined && keyPackageEntry.joinHostPin !== config.hostPin) {
+      throw new SecureRoomEngineError("unauthorized", "an invitation cannot replace the host selected for a pending admission");
     }
     const hello: SecureMemberHelloV4 = {
       v: 4,
@@ -1251,6 +1275,7 @@ export class SecureRoomController {
           kind: "secure-authenticate", v: 4, suite: 1, mode,
           frame: {
             kind: "join", requestId: keyPackageEntry.messageId,
+            ...(keyPackageEntry.joinHostPin && { expectedHostId: parseInvitationHostPin(keyPackageEntry.joinHostPin)!.deviceId }),
             signaturePublicKey: engine.signaturePublicKey, hello, memberBinding,
           }, auth,
         };
@@ -1365,21 +1390,16 @@ export class SecureRoomController {
       const localBinding = this.localMemberBinding;
       if (!config || !founderBinding || founderBinding.mode !== "founder" ||
           founderBinding.roomId !== config.roomId || founderBinding.roomInstance !== engine.roomInstance ||
-          !localBinding || localBinding.mode !== "admission" ||
-          !await verifyRoomInvitationMemberBindingWithSecretV4({
-            binding: founderBinding,
-            expected: founderBinding,
-            roomSecret: config.roomSecret,
-          })) {
+          !localBinding || localBinding.mode !== "admission") {
         await this.protocolClose("invalid founder member binding");
         handshake?.settle({ status: "failed", reason: "authentication-failed" });
         return;
       }
-      await engine.authorizeJoinFounder(config.roomId, founderBinding);
+      await engine.authorizeJoinHost(config.roomId, founderBinding);
       this.founderBinding = founderBinding;
       this.publishPendingJoinFingerprint(localBinding);
     } else {
-      this.founderBinding = null;
+      this.founderBinding = frame.mode === "setup" ? this.localMemberBinding : null;
       this.publishPendingJoinFingerprint(null);
     }
     const config = this.config;
@@ -1751,14 +1771,16 @@ export class SecureRoomController {
   ): Promise<void> {
     const payload = fromBase64Url(preview.frame.envelope.payload);
     let decision: "approve" | "reject" = "reject";
+    let declinedAuthorizationId: string | undefined;
     if (payload && this.isHost()) {
       try {
-        await this.requireEngine().inspectInboundApplication(
+        const inspection = await this.requireEngine().inspectInboundApplication(
           payload,
           preview.fromDeviceId,
           preview.logicalOrder,
           inboundRelayContext(preview.frame),
         );
+        declinedAuthorizationId = inspection.declinedAuthorizationId;
         decision = "approve";
       } catch {}
     }
@@ -1768,6 +1790,7 @@ export class SecureRoomController {
       requestId: randomSecureRoomIdV4(16),
       messageId: preview.frame.envelope.messageId,
       decision,
+      ...(declinedAuthorizationId !== undefined && { declinedAuthorizationId }),
     });
   }
 
@@ -3343,11 +3366,14 @@ export class SecureRoomController {
     }
 
     const saboteur = state.saboteur;
-    if (saboteur?.participantDeviceIds.includes(engine.deviceId)) {
-      const ownCommitment = saboteur.commitments.some((entry) => entry.deviceId === engine.deviceId);
-      const ownReveal = saboteur.reveals.some((entry) => entry.deviceId === engine.deviceId);
+    if (saboteur && (saboteur.phase === "committing" || saboteur.phase === "revealing")) {
+      // Everyone must contribute; concurrent requests only compete for the same
+      // single grant and are cancelled on each delivery. Use the signed roster
+      // order for local scheduling, not as a new validity rule for other clients.
+      const submitted = saboteur.phase === "committing" ? saboteur.commitments : saboteur.reveals;
+      const next = saboteur.participantDeviceIds.find(id => !submitted.some(entry => entry.deviceId === id));
       let secret = engine.pendingCommitSecret(saboteur.gameId);
-      if (saboteur.phase === "committing" && !ownCommitment) {
+      if (next === engine.deviceId && saboteur.phase === "committing") {
         if (!secret) {
           const nonce = randomSecureRoomIdV4(32);
           const commitment = await computeSaboteurCommitmentV4(saboteur.gameId, engine.deviceId, nonce);
@@ -3368,7 +3394,7 @@ export class SecureRoomController {
             },
           }, true);
         }
-      } else if (saboteur.phase === "revealing" && !ownReveal && secret?.kind === "saboteur") {
+      } else if (next === engine.deviceId && saboteur.phase === "revealing" && secret?.kind === "saboteur") {
         this.enqueueApplication({
           type: "saboteur", action: "entropy-reveal", gameId: saboteur.gameId, nonce: secret.nonce,
         }, `sab-reveal:${saboteur.gameId}`, true);
@@ -3532,7 +3558,8 @@ export class SecureRoomController {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.stopped || this.terminal || !this.config || !this.lease?.isActive()) return;
-    const delay = Math.min(RECONNECT_MAX_DELAY_MS, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5));
+    const delay = Math.max(this.reconnectNotBefore - Date.now(),
+      Math.min(RECONNECT_MAX_DELAY_MS, 1_000 * 2 ** Math.min(this.reconnectAttempts, 5)));
     this.reconnectAttempts += 1;
     const store = this.store.getState();
     store.setReconnecting(true);
@@ -3895,7 +3922,9 @@ export class SecureRoomController {
       const preserveRecovery = !retiredFreshState && !!engine?.isAuthenticationAmbiguous;
       this.discardEngineOnAuthenticationFailure = false;
       this.authenticationMayHaveCommitted = false;
-      const failure = frame.code === "rate-limited"
+      const failure = frame.code === "invitation-host-changed"
+        ? { reason: "invitation-host-changed" as const, message: "The host has changed. Ask someone in the fort to copy a fresh invite link." }
+        : frame.code === "rate-limited"
         ? {
             reason: "rate-limited" as const,
             message: "Too many secure-room attempts. Wait a minute, then try again.",
@@ -3926,6 +3955,12 @@ export class SecureRoomController {
     }
     if (frame.code === "fresh-admission-required") {
       await this.finishTerminal("admission-required", "This admission ended. A fresh secure admission is required.");
+      return;
+    }
+    if (frame.code === "rate-limited") {
+      // Both relays close the socket. Respect the entire traffic window; the
+      // normal close handler then replays the SAME device, including its outbox.
+      this.reconnectNotBefore = Date.now() + 5_000;
       return;
     }
     if (frame.code === "delivery-pending" || frame.code === "removal-pending" ||
