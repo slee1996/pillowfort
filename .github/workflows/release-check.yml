@@ -71,6 +71,23 @@ jobs:
       - name: Verify consent, fresh admission and repeated resume across four host tenures
         run: bun scripts/protocol-browser-evidence.ts --mode faults --fault changing-tenures --output "$RUNNER_TEMP/pillowfort-changing-tenures"
 
+      - name: Verify a returning guest across two transfers and Worker eviction
+        run: node scripts/protocol-workerd-evidence.mjs offline-two-transfers "$RUNNER_TEMP/pillowfort-offline-two-transfers"
+
+      - name: Check the independent sleep recorder without suspending a machine
+        run: |
+          python3 -B test/physical-sleep-observations.py
+          node scripts/protocol-workerd-evidence.mjs sleep-awake-control "$RUNNER_TEMP/pillowfort-awake-control"
+      - name: Retain only sanitized results from the two private rooms
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-replay-and-awake-control
+          path: |
+            ${{ runner.temp }}/pillowfort-offline-two-transfers/browser-results.json
+            ${{ runner.temp }}/pillowfort-offline-two-transfers/eviction.json
+            ${{ runner.temp }}/pillowfort-awake-control/browser-results.json
+            ${{ runner.temp }}/pillowfort-awake-control/relay-observations.json
+
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 
@@ -141,6 +158,23 @@ jobs:
           npm audit --package-lock-only --audit-level=moderate
           npm --prefix client audit --package-lock-only --audit-level=moderate
           npm --prefix hosted-mcp audit --package-lock-only --audit-level=moderate
+      - name: Audit the shipped Rust lockfile against current RustSec advisories
+        id: rustsec
+        run: |
+          archive=cargo-audit-x86_64-unknown-linux-gnu-v0.22.2
+          curl --fail --location --silent --show-error -H 'Accept: application/octet-stream' \
+            https://api.github.com/repos/rustsec/rustsec/releases/assets/439291614 -o "$RUNNER_TEMP/$archive.tgz"
+          echo "ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39  $RUNNER_TEMP/$archive.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive.tgz" -C "$RUNNER_TEMP" "$archive/cargo-audit"
+          # Pin the scanner, not the advisory database. Preserve its revision and failing exit status.
+          set -o pipefail
+          "$RUNNER_TEMP/$archive/cargo-audit" audit --file crypto/openmls-wasm/Cargo.lock --json | tee "$RUNNER_TEMP/pillowfort-rustsec.json" | jq '{database,lockfile,vulnerabilities,warnings}'
+      - name: Retain the Rust advisory database revision and findings
+        if: ${{ !cancelled() && steps.rustsec.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustsec-locked-provider
+          path: ${{ runner.temp }}/pillowfort-rustsec.json
       - name: Verify the pinned native provider against RFC 9180
         run: |
           rustup toolchain install 1.94.1 --profile minimal

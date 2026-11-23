@@ -45,6 +45,30 @@ node scripts/check-protocol-boundaries.mjs /tmp/pf-boundaries
 
 For the private timing study, build the production client, then run `python3 scripts/measure-premature-succession.py /tmp/pillowfort-study` (a fresh output directory, Bun and Playwright Chromium; the process-suspension arm uses POSIX signals). The relay, stopwatch and two observers remain running. `--subset absence` selects the still-absent host comparison. A 30-second extension exists only in the counterfactual Worker fixture. The timed interruption begins at the first fresh challenge after setup. No clock is advanced. A stopped Chromium process set is not a physical sleeping laptop. Never suspend a shared test host.
 
+### Separating physical sleep from browser suspension
+
+The hardware recorder never puts a machine to sleep. The presenter needs a **dedicated Mac laptop**, a stock browser on that laptop, and an awake observer machine running the private Worker and two separate Chromium profiles. Do not use the observer machine or a shared service host as the sleeping device. The laptop must already allow key-only SSH for reading its clock and macOS power events (`pmset -g log`); the tool does not change power, networking or SSH settings. Build the production client and install its locked Playwright Chromium first.
+
+Check the apparatus without claiming a hardware result:
+
+```sh
+python3 -B test/physical-sleep-observations.py
+node scripts/protocol-workerd-evidence.mjs sleep-awake-control /tmp/pf-awake-control
+```
+
+For a real trial, start this **on the awake machine**, in a graphical session, with a new output path:
+
+```sh
+python3 scripts/measure-laptop-sleep.py --dedicated-mac operator@dedicated-mac --transport ssh-loopback /tmp/pf-hardware-1
+```
+
+1. The recorder prints a private loopback relay address and opens the founder’s browser. Make that same relay reachable on the dedicated laptop. For an authorized temporary SSH path, run `ssh -N -o ExitOnForwardFailure=yes -R 127.0.0.1:PORT:127.0.0.1:PORT operator@dedicated-mac` from the awake machine, replacing both `PORT`s with the printed port. Stop this forward after the trial. A sleep can break the SSH connection itself; its result is about that transport. If an operator-controlled private HTTPS ingress already routes to this fixture, select `--transport private-https` and use its origin for the invite, retaining the same path and fragment. Do not target a public deployment.
+2. On the awake founder’s **Invite** screen, copy the private link to the laptop out of band. Join there as **Sleep Study Host**. On the founder, dismiss the invite dialog and approve the expected device request; on the laptop, explicitly choose **Catch** for the planned handoff. The recorder arms only after the new host’s policy covers both awake guests, its original connection has answered a real challenge, and ordinary encrypted chat has reached a guest. No invite or fingerprint belongs in the results.
+3. At **ARMED**, manually sleep and fully wake **only the dedicated laptop**. Wake early enough in the 90-second window for ordinary traffic to resume. The candidate clicks Catch on the first visible authorized offer under the experiment’s consent policy. The other observer submits a new marker about every 1.5 seconds; only display at the candidate counts. The relay records original-socket close/error, committed loss, and probe replies separately.
+4. `physical-result.json` requires an OS Sleep and a full Wake in the measurement window. It excludes messages submitted before the latest possible wake and reports a **range** for the first definitely post-wake message, accounting for whole-second power logs and before/after SSH clock uncertainty. A DarkWake alone or an ambiguous interval is not a physical result. If full wake is verified but no new message arrives, the report preserves the offers, observation window and submission count; latency stays null and the command exits nonzero. Successful recorder JSON contains no invitation, message text or participant identifiers.
+
+To study unnecessary offers, run matched trials on the **same host and network path**, alternately omitting and specifying `--extra-final-wait-ms 30000`, with comparable actual sleep durations. Compare offers, whether the original socket answered after wake, and time to an ordinary receiver observation. A single offer, an awake control or a forwarded path does not establish a physical false-offer rate. The extra deadline affects only the private comparison fixture.
+
 To check just the cross-host resume:
 
 ```sh
@@ -91,5 +115,9 @@ Normal TLC configurations use up to two operation/KeyPackage tokens, backlog cap
 The `guest-backpressure` cut intercepts one ordinary guest ACK on loopback, not a flood. It emulates the relay’s limit response and close, waits for authenticated recovery, and checks that the exact original device can exchange fresh chat without displaying the replayed delivery twice. It is never enabled in production.
 
 To exercise admission and resume inside a *chain* of host losses, build the release client and run `bun scripts/protocol-browser-evidence.ts --mode faults --fault changing-tenures --output /tmp/pillowfort-changing-tenures`. The same room must advance through four holders by signed choice, admit a fifth device using a successor-pinned invite, resume that device four times with bidirectional encrypted traffic after every matching receipt, and finish with both remaining participants observing closure. It runs on loopback; no production fault injection.
+
+`node scripts/protocol-workerd-evidence.mjs offline-two-transfers /tmp/pillowfort-offline-two-transfers` keeps an enrolled guest offline through two signed authority changes. After the first successor commits its own policy, the test evicts the actual local Durable Object with sockets hibernated. A different instance must restore that policy. Both instances record the guest disconnected at their respective switches. On its original identity, the guest must replay both exact signed acceptances before the final roster and host snapshot; while its genuine completion ACK is held, a draft must remain local. After that ACK, explicit resubmission must reach the new host once. The release workflow retains the Worker and browser records separately.
+
+The release dependency gate also scans `crypto/openmls-wasm/Cargo.lock` with digest-pinned `cargo-audit` 0.22.2 against the then-current RustSec database. The uploaded JSON records the database commit; it is not a source or cryptographic audit.
 
 The relay regressions and actual browser fault script are separate evidence. Run their documented commands rather than inferring an implementation pass from TLC results.

@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page, type WebSocket as BrowserSocket } from "playwright";
 import { prematureSuccession } from "./premature-succession";
+import { observeLaptopSleep } from "./physical-sleep-observers";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, connect, type Socket } from "node:net";
 import { resolve } from "node:path";
@@ -21,7 +22,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness", "succession-during-leave", "changing-tenures"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness", "succession-during-leave", "changing-tenures", "offline-two-transfers", "sleep-awake-control", "physical-sleep"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -38,11 +39,11 @@ const report: Record<string, unknown> = {
 };
 const staged = process.env.PILLOWFORT_QUALIFICATION_ORIGIN;
 if (staged && (live || !process.send || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
-type FixtureReceipt = { detectedAt: number } | { offer: NonNullable<SecureRelayStateV4["pendingHostTransfer"]> };
+type FixtureReceipt = { studyPolicy: string } | { checkpoint: { host: string; policy: string } } | { detectedAt: number } | { offer: NonNullable<SecureRelayStateV4["pendingHostTransfer"]> };
 const fixtureReceipt = staged ? new Promise<FixtureReceipt>(resolve => {
   process.once("message", message => resolve(message as FixtureReceipt));
 }) : null;
-if (selectedFault === "premature-succession" && !staged) throw Error("Use the private workerd runner for transient-path trials");
+if (["premature-succession", "offline-two-transfers", "physical-sleep", "sleep-awake-control"].includes(selectedFault ?? "") && !staged) throw Error("Use the private workerd runner");
 const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "idle-retirement", "idle-retirement-prefix"] as const;
 type WorkerCut = typeof workerCuts[number];
 const workerCut = workerCuts.find(cut => cut === selectedFault);
@@ -526,13 +527,72 @@ async function plannedThenUnplanned(browser: Browser) {
   } finally { await closeRoom(room); }
 }
 
+type AcceptedTransfer = { signer: string; event: string; policy: string; authorization: string };
+
+// This guest was absent for both acceptances and both former-host removals. Observe
+// its own replay (not the live holders' views) and delay only its genuine completion ACK.
+async function replayAcrossTransfers(room: RoomEvidence, devices: string[], chain: AcceptedTransfer[]) {
+  const guest = room.participants[3].page, host = room.participants[2].page;
+  const held = Promise.withResolvers<() => void>();
+  const replayed: AcceptedTransfer[] = [], errors: string[] = [];
+  let authenticated = 0, snapshots = 0, end = "", completion = "", released = false, earlyApplications = 0;
+  await guest.routeWebSocket("**", client => {
+    const worker = client.connectToServer();
+    client.onMessage(raw => {
+      const f = JSON.parse(raw.toString());
+      if (f.kind === "resume-complete") {
+        if (authenticated !== 1 || snapshots !== 1 || !end || end !== f.lastMessageId || completion) errors.push("wrong replay completion");
+        completion = f.requestId;
+      }
+      if (f.kind === "relay" && f.relayKind === "application" && !released) earlyApplications++;
+      worker.send(raw);
+    });
+    worker.onMessage(raw => {
+      const f = JSON.parse(raw.toString()), a = f.frame?.authorityEvent;
+      if (f.type === "authenticated") {
+        authenticated++;
+        if (f.mode !== "resume" || f.deviceId !== devices[3]) errors.push("replacement identity or new admission");
+      }
+      if (f.type === "relay" && a?.content.type === "host-succession" && a.content.action === "accept") {
+        if (authenticated !== 1 || snapshots) errors.push("authority outside ordered replay");
+        replayed.push({signer:a.deviceId, event:a.eventId, policy:a.content.policyEventId, authorization:a.content.authorizationId});
+      }
+      if (f.type === "room-state-snapshot") {
+        snapshots++;
+        if (replayed.length !== chain.length || !chain.every((h,i)=>h.signer === replayed[i].signer && h.event === replayed[i].event &&
+            h.policy === replayed[i].policy && h.authorization === replayed[i].authorization) || f.hostDeviceId !== devices[2] || f.pendingHostTransfer !== null ||
+            f.members.length !== 2 || ![2,3].every(i=>f.members.some((m:{deviceId:string;status:string})=>m.deviceId===devices[i] && m.status==="active"))) errors.push("snapshot without both accepted transfers and final roster");
+      }
+      if (f.type === "backlog-end") { if (snapshots !== 1) errors.push("end before snapshot"); end = f.lastMessageId; }
+      if (completion && f.type === "frame-accepted" && f.messageId === completion && !released) {
+        held.resolve(() => { released = true; client.send(raw); }); return;
+      }
+      client.send(raw);
+    });
+  });
+  await reopen(room, 3);
+  const release = await awaitBoundary(held.promise, "returning guest's matching receipt after two signed transfers");
+  await deliver(host, guest, "new host to returning guest before receipt release");
+  const draft = "same device after two host changes", input = guest.getByRole("textbox", { name:"Message", exact:true });
+  const copies = host.locator(".chat-content").getByText(draft, {exact:true});
+  await input.fill(draft); await input.press("Enter");
+  await guest.getByText("The secure room is reconnecting. Try again in a moment.", {exact:true}).first().waitFor();
+  if (earlyApplications || await copies.count() || await input.inputValue() !== draft) errors.push("ordinary send before current receipt");
+  release();
+  await deliver(host, guest, "fresh encrypted reply after current receipt");
+  await input.press("Enter"); await copies.first().waitFor();
+  if (await copies.count() !== 1 || await input.inputValue() !== "" || errors.length) throw Error(`Two-tenure recovery failed: ${errors.join("; ")}`);
+  return {sameDeviceResume:true, replayedExactAcceptances:replayed.length, finalRosterVerified:true, earlyApplications,
+    blockedDraftRetained:true, peerCopiesAfterMatchingReceipt:await copies.count(), deliveredBothDirections:true};
+}
+
 // One private room, not a sequence of independent happy paths: new admission,
 // three authority tenures, four replays of the same late guest, and retirement.
-async function changingTenures(browser: Browser) {
+async function changingTenures(browser: Browser, fault: "changing-tenures" | "offline-two-transfers") {
   type Policy = { id: string; list: string[] };
   const devices: string[] = [], policies = new Map<number, Policy[]>();
   const offers = new Map<string, { owner: number; policy: string }>();
-  const choices = new Map<string, { owner: number; policy: string; action: string }>();
+  const choices = new Map<string, { owner: number; policy: string; action: string; signer: string; event: string }>();
   const receipts = new Set<string>(), violations: string[] = [], waiters = new Set<() => void>();
   async function observed<T>(read: () => T | undefined, boundary: string): Promise<T> {
     const answer = Promise.withResolvers<T>();
@@ -547,7 +607,7 @@ async function changingTenures(browser: Browser) {
       socket.on("framesent", ({payload}) => {
         const f = JSON.parse(payload.toString()), content = f.authorityEvent?.content;
         if (content?.type === "host-succession-policy") proposed.set(f.envelope.messageId, { id: f.authorityEvent.eventId, list: content.deviceIds });
-        if (content?.type === "host-succession") choices.set(content.authorizationId, {owner:index, policy:content.policyEventId, action:content.action});
+        if (content?.type === "host-succession") choices.set(content.authorizationId, {owner:index, policy:content.policyEventId, action:content.action, signer:f.authorityEvent.deviceId, event:f.authorityEvent.eventId});
         if (index === 4 && f.kind === "resume-complete") {
           if (!resume || !snapshot || !end || f.lastMessageId !== end) violations.push("resume submitted before its own replay boundary");
           completion = f.requestId;
@@ -585,8 +645,9 @@ async function changingTenures(browser: Browser) {
     if (offers.get(token)?.owner !== next || choices.has(token)) throw Error("an offer targeted the wrong member or was answered before a choice");
     await participants[next].page.locator("#btn-catch").click();
     const signed = await observed(() => choices.get(token), "signed consent to that exact offer");
-    if (signed.action !== "accept" || signed.owner !== next || signed.policy !== policy.id) throw Error("consent binding changed");
+    if (signed.action !== "accept" || signed.owner !== next || signed.signer !== devices[next] || signed.policy !== policy.id) throw Error("consent binding changed");
     await currentPolicy(next, eligible.filter(i => i !== next));
+    return {signer:signed.signer, event:signed.event, policy:policy.id, authorization:token};
   }
   let observerInvite = "";
   async function recover(holder: number) {
@@ -600,6 +661,20 @@ async function changingTenures(browser: Browser) {
     await deliver(participants[holder].page, guest, `observed reply ${prior + 1}`);
   }
   try {
+    if (fault === "offline-two-transfers") {
+      const guest = participants[3].page;
+      await deliver(guest, participants[0].page, "observer present under founder");
+      await guest.goto("about:blank"); // Keep original IndexedDB, but no participant processing either handoff.
+      const first = await handoff(0,1,[1,2,3]);
+      const policy = await currentPolicy(1,[2,3]);
+      const receipt = await awaitBoundary(fixtureReceipt!, "real Worker eviction between the two signed transfers");
+      if (!("checkpoint" in receipt) || receipt.checkpoint.host !== devices[1] || receipt.checkpoint.policy !== policy.id) throw Error("Eviction identified a different tenure");
+      await deliver(participants[1].page, participants[2].page, "first successor still validates after Worker restart");
+      const second = await handoff(1,2,[2,3]);
+      const recovered = await replayAcrossTransfers(room, devices, [first, second]);
+      if (choices.size !== 2 || violations.length) throw Error("Unexpected consent count or changed device identity");
+      return {fault, explicitChoices:choices.size, observerOfflineDuringBoth:true, ...recovered};
+    }
     await handoff(0, 1, [1,2,3]);
     const host = participants[1].page;
     await host.getByRole("button", { name:"Invite", exact:true }).click(); await host.locator("#btn-copy-invite").click();
@@ -1301,7 +1376,7 @@ async function peerStorageFailure(browser: Browser) {
 }
 
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: selectedFault !== "physical-sleep" });
   report.environment = { ...(report.environment as object), chromium: browser.version() };
   if (mode !== "faults") {
     for (const [members, delay] of [[2, 0], [3, 0], [3, 100], [6, 0]]) {
@@ -1330,11 +1405,13 @@ try {
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
     if (selectedFault === "manual-offer-readiness") results.push(await manualOfferReadiness(browser!));
-    if (selectedFault === "changing-tenures") results.push(await changingTenures(browser!));
+    if (selectedFault === "changing-tenures" || selectedFault === "offline-two-transfers") results.push(await changingTenures(browser!, selectedFault));
     if (selectedFault === "succession-during-leave") results.push(await successionDuringLeave(browser!));
     if (selectedFault === "terminal-storage") results.push(await retirementStorage(browser!));
     if (selectedFault === "premature-succession") results.push(await prematureSuccession(origin, (host, configure, gateway) =>
       setupRoom(browser!, 3, configure, gateway, 250, undefined, host), closeRoom, deliver));
+    if (selectedFault === "physical-sleep" || selectedFault === "sleep-awake-control") results.push(await observeLaptopSleep(selectedFault, origin,
+      observe => setupRoom(browser!, 2, observe), closeRoom, () => newParticipant(browser!), fixtureReceipt!, deliver));
     if (selectedFault === "natural-idle") results.push(await idleRetirement(browser!, selectedFault));
     if (workerCut === "idle-retirement" || workerCut === "idle-retirement-prefix") results.push(await idleRetirement(browser!, workerCut));
     else if (workerCut) results.push(await workerdHandoff(browser!, workerCut));

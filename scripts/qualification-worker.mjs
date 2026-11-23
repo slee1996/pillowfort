@@ -17,10 +17,25 @@ export class Room extends ProductionRoom {
   }
   // Paired counterfactual only: keep the same host, nonce and socket, but give a late reply
   // another 30 s after the retry. Never used in the deployed Worker or the treatment runs.
+  get sleepStudy() { return this.env.CUT === "physical-sleep" || this.env.CUT === "sleep-awake-control"; }
+  power(event, details = {}) { this.report({kind:"power-observation", event, at:Date.now(), ...details}); }
+  originalSocket(ws) { return this.studySubject && this.att(ws).secureConnectionId === this.studySubject.connection; }
+  async webSocketClose(ws, ...rest) {
+    if (this.originalSocket(ws)) this.power("original-socket-close-observed");
+    return super.webSocketClose(ws, ...rest);
+  }
+  async webSocketError(ws, ...rest) {
+    if (this.originalSocket(ws)) this.power("original-socket-error-observed");
+    return super.webSocketError(ws, ...rest);
+  }
   async persistHostPath(next) {
-    if (this.env.CUT === "premature-succession" && this.env.STUDY_EXTRA_MS === "30000" &&
-        this.hostPath?.phase === "retry" && next?.phase === "expire") next = { ...next, dueAt: next.dueAt + 30_000 };
-    return super.persistHostPath(next);
+    const prior = this.hostPath;
+    if ((this.env.CUT === "premature-succession" || this.sleepStudy) && this.env.STUDY_EXTRA_MS === "30000" &&
+        prior?.phase === "retry" && next?.phase === "expire") next = { ...next, dueAt: next.dueAt + 30_000 };
+    await super.persistHostPath(next);
+    if (this.studySubject && prior?.nonce && next?.phase === "quiet" && next.connectionId === this.studySubject.connection) {
+      this.power("original-probe-reply-committed");
+    }
   }
   get idleCut() { return this.env.CUT === "idle-retirement" || this.env.CUT === "idle-retirement-prefix"; }
   async webSocketMessage(ws, message) {
@@ -34,6 +49,7 @@ export class Room extends ProductionRoom {
     });
   }
   sendSecure(ws, frame) {
+    if (frame.type === "host-path-probe" && this.originalSocket(ws)) this.power("original-probe-send-attempt");
     if (this.idleCut && frame.type === "room-retired") {
       if (this.armed) {
         const sent = this.sentBeforeCut ?? 0;
@@ -61,6 +77,30 @@ export class Room extends ProductionRoom {
       return;
     }
     super.dispatchSecureEffects(effects);
+    if (this.sleepStudy && !this.studySubject) {
+      const s = this.secureRelayState, policy = s.hostSuccession?.event;
+      const h = s.members.find(m=>m.deviceId === s.hostDeviceId);
+      const guests = s.members.filter(m=>m.deviceId !== s.hostDeviceId && m.status === "active" && m.connectionId);
+      if (h?.joinedOrder === 3 && h.connectionId && policy?.deviceId === h.deviceId && policy.content.type === "host-succession-policy" &&
+          guests.length === 2 && policy.content.deviceIds.length === 2 && guests.every(m=>policy.content.deviceIds.includes(m.deviceId))) {
+        this.studySubject = {connection:h.connectionId}; this.power("policy-ready", {policy:policy.eventId});
+      }
+    }
+    if (this.env.CUT === "offline-two-transfers" && effects.some(e=>e.type === "host-changed")) {
+      const s = this.secureRelayState, returning = s.members.find(m=>m.joinedOrder === 4);
+      this.report({kind:"switch", holderRank:s.members.find(m=>m.deviceId === s.hostDeviceId)?.joinedOrder,
+        observerDisconnected:returning?.status === "disconnected" && returning.connectionId === null});
+    }
+    if (this.env.CUT === "offline-two-transfers" && !this.reportedTenure) {
+      const s = this.secureRelayState, policy = s?.hostSuccession?.event;
+      // Report from each instance independently; never hold back a real effect.
+      if (policy?.deviceId === s?.hostDeviceId && policy?.content.type === "host-succession-policy" &&
+          policy.content.deviceIds.length === 2 && s.members.find(m => m.deviceId === s.hostDeviceId)?.joinedOrder === 2 &&
+          !s.pendingZombieRemovals.length && !s.pendingHostTransfer) {
+        this.reportedTenure = true;
+        this.report({ kind: "cut", checkpoint: { host: s.hostDeviceId, policy: policy.eventId, revision: s.revision } });
+      }
+    }
   }
   async commitSecureDisconnect(actor, ws) {
     const host = this.secureRelayState?.members.find(m => m.deviceId === this.secureRelayState.hostDeviceId);
@@ -68,6 +108,7 @@ export class Room extends ProductionRoom {
     const at = Date.now();
     const committed = await super.commitSecureDisconnect(actor, ws);
     if (committed && tracked && !this.secureRelayState?.members.some(m => m.deviceId === actor.deviceId && m.connectionId === actor.connectionId)) {
+      if (this.studySubject?.connection === actor.connectionId) this.power("relay-committed-original-disconnect");
       this.report({ kind: "detected", at });
     }
     return committed;
