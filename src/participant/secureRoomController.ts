@@ -1729,15 +1729,14 @@ export class SecureRoomController {
       this.ackDurableDelivery(envelope.messageId);
       await this.afterAppliedState(result.state, result.effects);
     } else {
-      if (delivery.frame.relayKind === "commit" && relayContext.kind === "commit" &&
-          relayContext.retirementDeviceId !== undefined &&
-          !engine.roster().some((entry) => entry.deviceId === relayContext.retirementDeviceId)) {
-        const replayedBarrier = {
-          deviceId: relayContext.retirementDeviceId,
-          admissionCommitMessageId: relayContext.retirementAdmissionCommitMessageId!,
-        };
-        engine.resolveRetirementBarrier(replayedBarrier);
-        this.consumeRetirementBarrier(replayedBarrier);
+      // A peer that applied the Remove before losing its ACK has no marker
+      // left to consume. receive() has already matched the full delivery digest.
+      const barrier = this.currentRetirementBarrier();
+      if (barrier && relayContext.kind === "commit" && relayContext.retirementDeviceId === barrier.deviceId &&
+          relayContext.retirementAdmissionCommitMessageId === barrier.admissionCommitMessageId &&
+          !engine.roster().some(entry => entry.deviceId === barrier.deviceId)) {
+        engine.resolveRetirementBarrier(barrier);
+        this.consumeRetirementBarrier(barrier);
       }
       this.ackDurableDelivery(envelope.messageId);
     }
