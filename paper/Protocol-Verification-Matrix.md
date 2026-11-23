@@ -1,6 +1,6 @@
-# Protocol v4-CS1 verification matrix — evidence edition 6
+# Protocol v4-CS1 verification matrix — evidence edition 7
 
-Current implementation: [`1ba68f236163`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). This matrix maps the plan to evidence, not complete verification. The manifest identifies each execution and its revision. Earlier latency, browser faults and the production shutdown check retain their original attribution.
+Immediate-offer relay: [`0df3215d9813`](https://github.com/slee1996/pillowfort/tree/0df3215d98139861831c6e3f68eb0b0997c584ad). Earlier model and recovery revision: [`1ba68f236163`](https://github.com/slee1996/pillowfort/tree/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b). This matrix maps the plan to evidence, not complete verification. The manifest identifies each execution and its revision. Earlier latency, browser faults and the production shutdown check retain their original attribution.
 
 | Plan obligation | Model coverage | Concrete implementation evidence | Explicit exclusion |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Current implementation: [`1ba68f236163`](https://github.com/slee1996/pillowfort/
 | M4.3 Persisted switch | M4 separate authority commit/removal actions | Relay recipient-overflow regression; lost-result crash-boundary test | Runtime storage implementation not refined to TLA+ |
 | M4.4 Mode-specific removal | M4 exact abstract removal steps | Engine signed leave/Remove tests and relay former-host removal lifecycle | Model omits MLS tree internals |
 | M4.5 Reconcile views | Focused M3×M4 safety check and reachable completed guest resume under the successor | `guest-resume-after-succession` checks same-device replay and encrypted delivery in both directions; separate successor crash regressions cover the candidate | One handoff; authority is checked at activation, not simultaneously at every peer |
-| M4.6 Join-order priority | M4 earliest eligible unattempted member | Relay disconnected-member skip, expired offer advance, refusal progression | A dishonest relay can lie about eligibility/connectivity |
+| M4.6 Join-order priority | M4 earliest eligible unattempted member | Relay regressions: first offer on socket loss or eligible resume completion; skip disconnected members; expiry and refusal advance the offer | A dishonest relay can lie about eligibility/connectivity |
 | M4.7 Tenure binding | M4 invalidates policy on switch, refreshes only under current host | Prior-policy reducer rejection; three permanent-successor-loss cases retire without old delegation | No automatic second handoff before a new policy is accepted |
 | M4.8 Barrier completion | Abstract remove-store/ACK/completion ordering only | Two queued targets: duplicate former-host retirement after relay restart cannot release the next target; engine retirement control/replayed marker tests | Concrete duplicate lifecycle signals are not exhaustively modeled |
 | Composition | Staged M1→M1+M2→M1+M2+M3→M1–M4 send guards; Interlock mutant must fail | Existing admission/removal/host-transfer barriers and full project gate | 12/16-step bounded prefixes; no refinement, deadlock-freedom or liveness proof |

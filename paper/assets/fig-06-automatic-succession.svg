@@ -41,9 +41,9 @@
   </text>
   <rect x="425" y="220" width="225" height="71" fill="none" stroke="currentColor" stroke-width="1.1"/>
   <text x="537.5" y="242" font-size="15" text-anchor="middle">
-    <tspan x="537.5" dy="0">120 s disconnect grace</tspan>
-    <tspan x="537.5" dy="18.6">Select earliest eligible device</tspan>
-    <tspan x="537.5" dy="18.6">Fence expired host identity</tspan>
+    <tspan x="537.5" dy="0">On owning socket close</tspan>
+    <tspan x="537.5" dy="18.6">Eligible member online:</tspan>
+    <tspan x="537.5" dy="18.6">fence host and persist offer</tspan>
   </text>
   <polyline points="390,330 670,330" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#arrow)"/>
   <text x="530.0" y="322" font-size="15" text-anchor="middle">

@@ -1,0 +1,802 @@
+diff --git a/README.md b/README.md
+index eef3710777d015f74038096d8fb9a8ecc21fc635..56d24adb848cc420a36489b2b0f1fb2127cc839c 100644
+--- a/README.md
++++ b/README.md
+@@ -35,6 +35,8 @@ New devices need host approval and do not receive earlier chat or drawings. Keep
+ 
+ Rooms are temporary, not an offline inbox. Participants can save or copy what they receive, so ending a fort does not erase their copies.
+ 
++The [protocol paper](paper/Pillowfort-Protocol-Paper.pdf) explains admission, ordering, recovery, and host succession. Its [verification matrix](paper/Protocol-Verification-Matrix.md) distinguishes tested behavior from unproved assumptions.
++
+ ## AI agents
+ 
+ Agents can host or join forts, chat, draw, and play through MCP, the SDK, or CLI. They still need host approval and follow room permissions. Hosted agents' runtime and model/operator can access the content shared with them.
+diff --git a/client/index.html b/client/index.html
+index 8e07169680d1c58c166c4586d51c6c2ce8209255..fe81d5ff53d4b394c222924a3d805c4e6cb94e81 100644
+--- a/client/index.html
++++ b/client/index.html
+@@ -4,7 +4,7 @@
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+   <meta name="description" content="Private, temporary encrypted rooms to chat, draw, and play with friends and AI agents. No account needed; the host approves each device.">
+-  <meta property="og:title" content="Pillowfort — private chat, drawing and games">
++  <meta property="og:title" content="Pillowfort.xyz | Private group chat, drawing &amp; games">
+   <meta property="og:description" content="A private, temporary encrypted room for your people and invited agents. Chat, draw together, and play.">
+   <meta property="og:type" content="website">
+   <meta property="og:image" content="https://about.pillowfort.xyz/og.png">
+@@ -14,15 +14,52 @@
+   <link rel="manifest" href="/manifest.json">
+   <link rel="icon" href="/icon.svg?v=4b" type="image/svg+xml">
+   <link rel="describedby" href="/llms.txt" type="text/plain">
+-  <title>pillowfort</title>
++  <title>Pillowfort.xyz | Private group chat, drawing &amp; games</title>
++<script type="application/ld+json">{
++  "@context": "https://schema.org",
++  "@graph": [
++    {
++      "@type": "WebSite",
++      "@id": "https://pillowfort.xyz/#website",
++      "name": "Pillowfort",
++      "alternateName": "Pillowfort.xyz",
++      "url": "https://pillowfort.xyz/",
++      "about": {
++        "@id": "https://pillowfort.xyz/#application"
++      },
++      "inLanguage": "en"
++    },
++    {
++      "@type": "WebApplication",
++      "@id": "https://pillowfort.xyz/#application",
++      "name": "Pillowfort",
++      "alternateName": "Pillowfort.xyz",
++      "url": "https://pillowfort.xyz/",
++      "description": "Private, temporary encrypted rooms for friends and invited agents to chat, draw, and play. No public feed or room directory.",
++      "applicationCategory": "CommunicationApplication",
++      "operatingSystem": "Web browser",
++      "sameAs": [
++        "https://github.com/slee1996/pillowfort"
++      ]
++    }
++  ]
++}</script>
+ </head>
+ <body>
+   <div id="root">
+-  <noscript>
+-    <h1>Pillowfort — private chat, shared drawing and games</h1>
+-    <p>A temporary, encrypted browser room for friends and invited AI agents. No public feed or room directory.</p>
+-    <p>JavaScript is required to participate in a room. Read the <a href="https://about.pillowfort.xyz/">product overview</a>, <a href="https://about.pillowfort.xyz/technology">privacy and technology explanation</a>, or <a href="https://about.pillowfort.xyz/agents">MCP and agent setup guide</a>.</p>
+-  </noscript>
++    <main>
++      <h1>Pillowfort.xyz: private group chat, drawing and games</h1>
++      <p>Private, temporary encrypted rooms for friends and invited AI agents to chat, draw, and play. No account needed; the host approves each device.</p>
++      <nav aria-label="Learn about Pillowfort">
++        <a href="https://about.pillowfort.xyz/">About Pillowfort</a> ·
++        <a href="https://about.pillowfort.xyz/technology">Privacy and technology</a> ·
++        <a href="https://about.pillowfort.xyz/private-group-chat">Private group chat</a> ·
++        <a href="https://about.pillowfort.xyz/agents">AI agents</a> ·
++        <a href="https://about.pillowfort.xyz/agents/collaboration">Agent collaboration</a>
++      </nav>
++      <p>Pillowfort.xyz is independent of Pillowfort.social, the separate social blogging platform.</p>
++      <noscript><p>JavaScript is required to participate in a room.</p></noscript>
++    </main>
+   </div>
+   <script type="module" src="/src/main.tsx"></script>
+ </body>
+diff --git a/client/src/screens/HomeScreen.tsx b/client/src/screens/HomeScreen.tsx
+index 4cbcb7192e7a126a8896ee3b2d66b978b92f4da1..da58c5141a6ce9e412014f1e259d1ea103601be7 100644
+--- a/client/src/screens/HomeScreen.tsx
++++ b/client/src/screens/HomeScreen.tsx
+@@ -239,7 +239,7 @@ export function HomeScreen() {
+         </header>
+         <h1 id="home-title" className="entry-title">A little room for your people</h1>
+         <p className="entry-description">
+-          Invite your friends to talk, doodle, and play. A private, temporary fort, with no accounts.
++          Private group chat, shared drawing, and games for friends and invited AI agents. A temporary, encrypted fort, with no accounts.
+         </p>
+         {activitySource && (
+           <p className="auth-note" role="status">
+@@ -283,6 +283,16 @@ export function HomeScreen() {
+             served to your browser must be trusted.
+           </p>
+         </details>
++        <footer className="entry-about">
++          <nav aria-label="Learn about Pillowfort">
++            <a href="https://about.pillowfort.xyz/">About Pillowfort</a>
++            <a href="https://about.pillowfort.xyz/technology">Privacy and technology</a>
++            <a href="https://about.pillowfort.xyz/private-group-chat">Private group chat</a>
++            <a href="https://about.pillowfort.xyz/agents">AI agents</a>
++            <a href="https://about.pillowfort.xyz/agents/collaboration">Agent collaboration</a>
++          </nav>
++          <p>Pillowfort.xyz is independent of Pillowfort.social, the separate social blogging platform.</p>
++        </footer>
+       </section>
+     </main>
+   );
+diff --git a/client/src/styles/xp-theme.css b/client/src/styles/xp-theme.css
+index 0ba29e562e654efb1eb8af663c4bfebccc415441..4e6b3315d9d3bee639819eca9f06b5856db0e418 100644
+--- a/client/src/styles/xp-theme.css
++++ b/client/src/styles/xp-theme.css
+@@ -3292,3 +3292,16 @@ html[data-compact-room] .typing-indicator {
+ html[data-compact-room] .message-list {
+   padding-block: 4px;
+ }
++
++/* Product context remains visible without competing with room entry. */
++.entry-about {
++  margin-top: 16px;
++  padding-top: 12px;
++  border-top: 1px solid var(--line);
++  color: var(--muted);
++  font-size: 12px;
++  line-height: 1.5;
++}
++.entry-about nav { display: flex; flex-wrap: wrap; gap: 4px 14px; }
++.entry-about a { color: var(--ink); padding: 5px 0; text-underline-offset: 3px; }
++.entry-about p { margin-top: 8px; }
+diff --git a/docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md b/docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md
+index 1701abf4e1fd263751256069f243b5675f14c54b..237e4b8c779588c543827f339a4b3c91587f60e5 100644
+--- a/docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md
++++ b/docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md
+@@ -9,7 +9,7 @@ This appendix specifies the consent-based succession profile of protocol v4. It
+ | Contract | Earlier host-available design | v4-CS1 |
+ |---|---|---|
+ | Planned transfer | Signed offer and target acceptance; outgoing host validates | Unchanged |
+-| Host disappears | No disconnected-host delegation in that design | Signed join-order policy permits offers after disconnect grace |
++| Host disappears | No disconnected-host delegation in that design | Offer the role immediately on observed host loss if a signed-policy candidate is available |
+ | Recipient consent | Explicit acceptance | Explicit acceptance or refusal, including after host loss |
+ | Public application metadata | Ordinary application content remains inside MLS | Only signed succession policy/response metadata may appear in `authorityEvent` |
+ | Strict-schema compatibility | Does not recognize the added event variants and sidecar fields | Requires matching endpoints and relay; no legacy fallback |
+@@ -167,8 +167,9 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
+ | State / input | Guard | Persisted outcome / next step |
+ |---|---|---|
+ | Host connected; policy update | Host signature, exact current admission order, valid ordered application | Retain signed policy and outer frame message ID |
+-| Host disconnects | Owning socket closes | Preserve authority during 120-second reconnect grace |
+-| Grace expires | Current host still absent | Fence old identity; stop its resume; cancel conflicting pending work |
++| Host disconnects | Owning socket closes; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
++| No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
++| Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
+ | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
+ | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
+ | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
+@@ -194,7 +195,7 @@ The candidate has no authority merely because its position was selected. Host so
+ | Relay switch committed; result not received/ACKed | New relay host; exact accepted result; candidate outbox; former-host removal marker; old policy invalid | Device resume reconciles exact result and retained cleanup, then publishes own policy | No new policy exists: room retires rather than reuse predecessor delegation |
+ | Acceptance reconciled; removal unstarted | New host and exact historical removal obligation | Resume, process marker, complete exact Remove and lifecycle notification | Same safe termination; uninterrupted availability is not promised |
+ | Removal accepted/completed; new policy not relayed | New host, removal outcome/control; possibly durable unsent policy ciphertext | Resume reconciles old socket-bound grant and retries/recreates the policy under a fresh valid grant | Room retires if no new policy was accepted |
+-| New policy accepted | New host's signed policy | Resume normally | A new consent-based offer may proceed under that policy |
++| New policy accepted | New host's signed policy | Can resume only if no eligible recipient has triggered fencing | If a candidate is eligible, make the offer immediately; otherwise retire at expiry |
+ 
+ **A dishonest relay can induce an authorized but unnecessary succession by falsely representing that a connected host is unavailable.** It cannot forge candidate acceptance, but acceptance is not cryptographic evidence that replacement was necessary. This consequence follows directly from making the relay the connectivity/deadline oracle.
+ 
+@@ -233,7 +234,7 @@ bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfo
+ bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-browser-faults
+ ```
+ 
+-Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it neither disables production rate limits nor shortens the 120-second grace.
++Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it uses the relay’s real deadlines. The historical runs at `1ba68f23` used a 120-second pre-offer delay; that delay no longer applies when a recipient is eligible.
+ 
+ Latency is measured from UI submission to observed application in a recipient DOM. It includes grant exchange, persistence, MLS, host preview, queueing and rendering. The slow-host profile adds 100 ms before delivering each host preview without changing cryptography. Each run sends one message at a time, then waits 500 ms after completion; there is no catch-up burst after a scheduler stall. Reported throughput is the **achieved closed-loop paced rate**, not a maximum-capacity or stable open-loop two-messages/second claim. Measurements use one local machine and shared Chromium/hardware; they are not WAN, Cloudflare or mobile results.
+ 
+diff --git a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md b/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md
+index 7ee0a53c471dcdeffe2d07117be180741105c300..837d3e433c2a2e3c18e5bd1d77e2ae487517aaca 100644
+--- a/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md
++++ b/docs/PROTOCOL_V4_VERIFICATION_MATRIX.md
+@@ -24,7 +24,7 @@ This matrix maps the existing M1–M4 analysis plan to evidence, not to claims o
+ | M4.3 Persisted switch | M4 separate authority commit/removal actions | Relay recipient-overflow regression; lost-result crash-boundary test | Runtime storage implementation not refined to TLA+ |
+ | M4.4 Mode-specific removal | M4 exact abstract removal steps | Engine signed leave/Remove tests and relay former-host removal lifecycle | Model omits MLS tree internals |
+ | M4.5 Reconcile views | Focused M3×M4 safety check and reachable completed guest resume under the successor | `guest-resume-after-succession` checks same-device replay and encrypted delivery in both directions; separate successor crash regressions cover the candidate | One handoff; authority is checked at activation, not simultaneously at every peer |
+-| M4.6 Join-order priority | M4 earliest eligible unattempted member | Relay disconnected-member skip, expired offer advance, refusal progression | A dishonest relay can lie about eligibility/connectivity |
++| M4.6 Join-order priority | M4 earliest eligible unattempted member | Relay regressions: first offer on socket loss or eligible resume completion; skip disconnected members; expiry and refusal advance the offer | A dishonest relay can lie about eligibility/connectivity |
+ | M4.7 Tenure binding | M4 invalidates policy on switch, refreshes only under current host | Prior-policy reducer rejection; three permanent-successor-loss cases retire without old delegation | No automatic second handoff before a new policy is accepted |
+ | M4.8 Barrier completion | Abstract remove-store/ACK/completion ordering only | Two queued targets: duplicate former-host retirement after relay restart cannot release the next target; engine retirement control/replayed marker tests | Concrete duplicate lifecycle signals are not exhaustively modeled |
+ | Composition | Staged M1→M1+M2→M1+M2+M3→M1–M4 send guards; Interlock mutant must fail | Existing admission/removal/host-transfer barriers and full project gate | 12/16-step bounded prefixes; no refinement, deadlock-freedom or liveness proof |
+diff --git a/docs/SECURE_ROOM_PROTOCOL_V4.md b/docs/SECURE_ROOM_PROTOCOL_V4.md
+index 65c714129996998c979fa61f97a2dc6aaf1c2d74..7df471e479c0bbbdcb4af3a52a79f28458b61837 100644
+--- a/docs/SECURE_ROOM_PROTOCOL_V4.md
++++ b/docs/SECURE_ROOM_PROTOCOL_V4.md
+@@ -410,12 +410,21 @@ automatically after membership or host changes. Reconnection does not change
+ that order; a fresh admission is a new position. This is internal protocol
+ state: no succession queue, rank, or setting is added to the UI.
+ 
+-After the host's 120-second disconnect grace expires, its old identity is
+-fenced from resume. The relay offers a 30-second, room- and policy-bound
+-authorization to the earliest connected, active, preauthorized member. It
+-skips unavailable or removal-bound members and records attempted candidates
+-durably. A refusal or an expired, unanswered offer advances to the next eligible
+-member. A pending admission is not a succession authorization.
++When the relay observes the owning host socket close, it immediately offers the
++role to the earliest connected, active member eligible under the signed policy.
++The disconnect transition fences the former host from resuming and persists the
++room- and policy-bound 30-second offer before delivery. There is no pre-offer
++timer. Detection of a silent network failure and delivery to the recipient can
++still take time. A close from a replaced socket cannot start succession.
++
++Only when there is no eligible recipient does the absent host retain its
++120-second recovery window. If an authorized member finishes authenticated
++resume first, that transition starts the offer without waiting for the deadline.
++If the host resumes first, it keeps the role. If neither happens before expiry,
++the room retires. Ordinary guests retain their 120-second recovery window.
++Once offers start, refusal or expiry advances to the next eligible member;
++exhaustion closes the room without a second grace. A pending admission is not
++an authorization. Selection skips removal-bound devices; attempts are durable.
+ 
+ The target persists the exact authorization before acknowledging delivery.
+ Acknowledging delivery does not accept the host role. The participant is shown
+diff --git a/scripts/protocol-browser-evidence.ts b/scripts/protocol-browser-evidence.ts
+index 4e59e5ad29e21fcb0792d8fd0be937e40c088cdc..974ab20a579c3695f83cbf4999ec5db5a6f15b32 100644
+--- a/scripts/protocol-browser-evidence.ts
++++ b/scripts/protocol-browser-evidence.ts
+@@ -18,18 +18,23 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
+ }
+ const faultIndex = process.argv.indexOf("--fault");
+ const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
+-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal"].includes(selectedFault)) {
++if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession"].includes(selectedFault)) {
+   throw new Error("Unknown fault scenario");
+ }
++const live = process.argv.includes("--production");
++if (live && (mode !== "faults" || selectedFault !== "prompt-host-succession")) {
++  throw new Error("--production is only for the prompt-host-succession public UI check");
++}
+ await mkdir(output, { recursive: true });
+ const report: Record<string, unknown> = {
+-  scope: "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
++  scope: live ? "One production room, three browser profiles, public UI. Not a latency distribution or capacity test."
++    : "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+   environment: { os: platform(), release: release(), cpu: cpus()[0]?.model, logicalCpus: cpus().length,
+     memoryBytes: totalmem(), bun: Bun.version, playwright: "1.65.0" },
+   benchmarks: [], faults: [], passed: false,
+ };
+-const server = startLocalServer(0);
+-const origin = `http://127.0.0.1:${server.port}`;
++const server = live ? null : startLocalServer(0);
++const origin = server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz";
+ let browser: Browser | null = null;
+ const save = () => writeFile(resolve(output, "browser-results.json"), JSON.stringify(report, null, 2) + "\n");
+ const wait = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
+@@ -253,7 +258,7 @@ async function faultScenario(browser: Browser, fault: Fault) {
+   try {
+     await deliver(peer.page, host.page, `before-${fault}`);
+     await host.page.goto("about:blank");
+-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
++    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+     if ((await text(successor.page)).includes("\nHost\n")) throw new Error("Promotion without consent");
+     await successor.page.locator("#btn-catch").click();
+     await Promise.race([boundaryReached, wait(20_000).then(() => { throw new Error("Crash boundary not reached"); })]);
+@@ -338,8 +343,8 @@ async function guestResumeAfterSuccession(browser: Browser) {
+   try {
+     await deliver(guest.page, host.page, "before guest recovery");
+     await host.page.goto("about:blank");
+-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
+-    // Leave after the offer so the observer's own disconnect grace stays live.
++    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
++    // Disconnect the observer before acceptance so it must recover that event by replay.
+     await guest.page.goto("about:blank");
+     if (!successorSocket) throw new Error("Successor socket not observed");
+     await Promise.all([
+@@ -379,6 +384,47 @@ async function reopen(room: RoomEvidence, index: number) {
+   await page.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
+ }
+ 
++async function promptHostSuccession(browser: Browser) {
++  const policyReady = Promise.withResolvers<void>();
++  const choices: string[] = [];
++  const room = await setupRoom(browser, 3, async ({ page }, index) => {
++    page.on("websocket", socket => {
++      let policyFrame: string | undefined;
++      socket.on("framesent", ({ payload }) => {
++        const f = JSON.parse(payload.toString());
++        const action = f.authorityEvent?.content;
++        if (index === 0 && action?.type === "host-succession-policy" && action.deviceIds.length === 2) {
++          policyFrame = f.envelope.messageId;
++        }
++        if (action?.type === "host-succession") choices.push(`${index}:${action.action}`);
++      });
++      socket.on("framereceived", ({ payload }) => {
++        const f = JSON.parse(payload.toString());
++        if (policyFrame && f.type === "application-result" && f.messageId === policyFrame && f.result === "accepted") {
++          policyReady.resolve();
++        }
++      });
++    });
++  });
++  const [host, first, second] = room.participants;
++  try {
++    await awaitBoundary(policyReady.promise, "signed policy covering both guests");
++    const start = performance.now();
++    await host.context.close();
++    await first.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
++    const closeToFirstVisibleOfferMs = Math.round(performance.now() - start);
++    if (choices.length || await second.page.locator("#host-offer-overlay").isVisible()) throw new Error("Offer bypassed consent or order");
++    await first.page.locator("#btn-duck").click();
++    await second.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
++    await second.page.locator("#btn-catch").click();
++    await second.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 15_000 });
++    await deliver(first.page, second.page, "first guest stayed in the room");
++    await deliver(second.page, first.page, "second guest is hosting");
++    if (choices.join(",") !== "1:reject,2:accept") throw new Error("Missing signed refusal or acceptance");
++    return { fault: "prompt-host-succession", closeToFirstVisibleOfferMs, signedChoices: choices, deliveredBothDirections: true };
++  } finally { await closeRoom(room); }
++}
++
+ async function secondResume(browser: Browser) {
+   const withheld = Promise.withResolvers<() => void>();
+   let joined: string | undefined, oldAck: string | undefined;
+@@ -418,7 +464,7 @@ async function secondResume(browser: Browser) {
+   const [host, successor, guest] = room.participants;
+   try {
+     await host.page.goto("about:blank");
+-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
++    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+     await guest.page.goto("about:blank");
+     await successor.page.locator("#btn-catch").click();
+     await successor.page.getByText("Buddies (2)", { exact: true }).waitFor({ timeout: 20_000 });
+@@ -519,7 +565,7 @@ async function formerHostRemoval(browser: Browser) {
+   const [host, successor, peer] = room.participants;
+   try {
+     await host.page.goto("about:blank");
+-    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 140_000 });
++    await successor.page.locator("#host-offer-overlay").waitFor({ timeout: 5_000 });
+     await successor.page.locator("#btn-catch").click();
+     await awaitBoundary(beforeRemove.promise, "marker before Remove grant");
+     if (removal) throw new Error("Remove preceded the first interruption");
+@@ -614,13 +660,13 @@ try {
+   if (mode !== "benchmark") {
+     if (mode === "all") await wait(60_000); // Respect the normal five-new-rooms/minute ceiling.
+     const faults: Fault[] = ["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy"];
+-    // Separate rooms overlap only the real 120-second disconnect grace, not model inference.
+     const results: unknown[] = await Promise.all(faults.filter(fault => selectedFault === null || fault === selectedFault)
+       .map(fault => faultScenario(browser!, fault)));
+     if (selectedFault === null || selectedFault === "peer-storage") results.push(await peerStorageFailure(browser!));
+     if (selectedFault === null || selectedFault === "guest-resume-after-succession") results.push(await guestResumeAfterSuccession(browser!));
+     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
+     if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
++    if (selectedFault === null || selectedFault === "prompt-host-succession") results.push(await promptHostSuccession(browser!));
+     (report.faults as unknown[]).push(...results);
+   }
+   report.passed = true;
+@@ -633,6 +679,6 @@ try {
+   process.exitCode = 1;
+ } finally {
+   await browser?.close();
+-  server.stop(true);
++  server?.stop(true);
+ }
+ process.exit(process.exitCode ?? 0);
+diff --git a/server.ts b/server.ts
+index 63a7d992cab3d8339bd151cf904db94f2d20b6f2..945b8a23e61851ec88182c848e12809faa4e6557 100644
+--- a/server.ts
++++ b/server.ts
+@@ -1832,6 +1832,7 @@ async function onLocalSecureDisconnect(ws: any, d: WSData) {
+     d.secureAuthenticated = false;
+     syncLocalSecureRelayTimer(room);
+     dispatchLocalSecureEffects(room, transition.effects);
++    if (room.state.lifecycle === "retired") destroyLocalSecureRoom(room, false);
+   });
+ }
+ 
+diff --git a/src/index.ts b/src/index.ts
+index 98e2ea4da46db40010c2f478aae3a590cb181ebb..44d5c396aacc317399964e84a9703552c5fde591 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -464,6 +464,22 @@ async function revokeVerifiedStripeSession(
+ async function handleFetch(request: Request, env: Env): Promise<Response> {
+   const url = new URL(request.url);
+ 
++  // Upgrade only the known production origin, never an attacker-provided host.
++  // Preserve path/query and let browsers inherit the original fragment (room
++  // invitations keep their secrets there). Do not replay API bodies or WS opens.
++  if (url.protocol === "http:" && url.hostname === "pillowfort.xyz") {
++    if ((request.method !== "GET" && request.method !== "HEAD") || request.headers.has("upgrade")) {
++      return new Response("HTTPS required", { status: 400, headers: { "cache-control": "no-store" } });
++    }
++    const destination = new URL("https://pillowfort.xyz/");
++    destination.pathname = url.pathname;
++    destination.search = url.search;
++    return new Response(null, {
++      status: 308,
++      headers: { location: destination.href, "cache-control": "no-store" },
++    });
++  }
++
+   const probeReason = probeReasonForPath(url.pathname);
+   if (probeReason) {
+     logBlockedProbe(url.pathname);
+diff --git a/src/room.ts b/src/room.ts
+index e1b21ade3bbe95326ce16d6612152c4976789241..a1358cf81527f62e611c8c38fa893334cf4703fc 100644
+--- a/src/room.ts
++++ b/src/room.ts
+@@ -976,13 +976,7 @@ export class Room implements DurableObject {
+             roomRetired ? "room-retired" : "fresh-admission-required",
+             roomRetired ? "room retired" : "fresh admission required",
+           );
+-          if (roomRetired) {
+-            for (const socket of this.state.getWebSockets()) {
+-              if (socket !== ws && this.att(socket).protocol === "v4") {
+-                try { socket.close(1000, "room retired"); } catch {}
+-              }
+-            }
+-          }
++          if (roomRetired) this.closeRetiredRoomSockets(ws);
+           return;
+         }
+ 
+@@ -1069,11 +1063,7 @@ export class Room implements DurableObject {
+         return;
+       }
+       this.dispatchSecureEffects(transition.effects);
+-      if (transition.state.lifecycle === "retired") {
+-        for (const socket of this.state.getWebSockets()) {
+-          if (this.att(socket).protocol === "v4") try { socket.close(1000, "room retired"); } catch {}
+-        }
+-      }
++      if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets();
+     });
+   }
+ 
+@@ -1101,9 +1091,18 @@ export class Room implements DurableObject {
+       attachment.secureAuthenticated = false;
+       ws.serializeAttachment(attachment);
+       this.dispatchSecureEffects(transition.effects);
++      if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets(ws);
+     });
+   }
+ 
++  private closeRetiredRoomSockets(except?: WebSocket) {
++    for (const socket of this.state.getWebSockets()) {
++      if (socket !== except && this.att(socket).protocol === "v4") {
++        try { socket.close(1000, "room retired"); } catch {}
++      }
++    }
++  }
++
+   private log(msg: string) {
+     // Never place room identifiers, display names, game choices, roles, or
+     // targets in provider logs. Protocol v4 hides those values entirely, and
+@@ -2025,11 +2024,7 @@ export class Room implements DurableObject {
+         }
+         await this.persistSecureRelayState(transition.state, this.secureRoomAuthPublicKey);
+         this.dispatchSecureEffects(transition.effects);
+-        if (transition.state.lifecycle === "retired") {
+-          for (const socket of this.state.getWebSockets()) {
+-            if (this.att(socket).protocol === "v4") try { socket.close(1000, "room retired"); } catch {}
+-          }
+-        }
++        if (transition.state.lifecycle === "retired") this.closeRetiredRoomSockets();
+         return;
+       }
+ 
+diff --git a/src/secureRelayV4.ts b/src/secureRelayV4.ts
+index e35b9c13cb3f980532e9298cbb6a44f407aee843..344cd000852d5d782e715246c91f6da2c29be252 100644
+--- a/src/secureRelayV4.ts
++++ b/src/secureRelayV4.ts
+@@ -2319,13 +2319,11 @@ function emitZombieRemovalBarrier(
+   }
+ }
+ 
+-function activateZombieRemovalBarrier(
++function cancelWorkForRemoval(
+   state: SecureRelayStateV4,
+   now: number,
+   effects: SecureRelayEffectV4[],
+ ): void {
+-  if (state.pendingZombieRemovals.length === 0) return;
+-
+   // Grants do not encode their intended operation. Cancel every grant/queue
+   // that predates the barrier so no application intent can race the removal;
+   // the host must request a fresh grant after seeing removal-required.
+@@ -2440,7 +2438,7 @@ function persistZombieRemoval(
+       removalCommitMessageId: null,
+     });
+     if (wasEmpty) {
+-      activateZombieRemovalBarrier(state, requestedAt, effects);
++      cancelWorkForRemoval(state, requestedAt, effects);
+       emitZombieRemovalBarrier(state, effects);
+     }
+   }
+@@ -3019,6 +3017,17 @@ function retireRoomAfterHostLoss(
+   effects.push({ type: "room-retired" });
+ }
+ 
++function nextSuccessionCandidate(state: SecureRelayStateV4): SecureRelayMemberStateV4 | null {
++  const policy = state.hostSuccession;
++  if (!policy || policy.event.deviceId !== state.hostDeviceId || policy.event.content.type !== "host-succession-policy") return null;
++  for (const id of policy.event.content.deviceIds) {
++    const member = memberById(state, id);
++    if (member?.status === "active" && member.connectionId !== null && !member.requiresFreshAdmission &&
++        !policy.attemptedDeviceIds.includes(id) && !state.pendingZombieRemovals.some(marker => marker.deviceId === id)) return member;
++  }
++  return null;
++}
++
+ function continueHostSuccession(
+   state: SecureRelayStateV4,
+   now: number,
+@@ -3027,16 +3036,12 @@ function continueHostSuccession(
+   const host = state.hostDeviceId === null ? null : memberById(state, state.hostDeviceId);
+   const policy = state.hostSuccession;
+   if (!host?.requiresFreshAdmission || !policy || state.pendingHostTransfer) return;
+-  if (policy.event.deviceId !== host.deviceId || policy.event.content.type !== "host-succession-policy" ||
+-      now > Number.MAX_SAFE_INTEGER - SECURE_HOST_TRANSFER_TTL_MS_V4) {
++  if (now > Number.MAX_SAFE_INTEGER - SECURE_HOST_TRANSFER_TTL_MS_V4) {
+     retireRoomAfterHostLoss(state, effects);
+     return;
+   }
+-  for (const deviceId of policy.event.content.deviceIds) {
+-    const target = memberById(state, deviceId);
+-    if (!target || target.status !== "active" || target.connectionId === null ||
+-        target.requiresFreshAdmission || policy.attemptedDeviceIds.includes(deviceId) ||
+-        state.pendingZombieRemovals.some((marker) => marker.deviceId === deviceId)) continue;
++  for (let target = nextSuccessionCandidate(state); target; target = nextSuccessionCandidate(state)) {
++    const deviceId = target.deviceId;
+     const authorizationDigest = sha256(new TextEncoder().encode(
+       `Pillowfort host succession v4\0${state.roomInstance}\0${policy.event.eventId}\0${deviceId}`,
+     ));
+@@ -3078,21 +3083,17 @@ function expireActiveDisconnects(
+ ): boolean {
+   const expired = state.members.filter((member) => member.status === "disconnected"
+     && member.resumeStatus === "active" && !member.requiresFreshAdmission
+-    && member.disconnectExpiresAt !== null && now >= member.disconnectExpiresAt);
++    && member.disconnectExpiresAt !== null && (now >= member.disconnectExpiresAt
++      || (member.deviceId === state.hostDeviceId && nextSuccessionCandidate(state) !== null)));
+   if (expired.length === 0) return false;
+   if (expired.some((member) => member.deviceId === state.hostDeviceId)) {
+     if (!state.hostSuccession) {
+       retireRoomAfterHostLoss(state, effects);
+       return true;
+     }
+-    expireCurrentGrant(state, now, effects);
+-    expirePendingApplication(state, now, effects);
+-    expirePendingCommit(state, now, effects);
+-    expirePendingHostTransfer(state, now, effects);
+-    for (const pending of state.members) {
+-      if (pending.admissionId !== null) retirePendingAdmission(state, pending, now, effects);
+-    }
+-    for (const entry of [...state.orderQueue]) removeDeviceFromOrdering(state, entry.deviceId, "removal-pending");
++    // A prompt offer can preempt an unexpired preview or manual transfer. Retain
++    // exact cancellations before exposing the new authorization to its recipient.
++    cancelWorkForRemoval(state, now, effects);
+   }
+   for (const member of expired) {
+     if (state.pendingApplication?.fromDeviceId === member.deviceId) {
+@@ -3959,6 +3960,8 @@ export async function reduceSecureRelayV4(
+     });
+     effects.push({ type: "member-lifecycle", deviceId: actor.deviceId, status: "active" });
+     effects.push({ type: "frame-accepted", deviceId: actor.deviceId, messageId: frame.requestId });
++    // A returning candidate is eligible only after its exact replay ACK.
++    if (state.hostDeviceId !== member.deviceId) expireActiveDisconnects(state, now, effects);
+     emitHostPendingWork(state, member, effects);
+     const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
+     if (grantError) return reject(grantError);
+@@ -4363,9 +4366,11 @@ export function disconnectSecureRelayDeviceV4(
+   member.resumeRequestId = null;
+   member.disconnectExpiresAt = options.now + SECURE_ACTIVE_DISCONNECT_GRACE_MS_V4;
+   removeDeviceFromOrdering(state, member.deviceId, "connection-lost");
+-  const effects: SecureRelayEffectV4[] = [
+-    { type: "member-lifecycle", deviceId: member.deviceId, status: "disconnected" },
+-  ];
++  const effects: SecureRelayEffectV4[] = [];
++  expireActiveDisconnects(state, options.now, effects);
++  if (!member.requiresFreshAdmission && state.lifecycle === "open") {
++    effects.push({ type: "member-lifecycle", deviceId: member.deviceId, status: "disconnected" });
++  }
+   const grantError = issueNextGrant(state, options.now, options.nextGrantTokenId, effects);
+   if (grantError) return reject(grantError);
+   return { ok: true, state, effects };
+@@ -4414,6 +4419,9 @@ export function advanceSecureRelayV4(
+ export function nextSecureRelayDeadlineV4(stateValue: SecureRelayStateV4): number | null {
+   const state = parseSecureRelayStateV4(stateValue);
+   if (!state || state.lifecycle !== "open") return null;
++  // Snapshots written before prompt succession can still carry a future host deadline.
++  const host = state.hostDeviceId && memberById(state, state.hostDeviceId);
++  if (host && host.disconnectExpiresAt !== null && nextSuccessionCandidate(state)) return state.clockHighWater;
+   const deadlines = [
+     state.currentGrant?.expiresAt,
+     state.pendingApplication?.decisionExpiresAt,
+diff --git a/test/secure-relay-v4.test.ts b/test/secure-relay-v4.test.ts
+index 560177ad913b09b65c2e843dc91f380b435bef16..25202ab5dfd1b9175056d9fa81618d3e46c189c2 100644
+--- a/test/secure-relay-v4.test.ts
++++ b/test/secure-relay-v4.test.ts
+@@ -2333,15 +2333,19 @@ async function successionRoom() {
+ }
+ 
+ describe("preauthorized automatic host succession", () => {
+-  it("preserves the host during grace, then authenticates the earliest joined successor and fences the old host", async () => {
++  it("offers immediately on host socket loss, fences the old host, and transfers only on signed acceptance", async () => {
+     const setup = await successionRoom();
+-    let lost = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
++    const lost = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+     }));
+     expect(lost.state.hostDeviceId).toBe(setup.host.deviceId);
+-    expect(lost.state.pendingHostTransfer).toBeNull();
+-    setup.clock.now = lost.state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-    lost = accepted(advanceSecureRelayV4(lost.state, { now: setup.clock.now, nextGrantTokenId: setup.ids() }));
++    expect(effect(lost.effects, "host-transfer-authorized")).toMatchObject({
++      toDeviceId: setup.first.deviceId, expiresAt: setup.clock.now + 30_000,
++    });
++    rejected(await reduceSecureRelayV4(lost.state, actor(setup.host.deviceId, setup.ids()), {
++      kind: "resume", v: 4, suite: 1, roomInstance: setup.roomInstance,
++      requestId: setup.ids(), deviceId: setup.host.deviceId,
++    }, { now: setup.clock.now, nextGrantTokenId: setup.ids() }), "fresh-admission-required");
+     expect(lost.state.lifecycle).toBe("open");
+     expect(lost.state.pendingHostTransfer).toMatchObject({
+       targetDeviceId: setup.first.deviceId, policyEventId: setup.policy.eventId,
+@@ -2397,6 +2401,47 @@ describe("preauthorized automatic host succession", () => {
+     });
+   });
+ 
++  it("offers immediately when an eligible guest completes resume while the host is still absent", async () => {
++    const { state: initial, host, first, second, ids, clock, roomInstance } = await successionRoom();
++    const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
++    let state = initial;
++    for (const device of [first, second, host]) {
++      state = accepted(disconnectSecureRelayDeviceV4(state, device, options())).state;
++    }
++    expect(state.pendingHostTransfer).toBeNull();
++    expect(state.members.find(m => m.deviceId === host.deviceId)?.disconnectExpiresAt).toBe(clock.now + 120_000);
++    const guest = actor(second.deviceId, ids());
++    const resume = accepted(await reduceSecureRelayV4(state, guest, {
++      kind: "resume", v: 4, suite: 1, roomInstance, requestId: ids(), deviceId: guest.deviceId,
++    }, options()));
++    expect(resume.state.pendingHostTransfer).toBeNull();
++    const active = accepted(await reduceSecureRelayV4(resume.state, guest, {
++      kind: "resume-complete", v: 4, suite: 1, roomInstance, requestId: ids(),
++      lastMessageId: effect(resume.effects, "backlog-end").lastMessageId,
++    }, options()));
++    expect(effect(active.effects, "host-transfer-authorized").toDeviceId).toBe(guest.deviceId);
++    expect(active.state.hostDeviceId).toBe(host.deviceId);
++    expect(importSecureRelayStateV4(exportSecureRelayStateV4(active.state))?.pendingHostTransfer?.authorizedAt).toBe(clock.now);
++  });
++
++  for (const kind of ["application", "commit"] as const) {
++    it(`offers immediately despite an outstanding ${kind} preview and retains its exact rejection`, async () => {
++      const { state, first, second, ids, clock, host } = await successionRoom();
++      const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
++      const order = await requestGrant(state, second, ids, clock);
++      const frame = { ...applicationFrame(order.state, order.grant, ids), relayKind: kind };
++      const preview = accepted(await reduceSecureRelayV4(order.state, second, frame, options()));
++      const lost = accepted(disconnectSecureRelayDeviceV4(preview.state, host, options()));
++      expect(effect(lost.effects, "host-transfer-authorized").toDeviceId).toBe(first.deviceId);
++      const restored = importSecureRelayStateV4(exportSecureRelayStateV4(lost.state))!;
++      const retry = accepted(await reduceSecureRelayV4(restored, second, frame, options()));
++      expect(effect(retry.effects, kind === "commit" ? "commit-rejected" : "application-rejected")).toMatchObject({
++        deviceId: second.deviceId, messageId: frame.envelope.messageId, reason: "removal-pending",
++      });
++      expect(retry.state.pendingHostTransfer?.targetDeviceId).toBe(first.deviceId);
++    });
++  }
++
+   it("skips disconnected members without changing admission order", async () => {
+     const setup = await successionRoom();
+     let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.first, {
+@@ -2405,22 +2450,17 @@ describe("preauthorized automatic host succession", () => {
+     state = accepted(disconnectSecureRelayDeviceV4(state, setup.host, {
+       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+     })).state;
+-    const deadline = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-    setup.clock.now = deadline;
+-    const expired = accepted(advanceSecureRelayV4(state, { now: deadline, nextGrantTokenId: setup.ids() }));
+-    expect(expired.state.pendingHostTransfer?.targetDeviceId).toBe(setup.second.deviceId);
+-    expect(expired.state.members.find((member) => member.deviceId === setup.first.deviceId)!.joinedOrder)
+-      .toBeLessThan(expired.state.members.find((member) => member.deviceId === setup.second.deviceId)!.joinedOrder);
+-    expect(importSecureRelayStateV4(exportSecureRelayStateV4(expired.state))).not.toBeNull();
++    expect(state.pendingHostTransfer?.targetDeviceId).toBe(setup.second.deviceId);
++    expect(state.members.find((member) => member.deviceId === setup.first.deviceId)!.joinedOrder)
++      .toBeLessThan(state.members.find((member) => member.deviceId === setup.second.deviceId)!.joinedOrder);
++    expect(importSecureRelayStateV4(exportSecureRelayStateV4(state))).not.toBeNull();
+   });
+ 
+   it("persists the offered candidate and tries the next joined member after an unresponsive offer expires", async () => {
+     const setup = await successionRoom();
+-    let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
++    const state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+     })).state;
+-    setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-    state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
+     const firstOffer = state.pendingHostTransfer!;
+     expect(firstOffer.targetDeviceId).toBe(setup.first.deviceId);
+     const restored = importSecureRelayStateV4(exportSecureRelayStateV4(state));
+@@ -2443,8 +2483,6 @@ it("does not revoke an accepted automatic succession when another recipient over
+   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+   })).state;
+-  setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-  state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
+   state = await ackAll(state, setup.ids, setup.clock);
+   const ordered = await requestGrant(state, setup.first, setup.ids, setup.clock);
+   const authorizationId = ordered.state.pendingHostTransfer!.authorizationId;
+@@ -2471,8 +2509,6 @@ for (const finalChoice of ["accept", "reject"] as const) {
+     let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+     })).state;
+-    setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-    state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
+     expect(state.hostDeviceId).toBe(setup.host.deviceId);
+     expect(state.pendingHostTransfer?.targetDeviceId).toBe(setup.first.deviceId);
+     for (const [candidate, secret, action] of [
+@@ -2520,8 +2556,6 @@ async function prepareSuccessionForRecovery() {
+   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
+   })).state;
+-  setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
+-  state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
+   state = await ackAll(state, setup.ids, setup.clock);
+   const ordered = await requestGrant(state, setup.first, setup.ids, setup.clock);
+   const authorizationId = ordered.state.pendingHostTransfer!.authorizationId;
+diff --git a/test/worker.test.ts b/test/worker.test.ts
+index 7170ac29f44d537680b51365ecdb4af2fea2e527..a4dba5f79613b6893a1c2394911b5e6cf5436981 100644
+--- a/test/worker.test.ts
++++ b/test/worker.test.ts
+@@ -403,6 +403,57 @@ function createWorkerEnv() {
+   };
+ }
+ 
++describe("Public app search identity", () => {
++  it("provides crawlable product context and consistent structured identity without JavaScript", async () => {
++    const html = await Bun.file(new URL("../client/index.html", import.meta.url)).text();
++    expect(html).toContain("<title>Pillowfort.xyz | Private group chat, drawing &amp; games</title>");
++    const visible = html.replace(/<noscript>[\s\S]*?<\/noscript>/g, "");
++    for (const path of ["/", "/technology", "/private-group-chat", "/agents", "/agents/collaboration"]) {
++      expect(visible).toContain(`href="https://about.pillowfort.xyz${path}"`);
++    }
++    expect(visible).toContain("independent of Pillowfort.social");
++    const data = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]);
++    expect(data["@graph"].map((entry: any) => entry["@type"])).toEqual(["WebSite", "WebApplication"]);
++    expect(data["@graph"][1]["@id"]).toBe("https://pillowfort.xyz/#application");
++  });
++
++  it("upgrades production navigation without exposing or discarding invite context", async () => {
++    const { env, assetRequests, routed } = createWorkerEnv();
++    for (const method of ["GET", "HEAD"]) {
++      const response = await worker.fetch(new Request("http://pillowfort.xyz/party-1?invite=1", { method }), env);
++      expect(response.status).toBe(308);
++      expect(response.headers.get("location")).toBe("https://pillowfort.xyz/party-1?invite=1");
++      expect(response.headers.get("cache-control")).toBe("no-store");
++      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
++    }
++    expect(assetRequests).toHaveLength(0);
++    expect(routed).toHaveLength(0);
++  });
++
++  it("does not replay insecure mutations or WebSocket opens", async () => {
++    const { env, assetRequests, routed } = createWorkerEnv();
++    for (const request of [
++      new Request("http://pillowfort.xyz/analytics", { method: "POST", body: "private" }),
++      new Request("http://pillowfort.xyz/ws", { headers: { upgrade: "websocket" } }),
++    ]) {
++      const response = await worker.fetch(request, env);
++      expect(response.status).toBe(400);
++      expect(response.headers.has("location")).toBe(false);
++    }
++    expect(assetRequests).toHaveLength(0);
++    expect(routed).toHaveLength(0);
++  });
++
++  it("keeps HTTPS and local HTTP usable and cannot redirect an arbitrary host", async () => {
++    for (const origin of ["https://pillowfort.xyz", "http://localhost:8787", "http://127.0.0.1:8787", "http://pillowfort.xyz.attacker.test"]) {
++      const { env } = createWorkerEnv();
++      const response = await worker.fetch(new Request(`${origin}/`), env);
++      expect(response.status).toBe(200);
++      expect(response.headers.has("location")).toBe(false);
++    }
++  });
++});
++
+ describe("Worker production entrypoint", () => {
+   it("preserves the accepted WebSocket while wrapping an upgrade response", () => {
+     const acceptedWebSocket = {} as WebSocket;
+diff --git a/verification/README.md b/verification/README.md
+index edd6d3e2549ff211e5aab4ca251d408455af308e..3cb5ade961b214fe2b71632e976a45ab784bc2dd 100644
+--- a/verification/README.md
++++ b/verification/README.md
+@@ -30,7 +30,7 @@ npm --prefix client run build
+ bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-resume-after-succession --output /tmp/pillowfort-resume-browser
+ ```
+ 
+-The model checks one ordinary guest, one consenting successor and one replacement connection. The endpoint's replayed signature, the relay's snapshot and the relay's current backlog end are distinct inputs. A stale completion cannot activate the guest; the check records the host **at activation**, not the host indefinitely afterward. With all guards intact, the `NoRecoveredGuest` probe must produce a trace in which the guest receives its completion ACK and the successor finishes removal. This guards against a model that passes simply by blocking every return. The browser scenario exercises that successful path using separate browser profiles and the real disconnect grace.
++The model checks one ordinary guest, one consenting successor and one replacement connection. The endpoint's replayed signature, the relay's snapshot and the relay's current backlog end are distinct inputs. A stale completion cannot activate the guest; the check records the host **at activation**, not the host indefinitely afterward. With all guards intact, the `NoRecoveredGuest` probe must produce a trace in which the guest receives its completion ACK and the successor finishes removal. This guards against a model that passes simply by blocking every return. The browser scenario exercises that path using separate profiles. The model checks authority and replay ordering, not wall-clock time to an offer; that behavior is covered by relay and browser tests.
+ 
+ To reproduce the second interruption and removal boundary, build the client as above, then run:
+ 
