@@ -1,0 +1,348 @@
+{
+  "source": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+  "runtimePullRequest": {
+    "headRefOid": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+    "mergeCommit": {
+      "oid": "d8744e12b42bcad72610c0810904f4c0f96a97ca"
+    },
+    "mergedAt": "2026-11-23T20:27:52Z",
+    "state": "MERGED",
+    "url": "https://github.com/slee1996/pillowfort/pull/26"
+  },
+  "checks": [
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403674",
+      "name": "check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403478",
+      "name": "protocol-models",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403027",
+      "name": "hosted-mcp",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403781",
+      "name": "dependency-audit",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372429",
+      "name": "check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986371902",
+      "name": "protocol-models",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372654",
+      "name": "hosted-mcp",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372568",
+      "name": "dependency-audit",
+      "state": "SUCCESS"
+    }
+  ],
+  "rollout": {
+    "app": {
+      "before": {
+        "created_on": "2026-11-23T19:22:49.016321Z",
+        "versions": [
+          {
+            "version_id": "75eb3a28-45c0-4c0f-a302-92205e72ba2b",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T20:28:31.93322Z",
+        "versions": [
+          {
+            "version_id": "6c27be97-00d0-4e2b-b69c-4d596f50989e",
+            "percentage": 100
+          }
+        ]
+      }
+    },
+    "hosted": {
+      "before": {
+        "created_on": "2026-11-23T19:22:58.699445Z",
+        "versions": [
+          {
+            "version_id": "a4fa0194-6d89-45aa-9789-7d14927607f0",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T20:28:40.488427Z",
+        "versions": [
+          {
+            "version_id": "5536563f-1c0b-402b-908e-780ae4200345",
+            "percentage": 100
+          }
+        ]
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "/assets/index-B0gLXG7_.js",
+      "bytes": 742688,
+      "sha256": "6a7b0a10f26e49b3f1a62593fcfe57c4239aaed4a89d9e57af5b6fc3036a38d7",
+      "matches": true
+    },
+    {
+      "path": "/assets/index-DZeI2l0x.css",
+      "bytes": 54756,
+      "sha256": "09c00245cfb53f5580da79bfcd23bfbf109467d642c33af5b3b21f76696ec4d6",
+      "matches": true
+    },
+    {
+      "path": "/assets/pillowfort_openmls_bg-BxD-mDtq.wasm",
+      "bytes": 1132383,
+      "sha256": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94",
+      "matches": true
+    }
+  ],
+  "normalProductionJourneys": {
+    "ordinaryHostTabClosure": {
+      "scope": "One self-created production room, production browser clients. Not a latency distribution or capacity test.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "benchmarks": [],
+      "faults": [
+        {
+          "fault": "prompt-host-succession",
+          "closeToFirstVisibleOfferMs": 181,
+          "signedChoices": [
+            "1:reject",
+            "2:accept"
+          ],
+          "deliveredBothDirections": true
+        }
+      ],
+      "passed": true
+    },
+    "hostedMcpWithNameCollision": {
+      "mode": "hosted",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "original name visible in chat but absent from new guest's mention resource",
+        "subscribe and reconcile baseline",
+        "cancel independent Task",
+        "notification-driven private read and reply",
+        "independent Task fan-out and cursor read",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed",
+        "grant revoked"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 61
+      }
+    },
+    "extendedBrowserAttempts": [
+      {
+        "observer": "runtime candidate, menu visibility",
+        "result": {
+          "host": "chromium",
+          "guest": "firefox",
+          "retoss": true,
+          "versions": [
+            "158.0.8127.18",
+            "159.0"
+          ],
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy",
+            "reopen stored guest and exchange fresh chat"
+          ],
+          "errors": [
+            "verify new host controls: TimeoutError: waitFor: Timeout 20000ms exceeded."
+          ]
+        }
+      },
+      {
+        "observer": "both applied rosters, before per-step tracing",
+        "result": {
+          "host": "chromium",
+          "guest": "firefox",
+          "retoss": true,
+          "versions": [
+            "158.0.8127.18",
+            "159.0"
+          ],
+          "hostChangeFrames": {
+            "host": 0,
+            "guest": 0
+          },
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy"
+          ],
+          "errors": [
+            "reopen stored guest and exchange fresh chat: TimeoutError: waitFor: Timeout 20000ms exceeded."
+          ]
+        }
+      },
+      {
+        "observer": "both applied rosters and bounded per-step trace",
+        "result": {
+          "host": "chromium",
+          "guest": "firefox",
+          "retoss": true,
+          "versions": [
+            "158.0.8127.18",
+            "159.0"
+          ],
+          "hostChangeFrames": {
+            "host": 0,
+            "guest": 0
+          },
+          "failureTrace": [
+            "12592 guest recv frame-accepted",
+            "12592 host recv member-lifecycle/active",
+            "12593 guest send order-request",
+            "12703 guest recv order-granted",
+            "12710 guest send relay",
+            "12833 host recv commit-preview/commit",
+            "12833 host send commit-decision",
+            "12946 guest recv frame-accepted",
+            "12949 host recv relay/commit",
+            "12949 host recv frame-accepted",
+            "12949 guest send delivery-ack",
+            "12949 guest send order-request",
+            "12950 host send delivery-ack",
+            "13051 guest recv frame-accepted",
+            "13100 host recv frame-accepted",
+            "13100 guest recv order-granted",
+            "13106 guest send relay",
+            "13225 host recv application-preview/application",
+            "13225 host send application-decision",
+            "13340 guest recv application-result/accepted",
+            "13344 host recv relay/application",
+            "13344 host recv frame-accepted",
+            "13344 guest send delivery-ack",
+            "13344 guest send order-request",
+            "13345 host send delivery-ack",
+            "13455 guest recv frame-accepted",
+            "13508 host recv frame-accepted",
+            "13508 guest recv order-granted",
+            "13514 guest send relay",
+            "13635 host recv application-preview/application",
+            "13635 host send application-decision",
+            "13749 guest recv application-result/accepted",
+            "13753 host recv relay/application",
+            "13753 host recv frame-accepted",
+            "13753 guest send delivery-ack",
+            "13754 host send delivery-ack",
+            "13856 guest recv frame-accepted",
+            "13900 host recv frame-accepted",
+            "14071 host send order-request",
+            "14187 host recv order-granted",
+            "14187 host send relay",
+            "14308 guest recv relay/application",
+            "14308 host recv application-result/accepted",
+            "14310 host send delivery-ack",
+            "14310 host send authorize-host-transfer",
+            "14326 guest send delivery-ack",
+            "14371 guest send order-request",
+            "14416 host recv frame-accepted",
+            "14457 host recv frame-accepted",
+            "14457 guest recv host-transfer-authorized",
+            "14457 guest recv frame-accepted",
+            "14459 guest send delivery-ack",
+            "14500 guest recv order-cancelled",
+            "14566 guest recv frame-accepted",
+            "14566 guest send order-request",
+            "14686 guest recv order-granted",
+            "14692 guest send relay",
+            "14815 host recv application-preview/application",
+            "14815 host send application-decision",
+            "14935 guest recv application-result/accepted",
+            "14938 host recv relay/application",
+            "14938 host recv frame-accepted",
+            "14940 host send delivery-ack",
+            "14940 guest send delivery-ack",
+            "14940 guest send order-request",
+            "15056 guest recv frame-accepted",
+            "15091 guest recv order-granted",
+            "15091 host recv frame-accepted",
+            "15096 guest send relay",
+            "15215 host recv application-preview/application",
+            "15215 host send application-decision",
+            "15332 guest recv application-result/accepted",
+            "15335 host recv relay/application",
+            "15335 host recv frame-accepted",
+            "15336 guest send delivery-ack",
+            "15337 host send delivery-ack",
+            "15436 guest recv frame-accepted",
+            "15482 host recv frame-accepted",
+            "15770 host send order-request",
+            "15892 host recv order-granted",
+            "15892 host send relay",
+            "16010 guest recv relay/application",
+            "16011 host recv application-result/accepted",
+            "16013 host send delivery-ack",
+            "16013 host send authorize-host-transfer",
+            "16019 guest send delivery-ack",
+            "16119 host recv frame-accepted",
+            "16160 guest recv host-transfer-authorized",
+            "16160 guest recv frame-accepted",
+            "16161 host recv frame-accepted",
+            "16162 guest send delivery-ack",
+            "16266 guest recv frame-accepted",
+            "22452 host recv host-path-probe",
+            "22452 host send host-path-reply",
+            "32637 host recv host-path-probe",
+            "32637 host send host-path-reply"
+          ],
+          "passed": [
+            "create and retain own password",
+            "private invite and masked password",
+            "admit and withhold earlier content",
+            "styled mention while away from chat and private reply",
+            "away presence reaches the other device",
+            "export transcript and clear only one copy",
+            "reopen stored guest and exchange fresh chat"
+          ],
+          "errors": [
+            "verify both participants applied the new host: TimeoutError: waitFor: Timeout 20000ms exceeded."
+          ]
+        }
+      }
+    ]
+  },
+  "interpretation": "The clean-close run checks consent and bidirectional chat on the live app. The hosted journey checks encrypted admission, subscriptions, independent Tasks, notification-driven reply, terminal state and grant revocation. Two separate extended browser runs timed out (first on the host menu, second in the guest-resume block); neither is counted as a pass. An observation timeout alone does not establish whether the relay lost state, the browser did not apply it, or the observer missed the surface. All network and storage interventions were private.",
+  "faultInjectionOnProduction": false
+}

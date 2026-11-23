@@ -81,8 +81,6 @@ For an ordinary application frame:
 
 The relay validates socket ownership, active membership, empty sender delivery backlog, route, current grant, exact order, expiry, barriers, and replay fingerprint. An ordinary non-host frame is retained for host preview. Host software inspects a temporary MLS engine, verifies the event and legal transition, and signs no replacement message: it sends an exact `application-decision` referring to that pending frame. Relay acceptance is persisted before dependent effects; recipients independently validate and persist before acknowledging.
 
-When an idle room has connected members, the Worker commits deletion and a retry alarm in one transaction. The only delivery data retained are the original authenticated connection/device pairs. On wake it attempts the content-free `room-retired` notice only on sockets still bound to those pairs, then clears the record and retry alarm. A restart during fan-out may repeat a send. A send is not a receipt; offline, replaced or unreachable sockets are not promised notification.
-
 ### C.1 M1 transition contract
 
 | Starting condition / input | Guard | Durable mutation | Emission / recovery |
@@ -135,7 +133,7 @@ Roster absence is not a receipt. A successor can see the former host absent from
 
 If one endpoint rejects an incoming commit, its engine restores its last valid committed snapshot and the controller fails that connection closed. It does not acknowledge the rejected delivery or continue ordinary sending. Other members may already have advanced. There is no automatic epoch merge, rollback of those peers, or quorum agreement protocol. Replaying a consistently invalid commit is not a repair mechanism. An irrecoverably divergent member needs fresh admission after retirement; loss of the necessary coordinator/state can require room termination. Outbound commit rejection and inbound validation failure are different cases and must not be conflated.
 
-Storage failure during incoming commit processing withholds acknowledgment and stops that receiver. The relay routes a group join proof only after the host’s exact activation has committed. On replay the receiver authenticates the Add and signed proof, releases their matching admission barrier before acknowledging the proof, and can process following traffic without the live activation notice. Verification exercised one failed write with the original durable state intact; it does not establish agreement among arbitrary MLS forks. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
+An unstorable incoming commit is not acknowledged. A group-delivered join proof records committed activation; its exact authenticated replay can release the matching barrier before later traffic. This recovers an intact prior state, not an arbitrary MLS fork. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
 
 ## F. M4 host transfer and public sidecars
 
@@ -179,13 +177,13 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
 | Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
-| Relay restarts after storing first offer, before dispatch | Original candidate still owns an active socket; original capability unexpired and unacknowledged | One durable delivery check forces same-device replay if necessary. Preserve the original policy, target, authorization and deadline; never ACK past earlier backlog |
+| Restart after offer commit, before dispatch | Original capability unexpired; its delivery still unacknowledged on the owning connection | Persist a one-shot delivery check with the offer. At four seconds, a still-unacknowledged owner is asked to reconnect; authenticated replay delivers the whole prefix with the original deadline. A healthy delivery does not wait four seconds |
 | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
 | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
 | Candidate explicitly refuses | Same exact authorization checks | Consume that offer; keep refuser admitted; offer next eligible member |
 | Offer expires/unanswered | Current offer reaches expiry | Next eligible unattempted member; never implicit acceptance |
 | Exhaustion | No eligible authorized candidate | Retire room and close live connections: fort collapses |
-| Successor cleans up | Exact former-host admission/Remove binding | Persist Remove, accepted result, retirement control and lifecycle completion |
+| Successor cleans up | Exact former-host admission/Remove binding | Persist the Remove and its result; retry `retire-member` until the exact request is acknowledged |
 | Successor refreshes policy | New host, reconciled membership, cleanup complete | Publish policy under the new host's own signing authority |
 
 Authorization IDs are deterministic per policy/candidate:
@@ -206,9 +204,29 @@ The candidate has no authority merely because its position was selected. Host so
 | Removal accepted/completed; new policy not relayed | New host, removal outcome/control; possibly durable unsent policy ciphertext | Resume reconciles old socket-bound grant and retries/recreates the policy under a fresh valid grant | Room retires if no new policy was accepted |
 | New policy accepted | New host's signed policy | Can resume only if no eligible recipient has triggered fencing | If a candidate is eligible, make the offer immediately; otherwise retire at expiry |
 
+<figure id="fig-successor-crash">
+<img src="assets/fig-07-successor-crash.svg" alt="Successor crash boundaries: restore the same device and finish cleanup within the grace, or retire the room without reusing the predecessor policy.">
+<figcaption><strong>Figure 7.</strong> Successor loss before a new policy is accepted. The accepted authority switch is not reversed. Recovery uses the same durable identity and exact cleanup obligation; permanent loss without a current successor delegation terminates the room.</figcaption>
+</figure>
+
 **A dishonest relay can induce an authorized but unnecessary succession by falsely representing that a connected host is unavailable.** It cannot forge candidate acceptance, but acceptance is not cryptographic evidence that replacement was necessary. This consequence follows directly from making the relay the connectivity/deadline oracle.
 
-### F.3 Detecting an unresponsive host
+### F.4 Terminal room retirement
+
+A retired room has no host authority and no succession policy. Both explicit shutdown and exhaustion after host loss must clear the previous delegation before state validation and persistence. Keeping a signed policy after clearing its authorizing host produces an invalid snapshot; relaxing validation is not a repair.
+
+| Starting state / input | Guard | Durable mutation | Emitted effect or retry |
+|---|---|---|---|
+| Current host sends `close-room` | Authenticated current host; own delivery backlog empty; `authorizationMessageId` references a retained accepted application | Retire members; clear host, succession policy, grant, pending transfer/operations and queued orders; retain exact control replay record | Validate and persist before terminal notification |
+| Retired snapshot stored | Complete valid terminal state | Storage commit succeeds | Send `room-retired` to authenticated attached devices in the retired membership snapshot |
+| Endpoint receives terminal notice | Exact room and authenticated transport | Retire local cryptographic state | Present terminal screen; ordinary sending remains unavailable |
+| Exact close request repeated | Retained request and fingerprint match | Preserve retirement; do not revive delegation | Replay terminal outcome |
+
+Applying the signed close application event precedes the relay's durable terminal notice; it is not evidence that retirement was stored. The production failure returned `persistence-failed` before that notice. The regression `persists explicit retirement after a signed succession policy was installed` failed before correction and now checks export/import, absent delegation, retired members and exact retry. A production browser execution at `c726c5e` confirms the terminal screen after an acknowledged signed policy. This concrete serialization path is not represented in the reduced TLC models.
+
+When an idle room has connected members, the Worker commits deletion and a retry alarm in one transaction. The only delivery data retained are the original authenticated connection/device pairs. On wake it attempts the content-free `room-retired` notice only on sockets still bound to those pairs, then clears the record and retry alarm. A restart during fan-out may repeat a send. A send is not a receipt; offline, replaced or unreachable sockets are not promised notification.
+
+### F.5 Detecting an unresponsive host
 
 | State / input | Guard | Action |
 |---|---|---|
@@ -225,47 +243,155 @@ The Worker writes this small record and its alarm in one transaction. Probes do 
 
 The models implement the existing plan's stages: M1 delivery; M2 admission/identity; M3 resume; M4 succession. `Coordination.tla` composes them in that order with admission, resume and host-availability send barriers. Separate state mutations represent persistence and network effects. Cryptography is an abstract authenticated capability; OpenMLS, IndexedDB and the transport are not formally verified by these models.
 
-Standalone models explore their finite reachable graphs with up to two operation/KeyPackage tokens, backlog capacity two, three host/member identities, and before/after deadline regions. Composed profiles check prefixes of 12 steps, plus a 16-step configuration with backlog capacity two. These are **safety** checks; deadlock, fairness, real-time liveness, crash recovery of an unavailable storage device, and unbounded executions are excluded. The composed resume abstraction is an interlock, not a model of every repeated socket incarnation or all concrete host-view combinations.
+Standalone models explore their finite reachable graphs with up to two operation/KeyPackage tokens, backlog capacity two, three host/member identities, and before/after deadline regions. The staged profiles check 12-step prefixes and a 16-step configuration with a backlog of two. For the one-operation, one-slot domain, exploration also runs to a fixed point with all four machines enabled. These are safety checks; the full finite graph is not an unbounded proof. System-wide deadlock freedom, real-time liveness and repair of a permanently lost store are not established. The composed resume abstraction is an interlock, not a model of every repeated socket incarnation or all concrete host-view combinations.
 
-The runner also weakens seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
+The original staged profiles weaken seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
 
-`ResumeAcrossSuccession.tla` checks a narrower interaction beyond those staged runs: an ordinary guest reconnects across one accepted host change. The guest's signed replay evidence is distinct from the relay's host snapshot. At activation, the relay must still have the backlog end that the guest acknowledged. Two weakened configurations omit the evidence check or accept a superseded backlog end; a separate unmodified configuration must reach a guest ready under the new host after cleanup. This last trace demonstrates a possible recovery, not eventual recovery. [Focused reproduction commands](../verification/README.md).
+`ResumeAcrossSuccession.tla` checks a narrower interaction beyond those staged runs: an ordinary guest reconnects across one accepted host change. The guest's signed replay evidence is distinct from the relay's host snapshot. At activation, the relay must still have the backlog end that the guest acknowledged. Two weakened configurations omit the evidence check or accept a superseded backlog end; a separate unmodified configuration must reach a guest ready under the new host after cleanup. This last trace demonstrates a possible recovery, not eventual recovery. See §H for reproduction.
 
 `RepeatedResume.tla` starts after handoff and permits two replacement sockets, identical nonempty backlog ends and delayed completions or ACKs. The safe witness reaches ordinary work after the second ACK despite loss of the first. Weakening the socket check or the ACK check produces distinct counterexamples; neither implies that stale traffic was accepted by the implementation. The browser test instead exposed a progress defect: the client retained its old completion ID and rejected a fresh terminator.
 
 | Plan property / failure | Concrete evidence | Limit |
 |---|---|---|
-| M1.1, M1.2, M1.3, M1.5 | M1 model; engine persistence/restart/CAS test; relay fingerprint and cancellation tests | Two bounded operations, not unlimited replay retention |
+| M1.1, M1.2, M1.3, M1.5 | M1 and `OutcomeRecovery` (durable sender generation, first verdict, rollback); engine persistence/restart/CAS test; relay fingerprint and cancellation tests | Two bounded operations, not unlimited replay retention |
 | M1.4 | M1 model and relay exact-prefix ACK tests | Resume uses its different whole-replay terminator |
 | M2.1–M2.5 | M2 model; every partial-admission phase expiry/cancel regression; ambiguous-auth browser engine tests | Signatures abstracted; bootstrap redaction checked concretely, not proved |
-| M3.1–M3.5 | M3 model; stale sentinel, historical marker, final-close and snapshot tests | Model does not establish global transcript agreement |
+| M3.1–M3.5 | M3 and `HistoricalCleanup`; stale sentinel, historical marker, final-close and snapshot tests | Model does not establish global transcript agreement |
 | M4.1–M4.8 | M4/composed models; six successor crash-boundary regressions; actual browser boundary interception | Availability requires a willing recoverable coordinator or current new policy |
 | Invalid peer membership transition | Engine commit-validation/rollback tests and controller fail-close path | No epoch merge or Byzantine agreement claim |
+| Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution; local IndexedDB failure followed by reload and retry | Concrete serialization and physical erasure are not proved by TLC |
 
 ## H. Reproduction and measurement interpretation
 
+### H.0 Current release qualification
+
+The [edition 12 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) distinguishes the release candidate `cbd7977df9df29bb6e80baf34a3f32b9f4dc4708` from the previously deployed browser used in the paired comparison. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
+
+```sh
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage; do
+  node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
+done
+for scenario in peer-storage full-room lost-guest-keys; do
+  bun scripts/protocol-browser-evidence.ts --mode faults --fault "$scenario" --output "$OUT/$scenario" || exit 1
+done
+python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"
 ```
+
+The idle cuts evict a local Worker immediately after deletion or after its first of two notifications. The lost-keys case erases a local guest database, then uses the real admission flow. No production credential is needed.
+
+The historical transport-only experiment included a forced-close control. The current partition gate fails if an offer does not arrive; it cannot use a forced close to pass. For a healthy-path smoke use `--fault healthy-host`. The edition 10 evidence tag also supplies two local-only cases: `--fault suspended-host` freezes a Chromium page, while `--fault paused-host` verifies a debugger pause on its JavaScript thread. A page that can answer is not a silent host. Never inject a network or storage fault into production.
+
+### H.0.1 Reproducing the premature-succession study
+
+From this edition’s source export, set `PILLOWFORT_QUALIFICATION_ASSETS` to the absolute path of `study-browser` in the replication archive. This selects the exact released browser byte-for-byte; omitting it evaluates the currently built client instead. Do not point the harness at a public deployment.
+
+```sh
+PILLOWFORT_QUALIFICATION_ASSETS="$BUNDLE/study-browser" \
+  python3 scripts/measure-premature-succession.py "$OUT/offer-study"
+PILLOWFORT_RELAY_CONFORMANCE_REPORT="$OUT/relay.json" bun test ./test/secure-relay-v4.test.ts
+cargo +1.94.1 test --locked --manifest-path crypto/openmls-wasm/Cargo.toml
+```
+
+Each trial requires a host policy naming two eligible guests and a pre-interruption encrypted chat. The clock starts at the first fresh challenge. In the clean-close control the host socket is closed at that point. Time to offer is the first authorization frame at its intended guest; acceptance is the candidate’s signed frame; transfer is checked at a separate peer. Ordinary traffic is the appearance of a newly sent message in the receiving guest’s UI. No system clock is advanced. The longer-wait control extends only the fixture’s last reply deadline; extensions and released timings are run in both orders. For temporary holds the guest accepts only after release. This measures an observed return to ordinary traffic with a fixed consent procedure, not the earliest possible recovery. With continuing absence the guest instead accepts the first visible offer; the original host is still unavailable when the message arrives.
+
+Chromium suspension stops every CDP-listed process of one dedicated host browser with OS signals. The relay, observers, operating system, and network stay awake. A physical sleep test requires a dedicated host laptop, an independent relay and two awake observers. Record OS sleep/wake, actual socket close or continued silence, challenge and offer times, signed consent, and first ordinary receipt. A physical sleep can close a transport immediately; it must not be grouped with application-path buffering. No such hardware result is reported here.
+
+### H.0.2 Earlier release qualification
+
+The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identifies the application and Worker builds, the independent clients, and the live checks. For that edition’s implementation, check out `8ba7ab7040da0522a02ea0c222801e2a072efa05`. Run `npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`, and install Chromium, Firefox and WebKit for the locked Playwright version. Run `npm run check`, `npm --prefix hosted-mcp run check`, then `NODE_ENV=production npm run build`. Use a new output directory. The model runner verifies the TLC JAR digest before execution.
+
+Run `python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"` and `bun verification/app/browsers.ts "$OUT/retoss.json" all retoss`. Install the published `@ontologic/pillowfort-agent@2.1.1` into an isolated directory; set `PKG` to its installed package directory and run `node "$PKG/scripts/agent.mjs" install-browser`. Then run:
+
+```sh
+for game in fresh-admission ttt rps koth vote saboteur breakout; do
+  node verification/app/game-handoff.ts "$game" "$OUT/$game.json" "$PKG" || exit 1
+done
+bun verification/app/agents.ts stdio "$OUT/stdio.json" "$PKG/scripts/agent.mjs"
+node scripts/protocol-workerd-evidence.mjs persisted-offer "$OUT/persisted-offer"
+node scripts/protocol-workerd-evidence.mjs silent-host-loss "$OUT/silent-host-loss"
+```
+
+The edition 9 tagged checkout additionally supplies `all-decline`, the isolated `guest-backpressure` browser cut, and opt-in public acceptance commands. No fault injection runs on production. The subsections below identify their own measured source; they are not instructions for checking the current revision.
+
+### H.1 Retained model and recovery executions
+
+```
+git clone https://github.com/slee1996/pillowfort.git
+cd pillowfort
+git checkout --detach 1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b
 npm ci
 npm --prefix client ci
 npx playwright install chromium
 npm run check
-bun test test/secure-relay-v4.test.ts --test-name-pattern 'M4 successor crash boundaries'
+bun test ./test/secure-game-reducer.test.ts ./test/secure-relay-v4.test.ts ./test/secure-relay-persistence-v4.test.ts ./test/secure-transport-v4.test.ts ./test/application-events-v4.test.ts
+bun test ./test/secure-relay-v4.test.ts --test-name-pattern 'persists explicit retirement after a signed succession policy'
 curl --fail --location https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar --output /tmp/tla2tools-1.7.4.jar
 python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-models
-bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-benchmarks
+```
+
+Those recovery experiments used three independent browser profiles and the then-current 120-second delay before an offer. They do not measure prompt succession. Each output directory contains its own result and environment. The observer case checks its roster before admitting any replacement-socket replay; receipt of a frame alone is not the assertion.
+
+```sh
+for fault in guest-resume-after-succession second-resume former-host-removal; do
+  bun scripts/protocol-browser-evidence.ts --mode faults --fault "$fault" --output "/tmp/pillowfort-$fault" || exit 1
+done
+```
+
+Use Node/Bun versions required by the lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and Chromium for pinned Playwright 1.65.0. The source archive omits the earlier `paper/` publication subtree, not runtime or test inputs. Cloning the pinned commit includes that subtree; explicit `./test/...` selection keeps archived source copies out of test discovery.
+
+### H.2 Retained light-load latency and browser-fault records
+
+The latency samples and four browser-fault executions are retained from `10fe8f8b490c9e890d5a642bc25568e985c2fe8a`; neither is presented as a new measurement of this revision. From the clone above, reproduce that earlier environment separately:
+
+```
+git worktree add ../pillowfort-latency-10fe8f8b490c 10fe8f8b490c9e890d5a642bc25568e985c2fe8a
+cd ../pillowfort-latency-10fe8f8b490c
+npm ci
+npm --prefix client ci
+npm run build
+bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfort-light-load
 bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-browser-faults
 ```
 
-Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it uses the relay’s real deadlines. The historical runs at `1ba68f23` used a 120-second pre-offer delay; that delay no longer applies when a recipient is eligible.
+Latency runs submit one message at a time, then wait 500 ms after completed delivery. That quiet interval is outside the latency sample and is not a production protocol delay. Samples include grant exchange, persistence, MLS, host preview, queueing and recipient DOM application. The delayed-host profile adds 100 ms before each host preview. These local, shared-hardware runs characterize light-load latency, not throughput capacity, WAN behavior or mobile performance. Original raw paced-rate fields remain in the retained JSON for provenance; the paper does not report them as capacity evidence.
 
-Latency is measured from UI submission to observed application in a recipient DOM. It includes grant exchange, persistence, MLS, host preview, queueing and rendering. The slow-host profile adds 100 ms before delivering each host preview without changing cryptography. Each run sends one message at a time, then waits 500 ms after completion; there is no catch-up burst after a scheduler stall. Reported throughput is the **achieved closed-loop paced rate**, not a maximum-capacity or stable open-loop two-messages/second claim. Measurements use one local machine and shared Chromium/hardware; they are not WAN, Cloudflare or mobile results.
+Quantiles use nearest-rank selection: sort the 20 samples and select index `ceil(p*n)-1`. The raw report's `medianMs` is that p50 estimate, not the average of the central pair. Retain the full sample arrays when comparing estimators.
+
+### H.3 Immediate offers
+
+Check out `0df3215d98139861831c6e3f68eb0b0997c584ad` in the clone, install the locked dependencies as above, and run:
+
+```sh
+bun test ./test/secure-relay-v4.test.ts
+npm run build
+bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --output /tmp/pillowfort-offer
+```
+
+The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
+
+### H.4 Earlier qualification: reconnect, eviction and silent transport failure
+
+Check out `f03fa147f79847dda5dac5b0a8ed37c8d040cee5`. Install the three locked workspaces (`npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`) and the pinned Playwright Chromium. Use the SHA-checked TLC JAR from H.1. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) links the logs, environment and limits.
+
+```sh
+npm run check
+npm --prefix hosted-mcp run check
+python3 scripts/check-protocol-models.py --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pf-models
+bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pf-browsers
+node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction
+node scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent
+```
+
+The eviction fixture interrupts the first effect dispatch **after** the production room transaction. Miniflare evicts the real local Durable Object with both guest sockets hibernated; a different instance handles the durable alarm. The restored offer retains the original policy, candidate, authorization, and absolute deadline. Replayed receipts may repeat, but a repeated signed acceptance neither republishes the action nor adds a removal. The separate planned-transfer run keeps the former host admitted and then exercises loss of the *next* host under its own policy.
+
+The silent-path fixture discards bytes in both directions without forwarding a WebSocket close, FIN, or reset at onset. Its two TCP legs acknowledge locally: this is application-path isolation, not an IP-level outage on a carrier network. A forced close after the observation window is a separate positive control. No destructive failure was induced in production.
 
 ## I. Related designs
 
+The comparison concerns mechanisms, not measured performance or cryptographic superiority.
+
 | Design | Relevant mechanism | Distinction from Pillowfort |
 |---|---|---|
-| MLS architecture, RFC 9750 §§5.2–5.3, 6.4–6.6 | Delivery-service consistency, application access control, invalid commits, state-loss recovery | These responsibilities are already recognized by MLS; Pillowfort specifies a particular room coordinator and persist-before-effect composition |
-| Matrix Megolm, specification v1.19 | Per-sender outbound ratchets, session-key distribution, application replay tracking | Different cryptographic/state organization; not an MLS epoch or Pillowfort coordinator benchmark baseline |
-| Signal private group system | Server-canonicalized encrypted group state with privacy-preserving authorization proofs | Different metadata/privacy goals; Pillowfort's relay observes device/membership coordination metadata and uses explicit admitted-host authority |
-
-Sources: [RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html), [Megolm v1.19](https://spec.matrix.org/v1.19/olm-megolm/megolm/), [Signal private group design](https://signal.org/blog/signal-private-group-system/). This is a design comparison, not a claim that these systems were experimentally benchmarked or that Pillowfort improves their cryptography.
+| [MLS architecture, RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html), §§5.2–5.3, 6.4–6.6 | Delivery-service consistency, application access control, invalid commits, state-loss recovery | These responsibilities are already recognized by MLS; Pillowfort specifies a particular room coordinator and persist-before-effect composition |
+| [Matrix Megolm, v1.19](https://spec.matrix.org/v1.19/olm-megolm/megolm/) | Per-sender outbound ratchets, session-key distribution, application replay tracking | Different cryptographic/state organization; not an MLS epoch or Pillowfort coordinator benchmark baseline |
+| [Signal private group system](https://signal.org/blog/signal-private-group-system/) | Server-canonicalized encrypted group state with privacy-preserving authorization proofs | Different metadata/privacy goals; Pillowfort's relay observes device/membership coordination metadata and uses explicit admitted-host authority |
