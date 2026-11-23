@@ -4,37 +4,24 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {createRequire} from 'node:module';
+import {mkdirSync, writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-const ts = createRequire(new URL('../client/package.json', import.meta.url))('typescript');
+import {ts, source as loadSource, one, nodes, compact, fn, variable, guarded} from './protocol-source.mjs';
 const out = process.argv[2];
 if (!out) throw Error('Usage: node scripts/check-protocol-guards.mjs OUTPUT_DIRECTORY [Z3]');
 const solver = process.argv[3] ?? 'z3';
 mkdirSync(out, {recursive:true});
 const sources = {}, results = [];
-function source(name) {
-  const bytes = readFileSync(new URL('../' + name, import.meta.url));
-  sources[name] = createHash('sha256').update(bytes).digest('hex');
-  return ts.createSourceFile(name, bytes.toString(), ts.ScriptTarget.Latest, true);
-}
-function one(items, what) { assert.equal(items.length, 1, what); return items[0]; }
-function nodes(root, pred) {
-  const found = [];
-  function visit(node) { if (pred(node)) found.push(node); ts.forEachChild(node, visit); }
-  visit(root); return found;
-}
-const compact = node => node.getText().replace(/\s+/g,'');
-const fn = (root, name) => one(nodes(root, n => (ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name?.getText() === name), name);
-const variable = (root, name) => one(nodes(root, n => ts.isVariableDeclaration(n) && n.name.getText() === name), name).initializer;
-const guarded = (root, atomicPath) => one(nodes(root, n => ts.isIfStatement(n) && compact(n.expression).includes(atomicPath)), atomicPath);
+const source = name => loadSource(name, sources);
 const kind = ts.SyntaxKind;
-const ops = new Map([[kind.AmpersandAmpersandToken,'and'],[kind.BarBarToken,'or'],[kind.EqualsEqualsEqualsToken,'='],[kind.ExclamationEqualsEqualsToken,'distinct'],[kind.GreaterThanEqualsToken,'>='],[kind.LessThanToken,'<']]);
+const ops = new Map([[kind.AmpersandAmpersandToken,'and'],[kind.BarBarToken,'or'],[kind.EqualsEqualsEqualsToken,'='],[kind.ExclamationEqualsEqualsToken,'distinct'],[kind.GreaterThanEqualsToken,'>='],[kind.LessThanToken,'<'],[kind.PlusToken,'+']]);
 function compile(n, names) {
   if (ts.isParenthesizedExpression(n)) return compile(n.expression,names);
   if (ts.isBinaryExpression(n) && ops.has(n.operatorToken.kind)) return `(${ops.get(n.operatorToken.kind)} ${compile(n.left,names)} ${compile(n.right,names)})`;
   if (ts.isPrefixUnaryExpression(n) && n.operator === kind.ExclamationToken) return `(not ${compile(n.operand,names)})`;
   if (ts.isStringLiteral(n)) { assert.match(n.text,/^[a-z-]+$/); return `"${n.text}"`; }
+  if (ts.isNumericLiteral(n)) { assert.match(n.text,/^\d+$/); return n.text; }
+  if (n.kind === kind.TrueKeyword || n.kind === kind.FalseKeyword) return n.getText();
   if (n.kind === kind.NullKeyword) return '"@null"';
   if (ts.isIdentifier(n) && n.text === 'undefined') return '"@undefined"';
   const atom = names.get(compact(n));
@@ -102,6 +89,50 @@ prove('M4-peer-policy-binding',allowed.expression,[bool('policyExists','policy')
 const reply=fn(path,'acknowledgeHostPath').body.statements[0]; assert(ts.isIfStatement(reply) && compact(reply.thenStatement)==='returnw;');
 prove('M4-current-probe',reply.expression,[bool('watch','w'),word('owner','w.deviceId'),word('device','device'),word('socket','w.connectionId'),word('connection','connection'),word('challenge','w.nonce'),word('reply','nonce'),word('phase','w.phase'),num('now','now'),num('due','w.dueAt')],
   '(and watch (= owner device) (= socket connection) (= challenge reply) (or (distinct phase "expire") (< now due)))',{rejects:true});
-const report={method:'TypeScript AST decision equivalence; unsatisfiable disagreement and positive/negative satisfiable witnesses for each expression.',scope:'Local guards on parsed inputs. No proof of caller reachability, cryptographic validity, all mutation sites or full TypeScript refinement.',typescript:ts.version,z3:execFileSync(solver,['-version'],{encoding:'utf8'}).trim(),sources,results};
+// The scalar eligibility test alone would still pass for a last-match scan.
+// Identify the real iteration order, return position and successful lookup, then
+// prove the initial, skip, return and exhaustion cases over an arbitrary sequence.
+assert.equal(compact(fn(relay,'memberById').body.statements[0]),'returnstate.members.find((member)=>member.deviceId===deviceId)||null;');
+const loops = [];
+function checkCases(label, sourceNode, declarations, queries, expected) {
+  const smt = '(set-logic ALL)\n'+declarations+'\n'+queries.map(q=>`(push)\n(assert ${q})\n(check-sat)\n(pop)`).join('\n')+'\n';
+  const file=resolve(out,label+'.smt2'); writeFileSync(file,smt);
+  const verdicts=execFileSync(solver,['-T:15',file],{encoding:'utf8'}).trim().split(/\s+/);
+  assert.deepEqual(verdicts,expected,label);
+  loops.push({label,source:sourceNode.getSourceFile().fileName,line:1+sourceNode.getSourceFile().getLineAndCharacterOfPosition(sourceNode.getStart()).line,verdicts,formulaSha256:createHash('sha256').update(smt).digest('hex')});
+}
+const eligibleNames=new Map([['member?.status','(select status i)'],['member.connectionId','(select connection i)'],['member.requiresFreshAdmission','(select fresh i)'],['policy.attemptedDeviceIds.includes(id)','(select tried i)'],['state.pendingZombieRemovals.some(marker=>marker.deviceId===id)','(select retiring i)']]);
+checkCases('M4-first-eligible-scan',loop,`
+(declare-const status (Array Int String)) (declare-const connection (Array Int String))
+(declare-const fresh (Array Int Bool)) (declare-const tried (Array Int Bool)) (declare-const retiring (Array Int Bool))
+(declare-const i Int) (declare-const n Int) (assert (and (<= 0 i) (<= i n)))
+(define-fun shipped ((i Int)) Bool ${compile(eligible.expression,eligibleNames)})
+(define-fun eligible ((i Int)) Bool (and (= (select status i) "active") (distinct (select connection i) "@null") (not (select tried i)) (not (select retiring i)) (not (select fresh i))))
+(define-fun prefix ((end Int)) Bool (forall ((j Int)) (=> (and (<= 0 j) (< j end)) (not (eligible j)))))`,[
+  '(not (prefix 0))', '(and (< i n) (prefix i) (not (shipped i)) (not (prefix (+ i 1))))',
+  '(and (< i n) (prefix i) (shipped i) (not (and (eligible i) (prefix i))))',
+  '(and (= i n) (prefix i) (exists ((j Int)) (and (<= 0 j) (< j n) (eligible j))))',
+  '(and (< i n) (not (< (- n (+ i 1)) (- n i))))', '(and (> i 0) (< i n) (prefix i) (shipped i))', '(and (> n 0) (= i n) (prefix i))'],
+  ['unsat','unsat','unsat','unsat','unsat','sat','sat']);
+
+// The host builds a dense signed list in admission order. Recipients compare its
+// length and every index, not a set or a lexicographic ordering of device IDs.
+const policyCase=one(nodes(fn(app,'reduceSecureRoomEventV4'),n=>ts.isCaseClause(n)&&n.expression.text==='host-succession-policy'),'peer policy');
+const checks=[[variable(fn(participant,'runAutomations'),'deviceIds'),'engine.deviceId','M4-author-policy-list'],[variable(policyCase,'order'),'state.hostDeviceId','M4-receiver-policy-list']];
+for (const [mapped,host,label] of checks) {
+  assert(ts.isCallExpression(mapped) && compact(mapped.expression.name)==='map');
+  assert.equal(compact(mapped.arguments[0]),'(member)=>member.deviceId');
+  const filter=mapped.expression.expression; assert.equal(compact(filter.expression),'state.members.filter');
+  const condition=filter.arguments[0]; assert(ts.isArrowFunction(condition) && compact(condition.parameters[0])==='member');
+  prove(label,condition.body,[word('device','member.deviceId'),word('host',host),bool('removing','state.pendingRemovalDeviceIds.includes(member.deviceId)')], '(and (distinct device host) (not removing))');
+}
+const listGuard=guarded(policyCase,'content.deviceIds.every');
+const all=one(nodes(listGuard.expression,n=>ts.isCallExpression(n)&&compact(n.expression)==='content.deviceIds.every'),'each signed rank');
+assert.equal(compact(all.arguments[0]),'(deviceId,index)=>deviceId===order[index]');
+assert.equal(compact(listGuard.thenStatement),'accepted=false;');
+assert.equal(compact(listGuard.elseStatement),'state.hostSuccession={eventId:event.eventId,hostDeviceId:event.deviceId,deviceIds:[...order]};');
+prove('M4-exact-signed-list',listGuard.expression,[word('device','event.deviceId'),word('host','state.hostDeviceId'),num('signedSize','content.deviceIds.length'),num('actualSize','order.length'),bool('ordered',compact(all))], '(and (= device host) (= signedSize actualSize) ordered)',{rejects:true});
+
+const report={loops,method:'TypeScript AST decision equivalence; unsatisfiable disagreement and positive/negative satisfiable witnesses for each expression.',scope:'Local guards on parsed inputs. No proof of caller reachability, cryptographic validity, all mutation sites or full TypeScript refinement.',typescript:ts.version,z3:execFileSync(solver,['-version'],{encoding:'utf8'}).trim(),sources,results};
 writeFileSync(resolve(out,'guards.json'),JSON.stringify(report,null,2)+'\n');
-console.log(`${results.length} production guard equivalences, ${2*results.length} non-vacuity witnesses`);
+console.log(`${results.length} production guard equivalences, ${2*results.length} non-vacuity witnesses, ${loops.length} sequence proof(s)`);

@@ -1,6 +1,6 @@
 ---------------------------- MODULE Coordination --------------------------
 EXTENDS Naturals
-CONSTANTS Capacity, MaxOps, Broken, Stage, MaxDepth
+CONSTANTS Capacity, MaxOps, Broken, Stage, MaxDepth, RankLimit, InitialRanks, RosterChanges, SocketLimit
 VARIABLES delivery, admission, resume, succession, depth, badInterlock
 vars == <<delivery, admission, resume, succession, depth, badInterlock>>
 D == INSTANCE M1Delivery WITH s <- delivery

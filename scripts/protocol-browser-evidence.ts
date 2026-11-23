@@ -21,7 +21,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness", "succession-during-leave"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness", "succession-during-leave", "changing-tenures"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -523,6 +523,102 @@ async function plannedThenUnplanned(browser: Browser) {
     if (signedChoices.join(",") !== "0:reject,1:accept") throw Error("Wrong succession choices");
     return { fault: "planned-then-unplanned", formerHostRemainedAdmitted: true, manualAcceptancePreviewed: true,
       freshPolicyBoundToOffer: true, signedChoices, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
+// One private room, not a sequence of independent happy paths: new admission,
+// three authority tenures, four replays of the same late guest, and retirement.
+async function changingTenures(browser: Browser) {
+  type Policy = { id: string; list: string[] };
+  const devices: string[] = [], policies = new Map<number, Policy[]>();
+  const offers = new Map<string, { owner: number; policy: string }>();
+  const choices = new Map<string, { owner: number; policy: string; action: string }>();
+  const receipts = new Set<string>(), violations: string[] = [], waiters = new Set<() => void>();
+  async function observed<T>(read: () => T | undefined, boundary: string): Promise<T> {
+    const answer = Promise.withResolvers<T>();
+    const check = () => { const result = read(); if (result !== undefined) answer.resolve(result); };
+    waiters.add(check); check();
+    try { return await awaitBoundary(answer.promise, boundary); } finally { waiters.delete(check); }
+  }
+  function observe({ page }: Participant, index: number) {
+    page.on("websocket", socket => {
+      const proposed = new Map<string, Policy>();
+      let resume = false, snapshot = false, end = "", completion = "";
+      socket.on("framesent", ({payload}) => {
+        const f = JSON.parse(payload.toString()), content = f.authorityEvent?.content;
+        if (content?.type === "host-succession-policy") proposed.set(f.envelope.messageId, { id: f.authorityEvent.eventId, list: content.deviceIds });
+        if (content?.type === "host-succession") choices.set(content.authorizationId, {owner:index, policy:content.policyEventId, action:content.action});
+        if (index === 4 && f.kind === "resume-complete") {
+          if (!resume || !snapshot || !end || f.lastMessageId !== end) violations.push("resume submitted before its own replay boundary");
+          completion = f.requestId;
+        }
+        for (const wake of waiters) wake();
+      });
+      socket.on("framereceived", ({payload}) => {
+        const f = JSON.parse(payload.toString());
+        if (f.type === "authenticated") {
+          if (devices[index] && devices[index] !== f.deviceId) violations.push("device identity changed");
+          devices[index] = f.deviceId; resume = f.mode === "resume";
+        }
+        if (resume && f.type === "room-state-snapshot") snapshot = true;
+        if (resume && f.type === "backlog-end") end = f.lastMessageId;
+        if (index === 4 && completion && f.type === "frame-accepted" && f.messageId === completion) receipts.add(completion);
+        if (f.type === "host-transfer-authorized" && f.policyEventId) offers.set(f.authorizationId, {owner:index,policy:f.policyEventId});
+        const policy = proposed.get(f.messageId);
+        if (policy && f.type === "application-result" && f.result === "accepted") {
+          const entries = policies.get(index) ?? []; entries.push(policy); policies.set(index, entries);
+        }
+        for (const wake of waiters) wake();
+      });
+    });
+  }
+  const room = await setupRoom(browser, 4, observe), participants = room.participants;
+  const currentPolicy = (holder: number, ranks: number[]) => observed(() => policies.get(holder)?.findLast(p =>
+    p.list.length === ranks.length && ranks.every((rank, i) => devices[rank] && devices[rank] === p.list[i])), "committed policy in admission order");
+  const held: string[] = [];
+  async function handoff(holder: number, next: number, eligible: number[]) {
+    const policy = await currentPolicy(holder, eligible);
+    if (held.includes(policy.id)) throw Error("a tenure reused its predecessor's policy");
+    held.push(policy.id);
+    await participants[holder].context.close();
+    const [token] = await observed(() => [...offers].find(([,v]) => v.policy === policy.id), "first delegated offer");
+    if (offers.get(token)?.owner !== next || choices.has(token)) throw Error("an offer targeted the wrong member or was answered before a choice");
+    await participants[next].page.locator("#btn-catch").click();
+    const signed = await observed(() => choices.get(token), "signed consent to that exact offer");
+    if (signed.action !== "accept" || signed.owner !== next || signed.policy !== policy.id) throw Error("consent binding changed");
+    await currentPolicy(next, eligible.filter(i => i !== next));
+  }
+  let observerInvite = "";
+  async function recover(holder: number) {
+    const guest = participants[4].page, prior = receipts.size;
+    await guest.goto("about:blank"); await guest.goto(observerInvite);
+    await guest.locator("#join-name").fill(room.names[4]);
+    await guest.getByRole("button", {name:/Join fort|Reconnect|Recover/}).click();
+    await observed(() => receipts.size > prior ? true : undefined, "receipt for this replacement's completion");
+    if (receipts.size !== prior + 1 || violations.length) throw Error(violations.join("; ") || "extra completion");
+    await deliver(guest, participants[holder].page, `guest after recovery ${prior + 1}`);
+    await deliver(participants[holder].page, guest, `observed reply ${prior + 1}`);
+  }
+  try {
+    await handoff(0, 1, [1,2,3]);
+    const host = participants[1].page;
+    await host.getByRole("button", { name:"Invite", exact:true }).click(); await host.locator("#btn-copy-invite").click();
+    await host.getByText("Link copied. Paste it in a message to your friend.").waitFor();
+    observerInvite = await host.evaluate(() => navigator.clipboard.readText());
+    if (!new URL(observerInvite).hash.includes("&host=")) throw Error("late admission needs the successor's private trust anchor");
+    await host.locator("#btn-close-invite").click();
+    const late = await newParticipant(browser); participants.push(late); room.names.push("Late observer"); observe(late, 4);
+    await late.page.goto(observerInvite); await late.page.locator("#join-name").fill(room.names[4]);
+    await late.page.locator("#btn-enter").click(); await host.locator("#btn-approve-admission").click();
+    await currentPolicy(1, [2,3,4]);
+    await recover(1); await handoff(1,2,[2,3,4]); await recover(2); await recover(2);
+    await handoff(2,3,[3,4]); await recover(3);
+    const last = participants[3].page;
+    await last.locator("#btn-room-menu").click(); await last.locator("#btn-knock-down").click(); await last.locator("#btn-confirm-room-exit").click();
+    await Promise.all([last,late.page].map(p => p.getByText("Fort has been knocked down.", {exact:true}).waitFor()));
+    if (choices.size !== 3 || receipts.size !== 4 || violations.length) throw Error("incomplete authority or delivery trace");
+    return {fault:"changing-tenures", admittedIdentities:new Set(devices).size, distinctFormerPolicies:held.length, explicitChoices:choices.size,
+      lateAdmissionUnderSuccessor:true, sameDeviceCompletionReceipts:receipts.size, bidirectionalExchanges:receipts.size, bothObservedRetirement:true};
   } finally { await closeRoom(room); }
 }
 
@@ -1234,6 +1330,7 @@ try {
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
     if (selectedFault === "manual-offer-readiness") results.push(await manualOfferReadiness(browser!));
+    if (selectedFault === "changing-tenures") results.push(await changingTenures(browser!));
     if (selectedFault === "succession-during-leave") results.push(await successionDuringLeave(browser!));
     if (selectedFault === "terminal-storage") results.push(await retirementStorage(browser!));
     if (selectedFault === "premature-succession") results.push(await prematureSuccession(origin, (host, configure, gateway) =>

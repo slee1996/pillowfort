@@ -8,8 +8,8 @@ PH == INSTANCE M4SuccessionProof WITH s <- succession
 
 \* Projection, not an assumption of independence: the actual product guards each
 \* component step; all other steps must stutter on that component's record.
-THEOREM Safe == ASSUME Capacity \in Nat, MaxOps \in Nat, Broken = "None"
-                PROVE Init /\ [][Next]_vars => []Safety
+THEOREM Safe == ASSUME RankLimit \in Nat, InitialRanks \in 1..RankLimit, Capacity \in Nat, MaxOps \in Nat, Broken = "None"
+                PROVE Init /\ [][Next]_vars => []Safety /\ [][H!ConsentAtSwitch]_<<succession>>
 <1>1. Init /\ [][Next]_vars => []D!Safety
   <2>1. Init => D!Init BY DEF Init
   <2>2. [Next]_vars => [D!Next]_<<delivery>>
@@ -52,11 +52,11 @@ THEOREM Safe == ASSUME Capacity \in Nat, MaxOps \in Nat, Broken = "None"
       R!Snapshot, R!ObserveEnd, R!SendCompletion, PR!Snapshot, PR!ObserveEnd, PR!SendCompletion,
       R!Acknowledge, R!Crash, R!Restore, PR!Acknowledge, PR!Crash, PR!Restore
   <2> QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, PTL
-<1>4. Init /\ [][Next]_vars => []H!Safety
+<1>4. Init /\ [][Next]_vars => []H!Safety /\ [][H!ConsentAtSwitch]_<<succession>>
   <2>1. Init => H!Init BY DEF Init
   <2>2. [Next]_vars => [H!Next]_<<succession>>
     BY Z3 DEF Next, vars, DeliveryStep, AdmissionStep, ResumeStep, HostStep
-  <2>3. PH!Init /\ [][PH!Next]_PH!vars => []PH!Safety BY PH!Safe
+  <2>3. PH!Init /\ [][PH!Next]_PH!vars => []PH!Safety /\ [][PH!ConsentAtSwitch]_PH!vars BY PH!Safe DEF PH!Parameters
   <2>4. []PH!Safety <=> []H!Safety BY DEF PH!Safety, H!Safety, PH!EligibleAt, H!EligibleAt
   <2>5. PH!Init <=> H!Init BY DEF PH!Init, H!Init
   <2>6. [H!Next]_<<succession>> <=> [PH!Next]_PH!vars BY DEF H!Next, PH!Next, PH!vars,
@@ -65,8 +65,11 @@ THEOREM Safe == ASSUME Capacity \in Nat, MaxOps \in Nat, Broken = "None"
       H!Reconnect, H!Grace, H!Choose, PH!Reconnect, PH!Grace, PH!Choose,
       H!AfterConsent, H!CommitAcceptance, H!Refuse, H!ExpireOffer, PH!AfterConsent, PH!CommitAcceptance, PH!Refuse, PH!ExpireOffer,
       H!StoreRemove, H!AckRemove, H!CompleteRemove, PH!StoreRemove, PH!AckRemove, PH!CompleteRemove,
-      H!PublishPolicy, PH!PublishPolicy
-  <2> QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, PTL
+      H!PublishPolicy, PH!PublishPolicy, H!PolicyList, PH!PolicyList,
+      H!AdmitNext, PH!AdmitNext, H!Withdraw, PH!Withdraw, H!Ranks, PH!Ranks, H!Guests, PH!Guests
+  <2>7. [PH!ConsentAtSwitch]_PH!vars <=> [H!ConsentAtSwitch]_<<succession>>
+    BY DEF PH!ConsentAtSwitch, H!ConsentAtSwitch, PH!vars
+  <2> QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, PTL
 <1>5. Init /\ [][Next]_vars => []~badInterlock
   <2>1. Init => ~badInterlock BY DEF Init
   <2>2. ~badInterlock /\ [Next]_vars => ~badInterlock'

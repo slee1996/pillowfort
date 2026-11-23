@@ -73,6 +73,13 @@ def main():
         profiles.append((module, module, 2, 2, "None", None, None))
         profiles.extend(("mutation-" + m, module, 2, 2, m, None, None) for m in mutations)
         profiles.append(("witness-" + witness, module, 2, 2, "None", None, None))
+    # Keep the original small product comparable. Separately exhaust the larger,
+    # changing domains and demonstrate transfers/replays beyond the old bounds.
+    domains = {"roster-churn": (2, 4), "witness-FourthHolder": (2, 4)}
+    socket_sweep = {"replacement-chain", "witness-FourthReplacement"}
+    witnesses.update({"witness-FourthHolder": "NoFourthHolder", "witness-FourthReplacement": "NoFourthReplacement"})
+    profiles.extend((name, "M4Succession", 1, 3, "None", None, None) for name in domains)
+    profiles.extend((name, "RepeatedResume", 1, 1, "None", None, None) for name in sorted(socket_sweep))
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:
@@ -88,8 +95,15 @@ def main():
         temporal = {"HostPath": "SilentProgress", "mutation-NeverDetect": "SilentProgress",
                     "IdleRetirement": "AttachedProgress", "mutation-NoWake": "AttachedProgress"}.get(name)
         behavior = f"SPECIFICATION Spec\nPROPERTY {temporal}" if temporal else "INIT Init\nNEXT Next"
+        parameters = {}
+        if module in {"M1Delivery", "M3Resume", "RepeatedResume", "Coordination"}:
+            parameters["SocketLimit"] = 5 if name in socket_sweep else 3 if module == "RepeatedResume" else 2
+        if module in {"M4Succession", "Coordination"}:
+            start, limit = domains.get(name, (3, 3))
+            parameters.update(InitialRanks=start, RankLimit=limit, RosterChanges=name in domains)
+        parameter_text = "".join(f" {key} = {str(v).upper()}\n" for key, v in parameters.items())
         config.write_text(f"{behavior}\nINVARIANTS {invariants}\nCONSTANTS\n"
-                          f' Capacity = {capacity}\n MaxOps = {operations}\n Broken = "{mutant}"\n' +
+                          f' Capacity = {capacity}\n MaxOps = {operations}\n Broken = "{mutant}"\n' + parameter_text +
                           (f" Stage = {stage}\n MaxDepth = {depth}\n" if stage is not None else ""))
         with tempfile.TemporaryDirectory(prefix="pillowfort-tlc-") as states:
             command = ["java", "-XX:+UseParallelGC", "-Xmx1024m", "-cp", str(jar), "tlc2.TLC", "-workers", "1",
@@ -110,7 +124,7 @@ def main():
                    else run.returncode == 0 and exhaustive)
         counts = re.search(r"([\d,]+) states generated, ([\d,]+) distinct states found", log)
         result = {"name": name, "module": module, "capacity": capacity, "maxOperations": operations,
-                  "stage": stage, "maxCompositionSteps": None if depth == 0 else depth,
+                  "additionalParameters": parameters, "stage": stage, "maxCompositionSteps": None if depth == 0 else depth,
                   "compositionToFixedPoint": depth == 0, "mutation": mutant,
                   "exitCode": run.returncode, "expectedCounterexample": mutant != "None",
                   "counterexampleFound": violated in ("Safety", "SilentProgress", "AttachedProgress"), "expectedViolation": expected,

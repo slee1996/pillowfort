@@ -1,9 +1,9 @@
 name: Protocol induction
 on:
   push:
-    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
+    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'scripts/check-protocol-boundaries.mjs', 'scripts/protocol-source.mjs', 'scripts/protocol-effect-paths.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
   pull_request:
-    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
+    paths: ['verification/*.tla', 'scripts/check-protocol-proofs.py', 'scripts/check-protocol-guards.mjs', 'scripts/check-protocol-boundaries.mjs', 'scripts/protocol-source.mjs', 'scripts/protocol-effect-paths.mjs', 'src/**', '.github/workflows/protocol-induction.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,9 +28,10 @@ jobs:
           python3 -m pip install --target "$PWD/solver" --no-deps 'https://files.pythonhosted.org/packages/b6/f2/036f6501d3a2835cd4a17fd67364cd56337a5183e20b063d3d8a005f7288/z3_solver-4.13.3.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl#sha256=794843e4946ade1561e40a75ffc1163b45d36b493fd6cc269ad1d6a65bddb8e5'
           ln -sf "$PWD/solver/bin/z3" "$PWD/tlapm/lib/tlapm/backends/bin/z3"
           "$PWD/solver/bin/z3" -version
-      - name: Prove the production guards and the five model theorems
+      - name: Check production decisions, publication paths and model theorems
         run: |
           node scripts/check-protocol-guards.mjs "$RUNNER_TEMP/results/guards" "$RUNNER_TEMP/solver/bin/z3"
+          node scripts/check-protocol-boundaries.mjs "$RUNNER_TEMP/results/boundaries"
           python3 scripts/check-protocol-proofs.py --tlapm "$RUNNER_TEMP/tlapm/bin/tlapm" --output "$RUNNER_TEMP/results/proofs"
       - uses: actions/upload-artifact@v4
         if: always()

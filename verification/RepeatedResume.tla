@@ -1,25 +1,21 @@
 ---------------------------- MODULE RepeatedResume ----------------------------
 EXTENDS Naturals
-CONSTANTS Capacity, MaxOps, Broken
+CONSTANTS Capacity, MaxOps, Broken, SocketLimit
 VARIABLES guest, requests, acks, cleared, activatedBy, releasedBy
 R == INSTANCE M3Resume WITH s <- guest
 
 \* Start at the cut explored by ResumeAcrossSuccession: while the ordinary
 \* guest is away, host 2 succeeds host 1. Its signed acceptance is retained
-\* until the relay accepts a complete replay. Before then, both replacement
-\* sockets can legitimately receive the SAME nonempty terminator (10).
-Tail == IF cleared THEN guest.connection ELSE 10
-CompletionId(c) == 20 + c
+\* until the relay accepts a complete replay. Until then, any number of replacement
+\* sockets can receive the same nonempty terminator. Even IDs denote empty cuts;
+\* 1 denotes the retained acceptance. A completion ID is fresh per incarnation.
+Tail == IF cleared THEN 2 * guest.connection ELSE 1
+CompletionId(c) == 2 * c + 1
 Init == R!Init /\ requests = {} /\ acks = {} /\ cleared = FALSE
         /\ activatedBy = 0 /\ releasedBy = 0
 
-FirstLoss == R!Disconnect /\ UNCHANGED <<requests, acks, cleared, activatedBy, releasedBy>>
-SecondLoss == /\ guest.connection = 2 /\ guest.phase \notin {"ready", "disconnected"}
-              /\ guest' = [guest EXCEPT !.phase = "disconnected", !.connection = 3,
-                            !.request = 0, !.terminator = 0, !.sent = FALSE,
-                            !.reconciled = FALSE, !.persisted = FALSE, !.acknowledged = FALSE]
-              /\ activatedBy' = 0 /\ releasedBy' = 0
-              /\ UNCHANGED <<requests, acks, cleared>>
+Replace == /\ R!Disconnect /\ activatedBy' = 0 /\ releasedBy' = 0
+           /\ UNCHANGED <<requests, acks, cleared>>
 Replay == /\ (R!BeginAt(Tail) \/ R!PersistPrefixWith(IF cleared THEN guest.authenticatedHost ELSE 2)
               \/ R!Snapshot(2) \/ R!ObserveEnd(guest.terminator))
           /\ UNCHANGED <<requests, acks, cleared, activatedBy, releasedBy>>
@@ -36,11 +32,13 @@ Accept(f) == /\ activatedBy = 0 /\ guest.phase \notin {"ready", "disconnected"}
 Release(f) == /\ (f.id = CompletionId(guest.connection) \/ Broken = "OldAck")
               /\ R!Acknowledge(guest.connection, guest.request, guest.terminator)
               /\ releasedBy' = f.socket /\ UNCHANGED <<requests, acks, cleared, activatedBy>>
-Next == FirstLoss \/ SecondLoss \/ Replay \/ Submit \/ (\E f \in requests : Accept(f)) \/ (\E f \in acks : Release(f))
+Next == Replace \/ Replay \/ Submit \/ (\E f \in requests : Accept(f)) \/ (\E f \in acks : Release(f))
 Safety == /\ R!Safety
           /\ (activatedBy # 0 => activatedBy = guest.connection /\ guest.authenticatedHost = 2)
           /\ (guest.connection > 1 /\ R!Ready => activatedBy = guest.connection /\ releasedBy = guest.connection)
 \* Both ACKs exist: the first completion succeeded, its ACK was delayed across
 \* another disconnect, and only the second completion released the guest.
 NoSecondRecovery == ~(guest.connection = 3 /\ R!Ready /\ (\E f \in acks : f.socket = 2))
+NoFourthReplacement == ~(guest.connection = 5 /\ R!Ready /\ activatedBy = 5 /\ releasedBy = 5
+                         /\ \A c \in 2..4 : \E f \in acks : f.socket = c)
 =============================================================================

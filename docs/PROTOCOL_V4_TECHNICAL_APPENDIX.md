@@ -261,6 +261,12 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 | Invalid peer membership transition | Engine commit-validation/rollback tests and controller fail-close path | No epoch merge or Byzantine agreement claim |
 | Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution; local IndexedDB failure followed by reload and retry | Concrete serialization and physical erasure are not proved by TLC |
 
+### Execution scope
+
+A candidate list is an ordered sequence, not a set. The issuing endpoint filters its current membership order without re-sorting it; receiving endpoints compare its length and every position to their own projection. The relay scans the signed list for the first currently eligible member. This does not establish that the relay reported reachability honestly. During one attempt series a nomination consumes one previously untried rank; changing connectivity can affect the next offer, but cannot make an attempted rank fresh under the same policy.
+
+The [coordination analysis](../verification/README.md) checks arbitrary finite rank and socket bounds. The [publication-path check](../scripts/check-protocol-boundaries.mjs) examines a separate obligation: which concrete success effects are allowed after a failed or unfinished write. A browser database request can succeed before its transaction commits. Authority and durable retirement claims rely on the latter. These source checks do not assume that observing a frame proves its peer has committed anything.
+
 ## H. Reproduction and measurement interpretation
 
 ### H.0 Current release qualification

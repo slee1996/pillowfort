@@ -2,8 +2,8 @@
 EXTENDS Naturals
 CONSTANTS Capacity, MaxOps, Broken
 VARIABLES resume, succession, signer, cut, completedUnder
-R == INSTANCE M3Resume WITH s <- resume
-H == INSTANCE M4Succession WITH s <- succession
+R == INSTANCE M3Resume WITH s <- resume, SocketLimit <- 2
+H == INSTANCE M4Succession WITH s <- succession, RankLimit <- 3, InitialRanks <- 3, RosterChanges <- FALSE
 
 \* 1 is the departing host, 2 the willing successor, 3 the returning guest.
 \* signer is the signed acceptance retained for replay, not the relay's host
