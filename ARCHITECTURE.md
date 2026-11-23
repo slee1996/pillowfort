@@ -71,10 +71,10 @@ or hibernation behavior.
 ## Host authority
 
 A planned host transfer requires the selected member's explicit acceptance.
-After unexpected host loss and the recovery window, the relay can offer authority
-to an eligible connected member under the host-signed succession policy, in
-admitted-member order. Delivery of an offer is not acceptance. If no eligible
-member accepts, the room retires.
+After the relay detects host loss, it offers authority immediately if a member
+authorized by the signed policy is connected and eligible. If none is eligible,
+the original host has a bounded opportunity to reconnect. An offer is not
+acceptance. If the offers are exhausted without consent, the room retires.
 
 The relay controls liveness decisions and can deny progress; it cannot forge
 the host's delegation or a successor's signature. See

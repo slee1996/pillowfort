@@ -34,6 +34,10 @@ Optional but recommended before a marketing push:
 - `npm run test:design-snapshots`
 - `npm run test:ui`
 
+The [app-wide acceptance matrix](../verification/app/README.md) also exercises
+independent browser engines, real published agent clients, and active games
+across host loss. Report known failures separately from a passing build.
+
 ## Preflight Commands
 
 Use patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on a supported release line and Bun 1.4.4+. CI pins Node.js 22.23.4 and Bun 1.4.4.
@@ -58,8 +62,8 @@ Product CI audits the root, client and hosted-MCP lockfiles and rejects
 moderate-or-higher advisories. The marketing repository owns its website/video audits.
 Before promotion, verify the actual Node/Bun binaries reject the compromised
 eMudhra chains; an OS trust-store update alone may not update bundled roots.
-See [security maintenance](../SECURITY.md#security-maintenance) for the retained
-Rust advisory and its fixed-ciphersuite boundary.
+See [security maintenance](../SECURITY.md#security-maintenance) for the pinned
+OpenMLS provider and the separate Cargo audit.
 
 Run `npm run agent:pack` and inspect `dist/agent/pillowfort-agent-VERSION.tgz`
 and its checksum. Packaging remains immutable and product-owned; it does not

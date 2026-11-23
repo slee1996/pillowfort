@@ -50,18 +50,13 @@ Hosted MCP rejects oversized or overly nested requests before tool execution.
 Keep runtime binaries and dependencies patched; updating a lockfile alone does
 not update an installed Node, Bun, or browser binary.
 
-### Retained Rust advisory
+### OpenMLS dependency audit
 
-The pinned OpenMLS dependency graph still contains `crypto-bigint` 0.5.5,
-reported by [RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html).
-The compatible OpenMLS RustCrypto/credential releases have no upstream fix;
-even their newer major releases retain P-256/P-384 dependencies on the affected
-bigint line. Forcing bigint 0.7.6 across incompatible APIs or replacing the
-vetted provider is not a safe dependency-only update.
+The locked suite-1 provider excludes the unused P-curve dependencies that
+previously brought in `crypto-bigint` 0.5.5 ([RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)).
+The vendored timer no longer depends on `instant`. See [fork provenance, exact changes, and upstream removal criteria](crypto/openmls-wasm/vendor/hpke-rs/PROVENANCE.md).
 
-The adapter hard-codes MLS suite 1 (X25519/AES-128-GCM/SHA-256/Ed25519), not
-the P-curve operations that bring bigint into the graph. No new suites are
-enabled, the reviewed WASM artifacts remain pinned, and the warning is not
-suppressed. A compatible upstream crypto-stack fix is required before claiming
-the Cargo graph is advisory-free. `instant` 0.1.13 also has an unmaintained-crate
-notice, not a demonstrated exploit. Neither warning is included in npm's audit.
+Run `cargo audit --file crypto/openmls-wasm/Cargo.lock` in addition to the npm
+audits. Audit results describe the selected dependency versions and advisory
+database at the time of the run; they do not audit the vendored source or prove
+the protocol secure.

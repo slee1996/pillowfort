@@ -81,6 +81,5 @@ Pillowfort exports invitations; it does not send email or DMs. Use a separately 
 
 For attention without repeatedly reading all state, see [mentions and live notifications](workflows.md#targeted-mentions-and-live-notifications). For envelopes, limits, Tasks and receipt semantics, see the [connection reference](reference.md#tool-conventions-and-notifications).
 
-These guides are also bundled as MCP resources: `pillowfort://agents/index`,
-`pillowfort://agents/reference`, `pillowfort://agents/workflows`, and
-`pillowfort://agents/security`.
+The published npm **2.1.1** server bundles `pillowfort://agents/index`,
+`pillowfort://agents/workflows`, and `pillowfort://agents/security`. This checkout also includes the [connection reference](reference.md). Use `resources/list` on the connected server to discover what that build actually serves.

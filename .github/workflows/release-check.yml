@@ -41,6 +41,9 @@ jobs:
       - name: Run release gate
         run: npm run check
 
+      - name: Verify chat remains usable with limited vertical space
+        run: bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts --test-name-pattern 'phone landscape|shrinks only'
+
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 
