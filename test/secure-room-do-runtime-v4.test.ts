@@ -731,6 +731,44 @@ describe("protocol-v4 Durable Object runtime", () => {
     expect(state.storage.events.indexOf("transaction-committed")).toBeLessThan(state.storage.events.indexOf("socket-send"));
   });
 
+  it("replays committed idle retirement on wake only to its originally owning socket", async () => {
+    const state = new TestState(), room = new Room(state as unknown as DurableObjectState, env());
+    await state.ready;
+    const deviceId = generateSecureRelayIdV4(), connectionId = generateSecureRelayIdV4();
+    const make = (device: string, connection: string, authenticated = true) => new TestSocket({ protocol: "v4",
+      secureAuthenticated: authenticated, secureDeviceId: device, secureConnectionId: connection }, state.storage.events);
+    const owner = make(deviceId, connectionId), replacement = make(deviceId, generateSecureRelayIdV4()),
+      unauthenticated = make(deviceId, connectionId, false), wrongDevice = make(generateSecureRelayIdV4(), connectionId);
+    state.sockets.push(owner);
+    (room as any).secureRelayState = { lifecycle: "open", roomInstance: generateSecureRelayIdV4(),
+      members: [{ deviceId, connectionId, status: "active" }] };
+    await state.storage.put("roomId", "closingfort");
+    await state.storage.put("alarmSchedule", { idle: Date.now() - 1 });
+    const commit = state.storage.transaction.bind(state.storage);
+    state.storage.transaction = async (f) => { await commit(f); throw Error("instance died after commit"); };
+    await expect(room.alarm()).rejects.toThrow("instance died after commit");
+    expect(await state.storage.get("roomId")).toBeUndefined();
+    expect(owner.sent).toHaveLength(0);
+    expect(state.storage.alarm).not.toBeNull(); // Passive peers must not have to wake the relay.
+    state.storage.transaction = commit;
+    state.sockets.push(replacement, unauthenticated, wrongDevice);
+    const nextIdle = Date.now() + 90_000;
+    const saved = await state.storage.get<Record<string, number>>("alarmSchedule");
+    await state.storage.put("alarmSchedule", { ...saved, idle: nextIdle });
+    new Room(state as unknown as DurableObjectState, env());
+    await state.ready;
+    expect(owner.sent.map(w => parseSecureServerFrameV4(JSON.parse(w))?.type)).toEqual(["room-retired"]);
+    expect(owner.closed?.code).toBe(1000);
+    for (const other of [replacement, unauthenticated, wrongDevice]) {
+      expect(other.sent).toHaveLength(0);
+      expect(other.closed).toBeNull();
+    }
+    expect(state.storage.alarm).toBe(nextIdle);
+    new Room(state as unknown as DurableObjectState, env());
+    await state.ready;
+    expect(owner.sent).toHaveLength(1);
+  });
+
   it("delivers terminal retirement after persisted connection ids are cleared", async () => {
     const state = new TestState();
     const room = new Room(state as unknown as DurableObjectState, env());

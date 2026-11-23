@@ -360,6 +360,8 @@ An ACK can remove only the exact front of the persisted backlog. A snapshot
 cannot authorize a relay-only member, silently retire an MLS member without a
 matching removal marker, or change signed host authority.
 
+Losing all device keys is not a resume. A guest must use a fresh device key and KeyPackage and receive a new approval. If the old profile still holds the requested name, the guest signs a distinct name in its join proof (the first free numeric suffix, case-insensitive, within 24 Unicode scalar values). The guest sees its accepted name; mentions use that name. Neither the name nor the invitation restores the old device or its chat history.
+
 Browser `message` and `close` events share the same serialized controller
 queue. A close observed immediately after a message is reconciled only after
 all earlier received encrypted frames have been authenticated and durably
@@ -404,6 +406,8 @@ make the terminal snapshot invalid and prevent durable shutdown. It then sends t
 protocol v4, and bound to a device in the retired membership snapshot. This
 preserves persist-before-notify ordering without broadening the terminal
 broadcast to an unknown or unauthenticated socket.
+
+When an idle room has connected members, the Worker commits deletion and a retry alarm in one transaction. The only delivery data retained are the original authenticated connection/device pairs. On wake it attempts the content-free `room-retired` notice only on sockets still bound to those pairs, then clears the record and retry alarm. A restart during fan-out may repeat a send. A send is not a receipt; offline, replaced or unreachable sockets are not promised notification.
 
 ## Host transfer and consent-based succession
 

@@ -361,6 +361,11 @@ describe("uniqueName", () => {
     expect(result).toBe("a".repeat(MAX_NAME_LEN - 1) + "2");
   });
 
+  it("keeps a full Unicode scalar before the collision suffix", () => {
+    const base = "🐱".repeat(MAX_NAME_LEN);
+    expect(uniqueName(base, new Set([base]))).toBe("🐱".repeat(MAX_NAME_LEN - 1) + "2");
+  });
+
   it("handles high suffix numbers with long names", () => {
     const base = "a".repeat(MAX_NAME_LEN);
     const taken = new Set([base]);

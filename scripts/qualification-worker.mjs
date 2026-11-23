@@ -1,18 +1,42 @@
 // Local workerd fixture only. wrangler.toml never imports this module.
 export { default } from "../src/index.ts";
 import { Room as ProductionRoom } from "../src/room.ts";
+import { SECURE_RELAY_MANIFEST_KEY_V4 } from "../src/secureRelayPersistenceV4.ts";
 
 export class Room extends ProductionRoom {
   instance = crypto.randomUUID();
   report(event) {
     this.state.waitUntil((async () => {
+      if (event.kind === "cut" && this.idleCut) event.deletionCommitted =
+        await this.state.storage.get(SECURE_RELAY_MANIFEST_KEY_V4) === undefined && await this.state.storage.get("roomId") === undefined;
       if (this.env.CUT === "probe-restart") event.idle = (await this.state.storage.get("alarmSchedule"))?.idle;
       await this.env.EVIDENCE.fetch("https://evidence.invalid/", {
         method: "POST", body: JSON.stringify({ ...event, instance: this.instance, room: this.roomId }),
       });
     })());
   }
+  get idleCut() { return this.env.CUT === "idle-retirement" || this.env.CUT === "idle-retirement-prefix"; }
+  async webSocketMessage(ws, message) {
+    await super.webSocketMessage(ws, message);
+    if (!this.idleCut || this.armed || typeof message !== "string" || JSON.parse(message).kind !== "host-path-reply") return;
+    await this.withSecureLock(async () => {
+      if (this.armed || this.secureRelayState?.members.filter(m => m.status === "active").length !== 2) return;
+      this.armed = true;
+      // Exercise the real idle alarm, without waiting ten minutes in CI.
+      await this.setAlarmDeadline("idle", Date.now());
+    });
+  }
   sendSecure(ws, frame) {
+    if (this.idleCut && frame.type === "room-retired") {
+      if (this.armed) {
+        const sent = this.sentBeforeCut ?? 0;
+        if (sent === (this.env.CUT === "idle-retirement-prefix" ? 1 : 0)) {
+          this.report({ kind: "cut", sent });
+          throw Error("fixture: interruption after idle deletion");
+        }
+        this.sentBeforeCut = sent + 1;
+      } else this.report({ kind: "terminal-replayed" });
+    }
     if (this.env.CUT === "probe-restart" && frame.type === "host-path-probe" && this.hostPath?.phase === "retry" && !this.cutProbe) {
       this.cutProbe = true;
       // Lose the original emission; a restored retry must not be lost again.

@@ -2,6 +2,7 @@
 
 The executable models implement the M1–M4 planning decomposition. The source-grounded protocol contract is in `docs/PROTOCOL_V4_TECHNICAL_APPENDIX.md`; the property-by-property coverage and exclusions are in `docs/PROTOCOL_V4_VERIFICATION_MATRIX.md`.
 
+- `IdleRetirement.tla`: deletion and notification to two original device/socket pairs. Model dispatch and receipt separately; check exact ownership and conditional dispatch under fair scheduling, not delivery to an offline peer. Five weakened configurations violate a property; a witness reaches both receipts through a restart after the first send.
 - `M1Delivery.tla`: sender persistence, connection-bound grants, host preview readiness, delivery/result separation, replay and prefix ACKs.
 - `Reinvite.tla`: delayed receipt of a manual refusal versus the next offer, and independent invitation/roster/bootstrap checks after migration and reload. Three weakened guards must fail; an unweakened witness reaches active membership. It abstracts authenticated keys and storage, not the cryptography itself.
 - `M2Admission.tla`: host approval, Add/Welcome/bootstrap/proof/activation, partial-admission expiry, single-use KeyPackages and retained identity ambiguity.
@@ -52,9 +53,10 @@ To exercise the production Worker locally (ephemeral storage, no live credential
 ```sh
 npm run build
 node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pillowfort-worker-restart
-for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix; do
   node scripts/protocol-workerd-evidence.mjs "$cut" "/tmp/pillowfort-$cut"
 done
+bun scripts/protocol-browser-evidence.ts --mode faults --fault lost-guest-keys --output /tmp/pillowfort-lost-keys
 bun scripts/protocol-browser-evidence.ts --mode faults --fault peer-storage --output /tmp/pillowfort-peer
 bun scripts/protocol-browser-evidence.ts --mode faults --fault full-room --output /tmp/pillowfort-full
 python3 scripts/check-protocol-models.py --model HostPath --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-hostpath

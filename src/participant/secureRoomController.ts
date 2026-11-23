@@ -7,6 +7,7 @@ import { isSecureDisplayNameV4, MAX_SECURE_DRAW_POINTS } from "../applicationEve
 import { decodeSecureAdmissionBundleV4, encodeSecureAdmissionBundleV4 } from "../admissionBundleV4";
 import { computeRpsCommitmentV4, computeSaboteurCommitmentV4, type SecureReducerEffectV4 } from "../secureGameReducer";
 import { normalizeRoomId } from "../entitlements";
+import { uniqueName } from "../shared";
 import {
   parseRoomInvitationMemberBindingV4,
   secureKeyPackageDigestV4,
@@ -2706,8 +2707,10 @@ export class SecureRoomController {
     }
     const processedWelcome = this.retainedJoinAuthEntry()?.joinWelcomeMessageId ?? null;
     if (!processedWelcome) throw new Error("join proof grant arrived before durable Welcome/bootstrap processing");
+    const taken = new Set(engine.state.members.map(member => member.displayName.toLowerCase()));
+    const displayName = uniqueName(this.config!.displayName, { has: name => taken.has(name.toLowerCase()) });
     const result = await engine.encryptJoinProof(
-      this.config!.displayName,
+      displayName,
       admissionId,
       processedWelcome,
       grant,
@@ -3523,18 +3526,22 @@ export class SecureRoomController {
   }
 
   private initializeUi(resumed: boolean): void {
-    if (this.uiInitialized) {
-      this.ui.applySecureRoomUiV4(this.requireEngine().state, [], this.requireEngine().deviceId);
-      return;
-    }
     const engine = this.requireEngine();
-    this.ui.initializeSecureRoomUiV4({
-      roomId: this.config!.roomId,
-      ownDeviceId: engine.deviceId,
-      state: engine.state,
-      resumed,
-    });
-    this.uiInitialized = true;
+    const state = engine.state;
+    const config = this.config!;
+    const profile = state.members.find(member => member.deviceId === engine.deviceId);
+    const renamed = profile && profile.displayName !== config.displayName;
+    if (renamed) {
+      config.displayName = profile.displayName;
+      this.rememberRecoveryContext(config);
+      this.store.getState().setName(profile.displayName);
+    }
+    if (this.uiInitialized) this.ui.applySecureRoomUiV4(state, [], engine.deviceId);
+    else {
+      this.ui.initializeSecureRoomUiV4({ roomId: config.roomId, ownDeviceId: engine.deviceId, state, resumed });
+      this.uiInitialized = true;
+    }
+    if (renamed) this.store.getState().addSystemMessage(`That name's taken — you're ${profile.displayName} now`);
   }
 
   private isHost(): boolean {

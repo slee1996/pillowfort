@@ -19,12 +19,12 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
-if (live && (mode !== "faults" || !["prompt-host-succession", "healthy-host"].includes(selectedFault ?? ""))) {
-  throw new Error("Production permits only the normal healthy-host and voluntary succession journeys");
+if (live && (mode !== "faults" || !["prompt-host-succession", "healthy-host", "natural-idle"].includes(selectedFault ?? ""))) {
+  throw new Error("Production permits only ordinary healthy-host, voluntary succession and natural idle closure");
 }
 await mkdir(output, { recursive: true });
 const report: Record<string, unknown> = {
@@ -37,7 +37,7 @@ const report: Record<string, unknown> = {
 const staged = process.env.PILLOWFORT_QUALIFICATION_ORIGIN;
 const cuts = process.env.PILLOWFORT_QUALIFICATION_CUTS;
 if (staged && (live || !cuts || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
-const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart"] as const;
+const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "idle-retirement", "idle-retirement-prefix"] as const;
 type WorkerCut = typeof workerCuts[number];
 const workerCut = workerCuts.find(cut => cut === selectedFault);
 if (workerCut && !staged) throw Error("Use protocol-workerd-evidence.mjs");
@@ -122,9 +122,9 @@ async function newParticipant(browser: Browser): Promise<Participant> {
   });
   return { context, page };
 }
-async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin, interAdmissionMs = 250): Promise<RoomEvidence> {
+async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin, interAdmissionMs = 250,
+  names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`)): Promise<RoomEvidence> {
   const participants: Participant[] = [];
-  const names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`);
   const host = await newParticipant(browser);
   participants.push(host);
   await configure?.(host, 0);
@@ -542,6 +542,79 @@ async function hostPath(destination: string, direction: "both" | "uplink" | "dow
   return { origin: `http://127.0.0.1:${address.port}`, block() { blocked = true; },
     closePaths() { for (const socket of sockets) socket.destroy(); },
     stop() { this.closePaths(); sink.close(); } };
+}
+
+async function idleRetirement(browser: Browser, fault: "idle-retirement" | "idle-retirement-prefix" | "natural-idle") {
+  const ordinary = fault === "natural-idle";
+  const wires: string[][] = [[], []];
+  const room = await setupRoom(browser, 2, async ({page}, i) => {
+    page.on("websocket", ws => {
+      ws.on("framereceived", ({payload}) => { if (JSON.parse(payload.toString()).type === "room-retired") wires[i].push("retired"); });
+      ws.on("close", () => wires[i].push("close"));
+    });
+  }, origin, 250, ordinary ? ["Cedar", "cedar"] : undefined);
+  try {
+    if (ordinary) await room.participants[1].page.getByText("That name's taken — you're cedar2 now", {exact:true}).waitFor();
+    await deliver(room.participants[0].page, room.participants[1].page, "before idle retirement");
+    const start = performance.now();
+    // From here the two real clients take no action. Recovery must not depend on a reload, new join or chat send.
+    await Promise.all(room.participants.map(({page}) => page.getByRole("heading", {name:"Fort has been knocked down."}).waitFor({timeout:ordinary ? 720_000 : 22_000})));
+    if (wires.some(w => w[0] !== "retired")) throw Error("terminal UI was not preceded by a retirement notice on the original socket");
+    return { fault, originalPeersReachedTerminal: wires.length, noUserActionUntilNotice: true, noticeBeforeDisconnect: true,
+      ...(ordinary && { caseInsensitiveNameResolved: true, elapsedMsSinceChat: Math.round(performance.now() - start) }) };
+  } finally { await closeRoom(room); }
+}
+
+async function lostGuestKeys(browser: Browser) {
+  const joins: {device: string; key: string; request: string}[] = [], resume: string[] = [];
+  const room = await setupRoom(browser, 2, async ({page}, i) => {
+    if (i !== 1) return;
+    page.on("websocket", ws => ws.on("framesent", ({payload}) => {
+      const f = JSON.parse(payload.toString());
+      if (f.kind !== "secure-authenticate") return;
+      if (f.mode === "join") joins.push({device:f.frame.hello.deviceId, key:f.frame.signaturePublicKey, request:f.frame.requestId});
+      if (f.mode === "resume") resume.push(f.frame.deviceId);
+    }));
+  });
+  const [host, guest] = room.participants;
+  try {
+    const original = joins[0], before = "only the previous leaf received this";
+    await deliver(host.page, guest.page, before);
+    const cdp = await guest.context.newCDPSession(guest.page);
+    const names = async () => (await cdp.send("IndexedDB.requestDatabaseNames", {securityOrigin:origin})).databaseNames;
+    await cdp.send("IndexedDB.enable");
+    if (!(await names()).includes("pillowfort-crypto-state-v1")) throw Error("participant database missing before cut");
+    await guest.page.goto("about:blank"); // Drop the old runtime before removing its persisted keys.
+    await cdp.send("Storage.clearDataForOrigin", {origin, storageTypes:"indexeddb"});
+    await guest.page.goto(origin);
+    if ((await names()).includes("pillowfort-crypto-state-v1")) throw Error("participant database survived cut");
+    await reopen(room, 1); // Same profile, link and display name; this is an explicit join, never silent recovery.
+    const approve = host.page.getByRole("button", {name:"Approve", exact:true});
+    await approve.waitFor({timeout:15_000});
+    const next = joins[1];
+    if (!original?.key || !next?.key || !original.device || !next.device || !original.request || !next.request ||
+        original.device === next.device || original.key === next.key || original.request === next.request || resume.length ||
+        await guest.page.locator("#msg-input").isVisible()) throw Error("key loss did not require distinct authenticated admission");
+    await approve.click();
+    await deliver(guest.page, host.page, "newly approved device talking");
+    const originalName = room.names[1], newName = `${originalName}2`;
+    await guest.page.getByText(`That name's taken — you're ${newName} now`, {exact:true}).waitFor();
+    const oldTarget = `@${JSON.stringify(originalName)}`, newTarget = `@${JSON.stringify(newName)}`;
+    await deliver(host.page, guest.page, `${oldTarget} old label`);
+    await deliver(host.page, guest.page, `${newTarget} new label`);
+    const marked = guest.page.locator(".chat-message-mentioned mark");
+    await marked.filter({hasText:newTarget}).waitFor();
+    if (await marked.filter({hasText:oldTarget}).count()) throw Error("mention addressed to old label reached new identity");
+    if (await guest.page.getByText(before, {exact:true}).count()) throw Error("the new device obtained previous chat history");
+    room.names[1] = newName;
+    await guest.page.goto("about:blank");
+    await reopen(room, 1);
+    await deliver(host.page, guest.page, "new leaf after reconnect");
+    await deliver(guest.page, host.page, "still the newly admitted identity");
+    if (joins.length !== 2 || !resume.length || resume.some(d => d !== next.device)) throw Error("restored the wrong identity");
+    return { fault:"lost-guest-keys", erasedRealIndexedDb:true, originalIdentityNotResumed:true, freshKeyAndAdmission:true,
+      hostApprovalRequired:true, previousChatWithheld:true, disambiguatedName:true, mentionsTargetOnlyNewLabel:true, newIdentityResumed:true, encryptedChatBothDirections:true };
+  } finally { await closeRoom(room); }
 }
 
 async function workerdHandoff(browser: Browser, fault: WorkerCut) {
@@ -1007,7 +1080,10 @@ try {
     if (selectedFault === "suspended-host" || selectedFault === "paused-host") results.push(await promptHostSuccession(browser!, selectedFault === "paused-host" ? "pause" : "freeze"));
     if (selectedFault === "healthy-host") results.push(await healthyHost(browser!));
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
-    if (workerCut) results.push(await workerdHandoff(browser!, workerCut));
+    if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
+    if (selectedFault === "natural-idle") results.push(await idleRetirement(browser!, selectedFault));
+    if (workerCut === "idle-retirement" || workerCut === "idle-retirement-prefix") results.push(await idleRetirement(browser!, workerCut));
+    else if (workerCut) results.push(await workerdHandoff(browser!, workerCut));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;
