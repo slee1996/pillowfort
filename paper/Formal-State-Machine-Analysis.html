@@ -27,11 +27,11 @@
 <h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
 State-Machine Analysis</h1>
 <p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 11 · 23 November 2026</em></p>
-<p><strong>Status:</strong> Fifteen finite configurations passed; 27
+edition 12 · 23 November 2026</em></p>
+<p><strong>Status:</strong> Eighteen finite configurations passed; 34
 deliberately weakened configurations yielded their expected violations
-and nine unweakened reachability checks reached their targets. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json">qualification
+and eleven unweakened reachability checks reached their targets. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json">qualification
 record</a> identifies each configuration, tested revision, and bound.
 Two models check progress under fair scheduling; neither they nor the
 safety checks prove implementation refinement, cryptography, or
@@ -58,7 +58,7 @@ whole-protocol liveness.</p>
 </tr>
 <tr>
 <td>M2 admission</td>
-<td style="text-align: right;">267</td>
+<td style="text-align: right;">251</td>
 <td style="text-align: right;">122</td>
 </tr>
 <tr>
@@ -108,31 +108,48 @@ whole-protocol liveness.</p>
 </tr>
 <tr>
 <td>Composed M1+M2, 12 steps</td>
-<td style="text-align: right;">39,141</td>
-<td style="text-align: right;">3,976</td>
+<td style="text-align: right;">36,889</td>
+<td style="text-align: right;">3,772</td>
 </tr>
 <tr>
 <td>Composed M1+M2+M3, 12 steps</td>
-<td style="text-align: right;">40,268</td>
-<td style="text-align: right;">19,336</td>
+<td style="text-align: right;">37,869</td>
+<td style="text-align: right;">18,191</td>
 </tr>
 <tr>
 <td>Composed M1–M4, 12 steps</td>
-<td style="text-align: right;">1,027,767</td>
-<td style="text-align: right;">362,690</td>
+<td style="text-align: right;">989,902</td>
+<td style="text-align: right;">350,246</td>
 </tr>
 <tr>
 <td>Composed M1–M4, backlog 2, 16 steps</td>
-<td style="text-align: right;">7,225,413</td>
-<td style="text-align: right;">2,292,582</td>
+<td style="text-align: right;">6,969,032</td>
+<td style="text-align: right;">2,223,390</td>
+</tr>
+<tr>
+<td>Outcome, rejection and atomic restoration</td>
+<td style="text-align: right;">601</td>
+<td style="text-align: right;">205</td>
+</tr>
+<tr>
+<td>Historical markers, close and two retirements</td>
+<td style="text-align: right;">2,445</td>
+<td style="text-align: right;">736</td>
+</tr>
+<tr>
+<td>Full finite M1–M4 product, no depth cutoff</td>
+<td style="text-align: right;">27,037,625</td>
+<td style="text-align: right;">6,544,512</td>
 </tr>
 </tbody>
 </table>
 <p>Standalone models use at most two operation/KeyPackage tokens,
 backlog capacity two, three succession identities, and before/after
-deadline regions. Composition uses one operation token and the stated
-depth bound. Counts are per configuration; they must not be interpreted
-as disjoint implementation states.</p>
+deadline regions. The full finite composition explores all reachable
+states for one operation, one KeyPackage token and one backlog slot,
+with no limit on path length; larger domains still use the stated
+cutoffs. Counts are per configuration; they must not be interpreted as
+disjoint implementation states.</p>
 <p>The seven original sensitivity checks cover persistence ordering,
 grant and transfer binding, host preview readiness, KeyPackage reuse,
 snapshot reconciliation and admission interlocks. The handoff model adds
@@ -173,11 +190,11 @@ replay, and refusal followed by another candidate’s acceptance. None
 establishes that all executions terminate. Focused models are not
 multiplied into the composed state count.</p>
 <p>Exact model sources, configurations and traces are included in the <a
-href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r11/Pillowfort-Protocol-v4-CS1-R11.zip">edition
-11 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r12/Pillowfort-Protocol-v4-CS1-R12.zip">edition
+12 evidence bundle</a>. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the
@@ -192,8 +209,8 @@ explicit-shutdown regressions remain in the artifact.</p>
 <p>The remainder records the broader analysis plan and properties. A
 listed obligation is not automatically a proved property: consult the
 coverage matrix for the executed subset. Deadlock checking was
-explicitly disabled for these bounded-prefix safety runs; no
-unrestricted idle action is used to manufacture a liveness result.</p>
+explicitly disabled for these safety runs; no unrestricted idle action
+is used to manufacture a liveness result.</p>
 <h2 id="verification-objective">1. Verification objective</h2>
 <p>Can admission, delivery, recovery, and host transfer interleave with
 crashes, retries, expiration, and disconnection without accepting the
@@ -530,6 +547,16 @@ the successor refreshes its policy.</p>
 retirement completion; engine delegation/context checks and durable
 controls; controller automatic policy/offer presentation and explicit
 acceptance/refusal actions.</p>
+<p>The <code>OutcomeRecovery</code> witness stores a rejection, crashes,
+restores and then accepts another ciphertext without rewinding the
+sender generation. <code>HistoricalCleanup</code> explores two
+independent retirements, repeated receipts and historical replay before
+and after close. Three outcome and four cleanup mutations must violate
+safety. These are symbolic tuples, not real MLS keys. The <a
+href="https://github.com/slee1996/pillowfort/blob/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708/verification/relay-conformance.ts">production
+relay observer</a> separately checks concrete fields, preconditions and
+effects across the implementation corpus; coverage of all frame kinds is
+not complete refinement.</p>
 <h2 id="composition-and-assumptions">7. Composition and assumptions</h2>
 <p>Compose in this order: <strong>M1 → M1+M2 → M1+M2+M3 with removal →
 all four.</strong> Each stage must preserve the earlier properties, not

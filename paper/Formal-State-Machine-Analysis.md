@@ -1,15 +1,15 @@
 # Pillowfort: Bounded State-Machine Analysis
 
-*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 11 · 23 November 2026*
+*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 12 · 23 November 2026*
 
-**Status:** Fifteen finite configurations passed; 27 deliberately weakened configurations yielded their expected violations and nine unweakened reachability checks reached their targets. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) identifies each configuration, tested revision, and bound. Two models check progress under fair scheduling; neither they nor the safety checks prove implementation refinement, cryptography, or whole-protocol liveness.
+**Status:** Eighteen finite configurations passed; 34 deliberately weakened configurations yielded their expected violations and eleven unweakened reachability checks reached their targets. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) identifies each configuration, tested revision, and bound. Two models check progress under fair scheduling; neither they nor the safety checks prove implementation refinement, cryptography, or whole-protocol liveness.
 
 ## Executed analysis
 
 | Configuration | Generated states | Distinct states |
 |---|---:|---:|
 | M1 delivery | 1,186 | 338 |
-| M2 admission | 267 | 122 |
+| M2 admission | 251 | 122 |
 | Re-offer and re-invitation | 24 | 19 |
 | M3 resume | 24 | 16 |
 | M4 succession | 499 | 201 |
@@ -19,12 +19,15 @@
 | Watched host, two socket incarnations | 157 | 96 |
 | Idle retirement, two original connections and one restart | 7,597 | 2,014 |
 | Composed M1, 12 steps | 15,297 | 670 |
-| Composed M1+M2, 12 steps | 39,141 | 3,976 |
-| Composed M1+M2+M3, 12 steps | 40,268 | 19,336 |
-| Composed M1–M4, 12 steps | 1,027,767 | 362,690 |
-| Composed M1–M4, backlog 2, 16 steps | 7,225,413 | 2,292,582 |
+| Composed M1+M2, 12 steps | 36,889 | 3,772 |
+| Composed M1+M2+M3, 12 steps | 37,869 | 18,191 |
+| Composed M1–M4, 12 steps | 989,902 | 350,246 |
+| Composed M1–M4, backlog 2, 16 steps | 6,969,032 | 2,223,390 |
+| Outcome, rejection and atomic restoration | 601 | 205 |
+| Historical markers, close and two retirements | 2,445 | 736 |
+| Full finite M1–M4 product, no depth cutoff | 27,037,625 | 6,544,512 |
 
-Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. Composition uses one operation token and the stated depth bound. Counts are per configuration; they must not be interpreted as disjoint implementation states.
+Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. The full finite composition explores all reachable states for one operation, one KeyPackage token and one backlog slot, with no limit on path length; larger domains still use the stated cutoffs. Counts are per configuration; they must not be interpreted as disjoint implementation states.
 
 The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Four further mutations delay the first offer, accept a stale socket close, nominate a guest before it completes replay, or renew the deadline during restart. Each produced its expected counterexample. The `Reinvite` model adds three checks: consuming a second offer with the first refusal receipt, replacing the stored invitation anchor on restore, and accepting a bootstrap from another admitted signer. Its positive witness activates a restored guest under the successor after a delayed refusal receipt.
 
@@ -34,11 +37,11 @@ The seven original sensitivity checks cover persistence ordering, grant and tran
 
 Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
 
-Exact model sources, configurations and traces are included in the [edition 11 evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r11/Pillowfort-Protocol-v4-CS1-R11.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact model sources, configurations and traces are included in the [edition 12 evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r12/Pillowfort-Protocol-v4-CS1-R12.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
 Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 
-The remainder records the broader analysis plan and properties. A listed obligation is not automatically a proved property: consult the coverage matrix for the executed subset. Deadlock checking was explicitly disabled for these bounded-prefix safety runs; no unrestricted idle action is used to manufacture a liveness result.
+The remainder records the broader analysis plan and properties. A listed obligation is not automatically a proved property: consult the coverage matrix for the executed subset. Deadlock checking was explicitly disabled for these safety runs; no unrestricted idle action is used to manufacture a liveness result.
 
 
 ## 1. Verification objective
@@ -163,6 +166,8 @@ Do **not** require every device's host view to change simultaneously. Temporary 
 **First adversarial schedules:** substitute target, policy, choice, or authorization; replay a prior-tenure policy; cross the grace boundary during resume; disconnect the first candidate; refuse then attempt stale acceptance; expire an offer before acceptance; lose a refusal result; let all members refuse; lose the accepted result; overflow another recipient during transfer delivery; replay a removal marker between the Remove ACK and retirement completion; crash before the successor refreshes its policy.
 
 **Source anchors:** bundled `secureGameReducer.ts` succession cases; relay `continueHostSuccession`, `expireActiveDisconnects`, signed-response handling and retirement completion; engine delegation/context checks and durable controls; controller automatic policy/offer presentation and explicit acceptance/refusal actions.
+
+The `OutcomeRecovery` witness stores a rejection, crashes, restores and then accepts another ciphertext without rewinding the sender generation. `HistoricalCleanup` explores two independent retirements, repeated receipts and historical replay before and after close. Three outcome and four cleanup mutations must violate safety. These are symbolic tuples, not real MLS keys. The [production relay observer](https://github.com/slee1996/pillowfort/blob/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708/verification/relay-conformance.ts) separately checks concrete fields, preconditions and effects across the implementation corpus; coverage of all frame kinds is not complete refinement.
 
 ## 7. Composition and assumptions
 

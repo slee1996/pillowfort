@@ -60,17 +60,33 @@ try {
     guest.setDefaultNavigationTimeout(45_000);
     let newcomer: Page | undefined;
     const relayErrors: string[] = [];
-    for (const [role, p] of [
-      ["host", host],
-      ["guest", guest],
-    ] as const)
-      p.on("websocket", (ws) =>
+    const hostChangeFrames = { host: 0, guest: 0 };
+    const started = Date.now();
+    const trace: string[] = [];
+    function note(role: string, direction: string, ...kinds: unknown[]) {
+      // Protocol discriminants only. Never report a payload, identifier, name, credential or URL.
+      const labels = kinds.filter((k) => typeof k === "string" && /^[a-z][a-z-]{0,39}$/.test(k));
+      if (!labels.length) return;
+      trace.push(`${Date.now() - started} ${role} ${direction} ${labels.join("/")}`);
+      if (trace.length > 96) trace.shift();
+    }
+    for (const [role, p] of [["host", host], ["guest", guest]] as const) {
+      p.on("websocket", (ws) => {
+        ws.on("close", () => note(role, "socket", "close"));
+        ws.on("framesent", ({ payload }) => {
+          if (typeof payload !== "string") return;
+          const f = JSON.parse(payload);
+          note(role, "send", f.kind, f.type, f.mode, f.frame?.relayKind);
+        });
         ws.on("framereceived", ({ payload }) => {
           if (typeof payload !== "string") return;
           const f = JSON.parse(payload);
+          note(role, "recv", f.type, f.relayKind ?? f.frame?.relayKind, f.status, f.result);
+          if (f.type === "host-changed") hostChangeFrames[role]++;
           if (f.type === "error" && /^[a-z-]{1,40}$/.test(f.code)) relayErrors.push(role + ": " + f.code);
-        }),
-      );
+        });
+      });
+    }
     let at = "entry";
     const passed: string[] = [];
     const errors: string[] = [];
@@ -79,6 +95,8 @@ try {
       guest: b,
       retoss,
       versions: [hostBrowser.version(), peerBrowser.version()],
+      hostChangeFrames,
+      failureTrace: [] as string[],
       passed,
       errors,
     };
@@ -200,10 +218,15 @@ try {
       await step("reopen stored guest and exchange fresh chat", async () => {
         await guest.goto("about:blank");
         await guest.goto(invite, { waitUntil: "domcontentloaded" });
+        at = "return to join screen";
         await guest.locator("#join-name").waitFor();
+        at = "request retained guest resume";
         await guest.getByRole("button", { name: /Join fort|Reconnect|Recover/ }).click();
+        at = "wait for resumed guest composer";
         await untilVisible(guest, "#msg-input");
+        at = "send from resumed guest";
         await send(guest, "same guest returned");
+        at = "observe resumed guest chat at original host";
         await messages(host, "same guest returned").first().waitFor();
         assert(
           authModes.includes("join") &&
@@ -229,10 +252,16 @@ try {
               await messages(host, "not hosting yet").first().waitFor();
             }
           }
-          at = "verify new host controls";
-          await menu(guest);
-          await untilVisible(guest, "#btn-knock-down");
-          await menu(guest);
+          // Dismissing the choice dialog is local; the committed transfer is asynchronous.
+          // The room menu also closes when its safety code changes. First require both
+          // applied rosters and controls; the new host exercises the actual controls below.
+          at = "verify both participants applied the new host";
+          await Promise.all([host, guest].map((page) => page
+            .locator('.member-entry.is-host .member-name[title="Rowan"]').waitFor({ state: "attached" })));
+          await Promise.all([
+            guest.locator("#btn-knock-down").waitFor({ state: "attached" }),
+            host.locator("#btn-leave-room").waitFor({ state: "attached" }),
+          ]);
           at = "send as former host";
           await send(host, "handoff complete");
           await messages(guest, "handoff complete").first().waitFor();
@@ -264,6 +293,7 @@ try {
       });
     } catch (e) {
       const err = e as Error;
+      run.failureTrace = trace;
       errors.push(
         `${at}: ${err.name}: ${err.message.split("\n")[0].replace(/https?:\/\/\S+|pf[23]_[\w-]+|f-[a-z2-7]{10}/g, "[private]")}${relayErrors.length ? " (" + relayErrors.join(", ") + ")" : ""}`,
       );

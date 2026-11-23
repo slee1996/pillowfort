@@ -1,0 +1,42 @@
+{
+  "source": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+  "npmLockedAudit": {
+    "root": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "client": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "hosted-mcp": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "githubAdvisoryRangeReconciliation": {
+    "open": 84,
+    "present": {
+      "client/package-lock.json": 12,
+      "package-lock.json": 39
+    },
+    "absent": {
+      "video/package-lock.json": 31,
+      "video/package.json": 2
+    },
+    "matches": []
+  },
+  "scope": "GitHub ranges compared to the resolved versions in each named lockfile on the release source; two named video manifests are absent. No alerts dismissed. A zero-match result is not a source audit."
+}

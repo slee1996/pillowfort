@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 11 · 23 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 12 · 23 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. None is an independent security audit or an unbounded proof.
 
-**Implementation:** [`a5f0fe6b`](https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Protocol-Verification-Matrix.md), [bounded analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
+**Implementation:** [`cbd7977d`](https://github.com/slee1996/pillowfort/tree/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Verification-Matrix.md), [bounded analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
 
 ## A. Profile and interoperability
 
@@ -247,7 +247,7 @@ The Worker writes this small record and its alarm in one transaction. Probes do 
 
 The models implement the existing plan's stages: M1 delivery; M2 admission/identity; M3 resume; M4 succession. `Coordination.tla` composes them in that order with admission, resume and host-availability send barriers. Separate state mutations represent persistence and network effects. Cryptography is an abstract authenticated capability; OpenMLS, IndexedDB and the transport are not formally verified by these models.
 
-Standalone models explore their finite reachable graphs with up to two operation/KeyPackage tokens, backlog capacity two, three host/member identities, and before/after deadline regions. Composed profiles check prefixes of 12 steps, plus a 16-step configuration with backlog capacity two. These are **safety** checks; deadlock, fairness, real-time liveness, crash recovery of an unavailable storage device, and unbounded executions are excluded. The composed resume abstraction is an interlock, not a model of every repeated socket incarnation or all concrete host-view combinations.
+Standalone models explore their finite reachable graphs with up to two operation/KeyPackage tokens, backlog capacity two, three host/member identities, and before/after deadline regions. The staged profiles check 12-step prefixes and a 16-step configuration with a backlog of two. For the one-operation, one-slot domain, exploration also runs to a fixed point with all four machines enabled. These are safety checks; the full finite graph is not an unbounded proof. System-wide deadlock freedom, real-time liveness and repair of a permanently lost store are not established. The composed resume abstraction is an interlock, not a model of every repeated socket incarnation or all concrete host-view combinations.
 
 The original staged profiles weaken seven safeguards individually: persist-before-send, grant connection binding, host preview readiness, single-use KeyPackages, snapshot reconciliation, transfer target binding, and membership send interlocks. Every weakened model must produce an invariant counterexample. These traces demonstrate sensitivity of the abstraction. The host-preview guard corresponds to a separately reproduced and fixed implementation race; the other mutations are not demonstrated implementation vulnerabilities.
 
@@ -257,22 +257,22 @@ The original staged profiles weaken seven safeguards individually: persist-befor
 
 | Plan property / failure | Concrete evidence | Limit |
 |---|---|---|
-| M1.1, M1.2, M1.3, M1.5 | M1 model; engine persistence/restart/CAS test; relay fingerprint and cancellation tests | Two bounded operations, not unlimited replay retention |
+| M1.1, M1.2, M1.3, M1.5 | M1 and `OutcomeRecovery` (durable sender generation, first verdict, rollback); engine persistence/restart/CAS test; relay fingerprint and cancellation tests | Two bounded operations, not unlimited replay retention |
 | M1.4 | M1 model and relay exact-prefix ACK tests | Resume uses its different whole-replay terminator |
 | M2.1–M2.5 | M2 model; every partial-admission phase expiry/cancel regression; ambiguous-auth browser engine tests | Signatures abstracted; bootstrap redaction checked concretely, not proved |
-| M3.1–M3.5 | M3 model; stale sentinel, historical marker, final-close and snapshot tests | Model does not establish global transcript agreement |
+| M3.1–M3.5 | M3 and `HistoricalCleanup`; stale sentinel, historical marker, final-close and snapshot tests | Model does not establish global transcript agreement |
 | M4.1–M4.8 | M4/composed models; six successor crash-boundary regressions; actual browser boundary interception | Availability requires a willing recoverable coordinator or current new policy |
 | Invalid peer membership transition | Engine commit-validation/rollback tests and controller fail-close path | No epoch merge or Byzantine agreement claim |
-| Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution | Concrete serialization/notification path is not modeled by TLC |
+| Explicit room retirement | Signed-policy shutdown regression; strict state export/import and exact retry; production terminal-screen execution; local IndexedDB failure followed by reload and retry | Concrete serialization and physical erasure are not proved by TLC |
 
 ## H. Reproduction and measurement interpretation
 
 ### H.0 Current release qualification
 
-The [edition 11 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) pins code, evidence, and deployment. Use the runtime revision `a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f`. After installing locked dependencies and browser engines, run the normal test gates and then build production browser assets. Run the following against loopback only:
+The [edition 12 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) distinguishes the release candidate `cbd7977df9df29bb6e80baf34a3f32b9f4dc4708` from the previously deployed browser used in the paired comparison. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
 
 ```sh
-for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix; do
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage; do
   node scripts/protocol-workerd-evidence.mjs "$cut" "$OUT/$cut" || exit 1
 done
 for scenario in peer-storage full-room lost-guest-keys; do
@@ -285,7 +285,22 @@ The idle cuts evict a local Worker immediately after deletion or after its first
 
 The historical transport-only experiment included a forced-close control. The current partition gate fails if an offer does not arrive; it cannot use a forced close to pass. For a healthy-path smoke use `--fault healthy-host`. The edition 10 evidence tag also supplies two local-only cases: `--fault suspended-host` freezes a Chromium page, while `--fault paused-host` verifies a debugger pause on its JavaScript thread. A page that can answer is not a silent host. Never inject a network or storage fault into production.
 
-### H.0.1 Edition 9 release qualification
+### H.0.1 Reproducing the premature-succession study
+
+From this edition’s source export, set `PILLOWFORT_QUALIFICATION_ASSETS` to the absolute path of `study-browser` in the replication archive. This selects the exact released browser byte-for-byte; omitting it evaluates the currently built client instead. Do not point the harness at a public deployment.
+
+```sh
+PILLOWFORT_QUALIFICATION_ASSETS="$BUNDLE/study-browser" \
+  python3 scripts/measure-premature-succession.py "$OUT/offer-study"
+PILLOWFORT_RELAY_CONFORMANCE_REPORT="$OUT/relay.json" bun test ./test/secure-relay-v4.test.ts
+cargo +1.94.1 test --locked --manifest-path crypto/openmls-wasm/Cargo.toml
+```
+
+Each trial requires a host policy naming two eligible guests and a pre-interruption encrypted chat. The clock starts at the first fresh challenge. In the clean-close control the host socket is closed at that point. Time to offer is the first authorization frame at its intended guest; acceptance is the candidate’s signed frame; transfer is checked at a separate peer. Ordinary traffic is the appearance of a newly sent message in the receiving guest’s UI. No system clock is advanced. The longer-wait control extends only the fixture’s last reply deadline; extensions and released timings are run in both orders. For temporary holds the guest accepts only after release. This measures an observed return to ordinary traffic with a fixed consent procedure, not the earliest possible recovery. With continuing absence the guest instead accepts the first visible offer; the original host is still unavailable when the message arrives.
+
+Chromium suspension stops every CDP-listed process of one dedicated host browser with OS signals. The relay, observers, operating system, and network stay awake. A physical sleep test requires a dedicated host laptop, an independent relay and two awake observers. Record OS sleep/wake, actual socket close or continued silence, challenge and offer times, signed consent, and first ordinary receipt. A physical sleep can close a transport immediately; it must not be grouped with application-path buffering. No such hardware result is reported here.
+
+### H.0.2 Earlier release qualification
 
 The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) identifies the application and Worker builds, the independent clients, and the live checks. For that edition’s implementation, check out `8ba7ab7040da0522a02ea0c222801e2a072efa05`. Run `npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`, and install Chromium, Firefox and WebKit for the locked Playwright version. Run `npm run check`, `npm --prefix hosted-mcp run check`, then `NODE_ENV=production npm run build`. Use a new output directory. The model runner verifies the TLC JAR digest before execution.
 
@@ -358,7 +373,7 @@ bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succe
 
 The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
 
-### H.4 Current qualification: reconnect, eviction and silent transport failure
+### H.4 Earlier qualification: reconnect, eviction and silent transport failure
 
 Check out `f03fa147f79847dda5dac5b0a8ed37c8d040cee5`. Install the three locked workspaces (`npm ci`, `npm --prefix client ci`, `npm --prefix hosted-mcp ci`) and the pinned Playwright Chromium. Use the SHA-checked TLC JAR from H.1. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) links the logs, environment and limits.
 

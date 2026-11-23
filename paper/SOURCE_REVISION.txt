@@ -1,3 +1,13 @@
+Evidence edition 12; protocol v4; profile pf-v4-cs1.
+Release source, private Worker, models and terminal-storage browser: cbd7977df9df29bb6e80baf34a3f32b9f4dc4708
+https://github.com/slee1996/pillowfort/tree/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708
+Paired timing study browser: a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f (identical to the previously deployed asset digests; embedded in the archive).
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-23-r12
+Records: evidence/qualification-r12/qualification.json
+The archive contains source-cbd7977df9.tar.gz, the actual study browser, configs and traces, and SHA256SUMS.
+
+Historical edition 11 provenance (unchanged):
+
 Evidence edition 11; protocol v4; profile pf-v4-cs1.
 Release source, CI and production build: a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f
 https://github.com/slee1996/pillowfort/tree/a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f

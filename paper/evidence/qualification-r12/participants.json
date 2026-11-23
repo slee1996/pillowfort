@@ -1,0 +1,93 @@
+{
+  "source": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+  "localBrowserJourneys": [
+    {
+      "host": "chromium",
+      "guest": "firefox",
+      "retoss": true,
+      "versions": [
+        "158.0.8127.18",
+        "159.0"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host admits from a fresh member-exported link",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "firefox",
+      "guest": "webkit",
+      "retoss": true,
+      "versions": [
+        "159.0",
+        "27.2"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "webkit",
+      "guest": "chromium",
+      "retoss": true,
+      "versions": [
+        "27.2",
+        "158.0.8127.18"
+      ],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    }
+  ],
+  "npmStdio": {
+    "package": "@ontologic/pillowfort-agent@2.1.1",
+    "result": {
+      "mode": "stdio",
+      "passed": [
+        "native focused/full selection and preflight",
+        "authenticated discovery / guides / prompts",
+        "native encrypted host",
+        "exact admission",
+        "original name visible in chat but absent from new guest's mention resource",
+        "subscribe and reconcile baseline",
+        "notification-driven private read and reply",
+        "cancel listen without losing identity",
+        "encrypted drawing and browser PNG export",
+        "terminal room observation",
+        "participant closed"
+      ],
+      "errors": [],
+      "counts": {
+        "catalog": 65
+      }
+    }
+  },
+  "limits": "A running SDK handler, not a claim that an idle third-party model starts a turn. Headless browser engines, not physical laptops or phones."
+}

@@ -1,0 +1,163 @@
+{
+  "edition": 12,
+  "protocol": "v4-CS1",
+  "runtimeSource": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+  "runtimePr": "https://github.com/slee1996/pillowfort/pull/26",
+  "runtimeMerge": "d8744e12b42bcad72610c0810904f4c0f96a97ca",
+  "evidenceTag": "protocol-v4-cs1-evidence-2026-11-23-r12",
+  "previous": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json",
+  "sourceArchive": {
+    "file": "sources/source-cbd7977df9.tar.gz",
+    "sha256": "1b76499a612572905cdf8db061bb9d075608fc2cc58a77d4d9fc47fe9869876d",
+    "contents": "All tracked source at the candidate except the paper subtree."
+  },
+  "measurementRevisions": {
+    "workerAndFixture": "cbd7977df9df29bb6e80baf34a3f32b9f4dc4708",
+    "studyBrowser": "a5f0fe6b4f2a6e0d4c1e2888db6268048d1f904f",
+    "studyBrowserAssets": "premature-succession.json#participantBrowserAssets",
+    "why": "The host-loss trials used the preceding production browser, whose exact files are shipped under study-browser/. The independent retirement-storage trial and release journeys used the new candidate. Only the private comparison Worker changes the challenge deadline."
+  },
+  "gates": {
+    "application": {
+      "command": "PILLOWFORT_RELAY_CONFORMANCE_REPORT=\"$OUT/relay.json\" npm run check",
+      "passed": true,
+      "testCases": 594,
+      "bunPassed": 578,
+      "nodePassed": 16
+    },
+    "hosted": {
+      "command": "npm --prefix hosted-mcp run check",
+      "passed": true,
+      "testCases": 14
+    },
+    "nativeProvider": {
+      "command": "cargo +1.94.1 test --offline --locked --manifest-path crypto/openmls-wasm/Cargo.toml",
+      "passed": true,
+      "tests": 6
+    },
+    "models": {
+      "passed": true,
+      "profiles": 63,
+      "intact": 18,
+      "mutations": 34,
+      "witnesses": 11,
+      "fixedPointDistinctStates": 6544512
+    },
+    "continuousIntegration": [
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403674",
+        "name": "check",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403478",
+        "name": "protocol-models",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403027",
+        "name": "hosted-mcp",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258455416/job/137986403781",
+        "name": "dependency-audit",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372429",
+        "name": "check",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986371902",
+        "name": "protocol-models",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372654",
+        "name": "hosted-mcp",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/slee1996/pillowfort/actions/runs/45258445999/job/137986372568",
+        "name": "dependency-audit",
+        "state": "SUCCESS"
+      }
+    ]
+  },
+  "records": {
+    "prematureOffers": "premature-succession.json",
+    "formal": "models.json",
+    "realRelayConformance": "relay-conformance.json",
+    "terminalErasure": "terminal-storage.json",
+    "provider": "provider.json",
+    "releaseParticipants": "participants.json",
+    "advisories": "dependencies.json",
+    "production": "deployment.json"
+  },
+  "scopeAndRemainingLimits": [
+    {
+      "property": "Receiver-observed availability versus unnecessary offers",
+      "established": "24 private-loopback executions. For all six 18-second temporary cases the released detector offered and the longer-wait case retained its authenticated host. For four still-absent controls, released behavior restored ordinary guest traffic about thirty seconds earlier.",
+      "notEstablished": "The fixture did not suspend a physical laptop or disconnect a Wi-Fi radio. The data do not give a deployment false-positive rate, a real-time guarantee or an optimal timeout."
+    },
+    {
+      "property": "Implementation conformance",
+      "established": "A separate observer checked 2,152 accepted and 40 rejected steps from 21 entry classes, immutable state and persistence round trips, exact FIFO cleanup and consent. Actual retirement plus storage failure closed producers and preserved recovery across reload.",
+      "notEstablished": "These finite traces are not an all-input proof of refinement. Permanent storage loss, unending disconnection, or refusal cannot guarantee progress."
+    },
+    {
+      "property": "Composition and cryptography",
+      "established": "The one-operation, one-slot M1–M4 product reached a fixed point with no depth cutoff. External RFC 9180 vectors and all four shipping browser artifacts were checked independently of in-process round trips.",
+      "notEstablished": "No unbounded proof of implementation, global agreement or deadlock freedom; no independent audit, physical erasure guarantee or formal security proof of MLS."
+    },
+    {
+      "property": "Agent and browser behavior",
+      "established": "A live participant may subscribe and act on a decrypted mention; receipt is independent of an unrelated reader. Chromium, Firefox and WebKit completed consent-based re-offer and room shutdown.",
+      "notEstablished": "Third-party idle-agent wakeups, offline identity, phone radio behavior, WAN latency and field incident rates are not established."
+    }
+  ],
+  "reproduce": {
+    "install": [
+      "npm ci",
+      "npm --prefix client ci",
+      "npm --prefix hosted-mcp ci",
+      "npx playwright install chromium firefox webkit",
+      "NODE_ENV=production npm run build"
+    ],
+    "local": [
+      "PILLOWFORT_QUALIFICATION_ASSETS=\"$BUNDLE/study-browser\" python3 scripts/measure-premature-succession.py \"$OUT/offer-study\"",
+      "PILLOWFORT_RELAY_CONFORMANCE_REPORT=\"$OUT/relay.json\" bun test ./test/secure-relay-v4.test.ts",
+      "node scripts/protocol-workerd-evidence.mjs terminal-storage \"$OUT/terminal-storage\"",
+      "python3 scripts/check-protocol-models.py --jar \"$TLA_JAR\" --output \"$OUT/models\"",
+      "cargo +1.94.1 test --offline --locked --manifest-path crypto/openmls-wasm/Cargo.toml",
+      "bun verification/app/browsers.ts \"$OUT/browser.json\" all retoss",
+      "bun verification/app/agents.ts stdio \"$OUT/stdio.json\" \"$INSTALLED_AGENT/scripts/agent.mjs\" --same-name"
+    ],
+    "notes": "Use a fresh directory per execution. Install @ontologic/pillowfort-agent@2.1.1 separately for the stdio journey. For offline Cargo execution the pinned crates must already be cached. Interpret time zero, cleanup, reversal of trial order and hardware limits as specified in the technical appendix."
+  },
+  "pdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 11,
+      "pageNumbers": true,
+      "publicLinks": 57
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 14,
+      "pageNumbers": true,
+      "publicLinks": 12
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 7,
+      "pageNumbers": true,
+      "publicLinks": 14
+    }
+  },
+  "publicationHarness": {
+    "pinnedAt": "protocol-v4-cs1-evidence-2026-11-23-r12",
+    "file": "verification/app/browsers.ts",
+    "sha256": "6e0df1dddc1efac1b8978fe3def5ea870dab9cb41808a52e77df0ee887166a25",
+    "why": "The first live attempt timed out observing an open host menu; the second timed out in the multi-step guest-resume block. The final observer records the exact failed substep and bounded protocol discriminants on failure, and separately requires both applied host roles before testing actual authority. Both earlier attempts are retained. Copy reproduction/ over the unpacked source only for the amended normal browser smoke."
+  }
+}
