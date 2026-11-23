@@ -1,14 +1,14 @@
 # Pillowfort: An MLS-Based Protocol for Ephemeral Rooms
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 5 · 22 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 6 · 22 November 2026</div>
 
 ## Abstract {.abstract-heading}
 
-Pillowfort is a protocol for temporary, end-to-end encrypted rooms where people and software agents can chat, draw, and play games. A relay server carries encrypted messages between devices. One participant’s device serves as host: it approves requests to join and automatically checks actions such as game moves against the room’s rules. When the host disconnects mid-game, even players who remain online must wait for a host to validate the next move.
+Pillowfort is a protocol for temporary, end-to-end encrypted rooms where people and software agents can chat, draw, and play games. The devices encrypt group messages with Messaging Layer Security (MLS); a relay server delivers those messages. One participant’s device serves as host: it approves requests to join and automatically checks actions such as game moves against the room’s rules. When the host disconnects mid-game, even players who remain online must wait for a host to validate the next move.
 
-If the host does not return, the relay may offer the role to a member named in the host’s signed policy. Taking over is voluntary: it requires that member’s signed acceptance. If no eligible member accepts, the room closes. A new host sets its own policy for future offers. If it is lost before that policy takes effect, the room closes rather than reuse the previous host’s policy. We describe how Pillowfort enforces these rules over Messaging Layer Security (MLS) and test recovery from interrupted handoffs.
+Another member can take over in the same room using its own device identity. In a planned handoff, the host offers the role directly and can stay as a member afterward. After a disconnect, the relay waits two minutes for the host to return, then uses a policy the host signed in advance to offer the role to eligible members one at a time. On either path, authority changes only when the recipient signs an acceptance and the relay records the transfer. If nobody accepts after a disconnect, the room closes. In a browser test, a returning guest kept its identity and resumed encrypted chat with the new host.
 
-**Keywords:** group messaging; MLS; authenticated state machines; crash recovery; admission control.
+**Keywords:** group messaging; MLS; authenticated state machines; crash recovery; host migration.
 
 ## 1. Scope and design objectives
 
@@ -106,37 +106,37 @@ Historical removal markers must remain paired with the membership transition tha
 
 Room retirement clears host authority and its succession policy before the relay persists the terminal state. Only after that write does it notify authenticated attached devices. Receiving the signed close application event alone does not establish that durable shutdown has completed.
 
-## 7. Host transfer and preauthorized succession {.page-start}
+## 7. Host migration: the pillow toss {.page-start}
 
-Host authority moves to an existing admitted identity; it does not create a replacement participant. The protocol supports manual handoff and offers after host disconnection. Both require the target's explicit acceptance [3,5–7].
+Host migration transfers two duties: approving joins and validating other members’ actions. It does not move the room or copy the old host’s private keys. The successor already belongs to the MLS group and signs as itself. Pillowfort calls the offer to take over a *pillow toss*. Figures 5 and 6 show who can make the offer and what happens to the former host [3,5–7].
 
-### 7.1 Explicit handoff
+### 7.1 Planned handoff: the host offers the role
 
-The current host issues a signed offer naming the target device. Relay authorization binds the source host, target, exact offer, room context, and expiration. The target persists the authorization and explicitly accepts it as a person or authorized agent. Its signed acceptance references that authorization. The current host validates the acceptance automatically. The relay commits the authority change before dependent delivery effects. The former host remains an admitted member.
+The current host signs an offer naming one admitted device. The relay binds the authorization to the room, both devices, the exact offer, and its expiry. The recipient saves the authorization and chooses whether to accept. If it accepts, its device signs a response referencing that authorization. The outgoing host’s software validates the response automatically; the relay records the new host before notifying members. The former host stays as an ordinary member. A refusal leaves the current host in place.
 
 <figure id="fig-transfer">
 <img src="assets/fig-05-host-transfer.svg" alt="Manual host-transfer sequence separating the signed offer, bound authorization, explicit target acceptance, automatic validation, and persisted relay authority change.">
-<figcaption><strong>Figure 5.</strong> Explicit host handoff. Source and target decisions are distinguished from automatic checks. This path requires the outgoing host's validation; it is not the disconnection-recovery path. Endpoint views may reconcile at different times.</figcaption>
+<figcaption><strong>Figure 5.</strong> Planned handoff. The outgoing host signs the offer; the target signs its acceptance. The authority change takes effect when the relay records it, not when either participant receives the result.</figcaption>
 </figure>
 
-### 7.2 Consent-based succession after disconnection
+### 7.2 After a disconnect: the relay offers the role
 
-While connected, host software maintains a signed `host-succession-policy` event containing admitted devices in authenticated admission order, excluding the host and members awaiting removal. Reconnection does not change that order. Membership or authority changes require a new policy.
+While the host is online, its software signs a `host-succession-policy` listing admitted devices in the order they joined. The list excludes the host and members awaiting removal. Reconnecting does not change priority; a change of membership or host requires a new policy. The policy tells the relay whom it may ask, not who will serve.
 
-The relay preserves the current host during a **120-second disconnect grace**. On expiry it fences that identity from resume and offers a **30-second authorization** to the earliest connected, active candidate in the current signed policy. Unavailable and removal-bound devices are ineligible. Candidate attempts and outstanding capabilities are durable; refusal or an unanswered offer advances to the next eligible candidate. An admitted device absent from the current policy is not implicitly authorized to succeed.
+Suppose Ada hosts a room, and Ben and Chen joined in that order. If Ada disconnects, she keeps the role for a **120-second grace period**. If she resumes in time, no offer is needed. Otherwise the relay blocks her old device identity from resuming. If both guests are active, connected, and in Ada’s policy, Ben receives the first **30-second offer**. If Ben declines or the offer expires, Chen gets a fresh offer. Ben’s refusal does not remove him from the room. If neither accepts, the room closes. The relay records each attempt and outstanding offer; it skips unavailable devices and those awaiting removal.
 
 <figure id="fig-succession">
 <img src="assets/fig-06-automatic-succession.svg" alt="Consent-based succession: the relay offers the pillow in signed admission order; each candidate explicitly accepts or declines. Acceptance transfers authority; refusal advances to the next candidate. If all refuse, the fort collapses.">
-<figcaption><strong>Figure 6.</strong> Succession after host loss. Policy maintenance, offer delivery, and cryptographic checks are automatic; accepting the role is not. The disconnected host need not validate the response. The accepted successor completes the former host's MLS removal before ordinary work continues. Refusal or expiry advances the offer; exhaustion collapses the fort.</figcaption>
+<figcaption><strong>Figure 6.</strong> Succession after host loss. The relay consults the former host’s signed policy; no further message from that host is required. Refusal or timeout advances the offer, never the authority. Only the accepting path leads to removal of the former host and resumption of ordinary traffic.</figcaption>
 </figure>
 
-The target persists the exact authorization before acknowledging delivery. Neither delivery acknowledgment nor membership accepts the host role. The participant explicitly chooses to accept or decline; its signed, encrypted `host-succession` response binds that choice to the policy and capability. The relay verifies the credential, candidate, connection, grant, order, and expiry. Recipients authenticate the MLS sender and response. This narrow response may pass a membership barrier to restore its coordinator; it does not authorize arbitrary traffic through the barrier.
+A delivery acknowledgment means only that the recipient saved the offer. The recipient chooses whether to accept or decline, signs a `host-succession` response bound to the policy and offer, and encrypts it with MLS. A signed copy alongside the ciphertext lets the relay check the credential, candidate, connection, grant, order, and expiry. Peers authenticate the MLS sender and the decrypted response. This response may cross a pending membership barrier to restore a host. Ordinary traffic may not.
 
-On acceptance, authority and capability consumption are committed before dependent delivery effects. An unrelated delivery overflow cannot revoke an accepted transfer. The former host is retired; the successor completes its exact MLS Remove and retirement notification, then publishes a new policy. A refusal consumes the current offer without promoting or removing the refusing member. If every eligible member refuses, the fort collapses and the relay closes the room. Unanswered or unavailable candidates cannot force another member to accept. Old policies cease to authorize transfer after the host changes.
+If Chen accepts, the relay records Chen as host and consumes the authorization before delivering the result. A later delivery overflow cannot undo the transfer. Unlike a planned handoff, succession retires the absent device: Chen completes the MLS Remove for Ada’s device and its retirement notification before ordinary work continues. Ben and Chen can then exchange messages in the same room without another invitation. Chen publishes a new policy for any future succession; Ada’s policy ceased to authorize offers when the relay changed hosts.
 
-These steps are not one atomic transaction across devices. A successor that returns with its retained identity must reconcile the authority result and finish the exact former-host removal. Publishing its own policy establishes delegation for a subsequent host loss. If it is permanently lost before the relay accepts that policy, the preceding host's delegation cannot authorize another promotion: after the successor's disconnect grace, the relay retires the room. This preserves the authority boundary at the cost of availability.
+The authority change, removal, and new policy are separate steps. If Chen’s device crashes after the relay records the transfer, it can resume with its retained identity, reconcile the result, and finish any outstanding removal. If it stays offline and the relay never accepted Chen’s own policy, the room closes at grace expiry. The relay cannot use Ada’s policy to choose a second successor.
 
-The outgoing host need not remain online. The mechanism is not quorum-based or Byzantine leader election. The relay is the connectivity and deadline oracle: signatures authenticate delegation and acceptance, not evidence that another endpoint is offline. A dishonest relay can therefore induce an authorized but unnecessary succession by misrepresenting availability. It cannot forge the host's delegation or the candidate's consent.
+This is not a quorum election. The relay judges connectivity and deadlines; signatures prove delegation and acceptance, not that another device was offline. A dishonest relay can therefore induce an authorized but unnecessary succession by misrepresenting availability. It cannot forge either participant’s signature.
 
 ## 8. Agent interfaces and notification semantics {.page-start}
 
@@ -171,7 +171,7 @@ These mechanisms do not provide an offline inbox, exactly-once agent actions, or
 
 : **Table 2.** Authority and recovery claims. In the shutdown row, the revision is the corrected production build; the earlier failure is a separate observation.
 
-At `1ba68f23`, the five protocol suites passed 90 tests (768 assertions) and the real-MLS engine suite passed 26 (310 assertions). TLC found no invariant violation in 11 finite configurations; all 11 deliberately weakened variants produced counterexamples. Two traces reached successful recovery with the guards intact. The largest composition explored 1,202,973 states at a 16-step bound. These checks do not establish implementation refinement, unbounded progress, or cryptographic security. The [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md) gives the property-level results.
+At `1ba68f23`, the five protocol suites passed 90 tests (768 assertions) and the real-MLS engine suite passed 26 (310 assertions). TLC found no invariant violation in 11 finite configurations; all 11 deliberately weakened variants produced counterexamples. Two traces reached successful recovery with the guards intact. The largest composition explored 1,202,973 states at a 16-step bound. These checks do not establish implementation refinement, unbounded progress, or cryptographic security. The [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Verification-Matrix.md) gives the property-level results.
 
 ### 10.2 Light-load latency
 
@@ -190,7 +190,7 @@ MLS architecture already assigns access control, delivery consistency, invalid-c
 
 ## 12. Conclusion
 
-Pillowfort composes MLS with explicit admission, context-bound ordering, persist-before-effect execution, exact replay reconciliation, and authenticated host transfer. A signed admission-order policy permits offers without the disconnected host's further participation, while every recipient retains the choice to accept or decline. Its recovery contract preserves uncertainty and refuses to reuse an invalid delegation. The bounded analysis and fault executions support specific coordination properties under the stated storage, endpoint, and relay assumptions.
+Pillowfort separates the continuity of a room from the availability of its first host. A planned handoff changes who validates actions without removing anyone. After a disconnect, a signed policy lets the relay offer the same role without the former host’s participation, but only a member’s signed acceptance can complete the transfer. In the [browser recovery run](https://github.com/slee1996/pillowfort/blob/994f8e8dc212cc3230cfdc5e7737d15d0495331c/paper/evidence/recovery-r3/handoff-guest.json), a returning guest replayed that acceptance and resumed encrypted chat without changing its device identity. If no eligible member agrees to host, the protocol closes the room instead.
 
 ## References {.references-heading}
 
@@ -204,8 +204,8 @@ Pillowfort composes MLS with explicit admission, context-bound ordering, persist
 8. Pillowfort. *Agent Security and Custody*. [Pinned source](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/agents/security.md).
 9. Model Context Protocol. *Subscriptions*, protocol revision 2026-07-28. [Specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions.md).
 10. Model Context Protocol. *Tasks Extension*. [Overview](https://modelcontextprotocol.io/extensions/tasks/overview.md).
-11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Technical-Appendix.pdf).
+11. Pillowfort. *Protocol v4-CS1: Wire Contract and Failure Semantics*. [Technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Technical-Appendix.pdf).
 12. Matrix. *Megolm Group Ratchet*, specification v1.19. [Specification](https://spec.matrix.org/v1.19/olm-megolm/megolm/).
 13. Signal. *The Signal Private Group System*. [Design](https://signal.org/blog/signal-private-group-system/).
 
-**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r5/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).
+**Companion artifacts:** [bounded analysis report](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Formal-State-Machine-Analysis.pdf); [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Protocol-Verification-Matrix.md); [complete evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r6/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip).
