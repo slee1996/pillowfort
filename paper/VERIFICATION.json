@@ -1,21 +1,21 @@
 {
   "schemaVersion": 4,
   "edition": {
-    "number": 3,
+    "number": 4,
     "title": "Pillowfort: An MLS-Based Protocol for Ephemeral Rooms",
     "date": "2026-11-22",
     "wireVersion": 4,
     "profile": "pf-v4-cs1",
-    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r3",
-    "previousArtifactCommit": "71ed475940ecd33d487e17d4940a0ac60c60f2c4",
+    "evidenceTag": "protocol-v4-cs1-evidence-2026-11-22-r4",
+    "previousArtifactCommit": "994f8e8dc212cc3230cfdc5e7737d15d0495331c",
     "previousEditionPreserved": true,
     "changes": [
-      "Separate signed authority from relay snapshot at guest resume",
-      "Model and test two socket replacements with delayed completions and ACKs",
-      "Fix successor cleanup and observer replay across immediate close",
-      "Publish revision-specific passing and failing records, preserving earlier measurements"
+      "Lead with the distinction between authority to offer and consent to host.",
+      "Present six protocol claims with their supporting observations, tested revisions and limits.",
+      "Restore consecutive page numbers across all three PDFs and attach the workload and scope caveat to the latency table."
     ],
-    "publicPullRequest": "https://github.com/slee1996/pillowfort/pull/10"
+    "publicPullRequest": "https://github.com/slee1996/pillowfort/pull/11",
+    "evidenceRetainedFrom": "protocol-v4-cs1-evidence-2026-11-22-r3"
   },
   "source": {
     "commit": "1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b",
@@ -153,7 +153,7 @@
       "result": "evidence/signed-example-verification.json"
     },
     "courtJester": {
-      "newExecutableChangesThisEdition": true,
+      "newExecutableChangesThisEdition": false,
       "newRunThisEdition": false,
       "currentReleaseChecks": "Historical production checks only; see PRODUCTION_DEPLOYMENT.json",
       "shutdownFixChecks": "evidence/production-shutdown-court-jester.json",
@@ -165,6 +165,18 @@
           "file": "Pillowfort-Protocol-Paper.pdf",
           "pages": 10,
           "a4Portrait": true,
+          "verifiedPageNumbers": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
           "outOfPageText": [],
           "blankPages": [],
           "localOrRelativeLinks": [],
@@ -174,6 +186,19 @@
           "file": "Protocol-Technical-Appendix.pdf",
           "pages": 11,
           "a4Portrait": true,
+          "verifiedPageNumbers": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
           "outOfPageText": [],
           "blankPages": [],
           "localOrRelativeLinks": [],
@@ -183,6 +208,14 @@
           "file": "Formal-State-Machine-Analysis.pdf",
           "pages": 6,
           "a4Portrait": true,
+          "verifiedPageNumbers": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
           "outOfPageText": [],
           "blankPages": [],
           "localOrRelativeLinks": [],
@@ -195,7 +228,23 @@
         "2x PNG"
       ],
       "figuresUnchanged": true,
-      "visualVerification": "Opened all three HTML documents in Chromium and rendered their PDFs. Seven figures decoded. PDF checks: A4 pages, external or internal links only, no blank pages, out-of-page words or replacement characters. Inspected a page contact sheet and the reformatted final analysis page."
+      "visualVerification": "Rendered all three HTML documents in Chromium. All seven images decoded. The numbered, A4 PDFs have no empty pages, out-of-page text, local links, or replacement characters. Inspected the first page and evaluation page of the paper. Verified every physical footer, six claim rows, their primary records, and all four p50/p95 pairs against the original sample arrays.",
+      "claimsTable": {
+        "paperPage": 9,
+        "claims": 6,
+        "columns": [
+          "Protocol claim",
+          "Supporting observation",
+          "Tested revision",
+          "Limit"
+        ]
+      },
+      "latencyTable": {
+        "paperPage": 9,
+        "captionOnSamePageAsAllRows": true,
+        "originalSourceCommit": "10fe8f8b490c9e890d5a642bc25568e985c2fe8a",
+        "nearestRankMatchesRawSamples": true
+      }
     },
     "previousEditionImplementation": {
       "sourceCommit": "c726c5eccafacb6fe6c881be3fcc174287c2f86f",
@@ -282,7 +331,7 @@
     "hostedMcpVersion": "c308841b-1764-4bc7-aa67-03b15f3385a3",
     "verificationRecord": "PRODUCTION_DEPLOYMENT.json",
     "newDeploymentForPaperUpdate": false,
-    "scope": "Retained shutdown deployment record from edition 2, not a deployment of the new recovery changes."
+    "scope": "Retained edition 2 shutdown deployment record, not a deployment for this editorial revision."
   },
   "evidenceLimits": [
     "No independent security audit or cryptographic proof",
@@ -295,17 +344,17 @@
     {
       "file": "Formal-State-Machine-Analysis.html",
       "bytes": 27643,
-      "sha256": "08f452aa136470f420531bbd81639f7ec0cf3e808e3a64359afc55950e4de53a"
+      "sha256": "8ca5b903ca22a6712e87dbc3f977c5179531e41d1b42c1924fc6fc918ab7f67d"
     },
     {
       "file": "Formal-State-Machine-Analysis.md",
       "bytes": 22976,
-      "sha256": "36f09cebad16a412f15a39884cfa00825247f92926ccfaec898f74638944a3d0"
+      "sha256": "33bba756c256bb5aa50fca676451868589d09eeba9c0c8851b07f59dfeab854d"
     },
     {
       "file": "Formal-State-Machine-Analysis.pdf",
-      "bytes": 326871,
-      "sha256": "d5fe738f1aed558b6682be22ad66fa13249d588af3f5e71ce1d45347ee5421db"
+      "bytes": 326924,
+      "sha256": "52e73fb9171949da4f80948fe77dee5479a37b84d1dc8c7d0fe24430c3b85069"
     },
     {
       "file": "PRODUCTION_DEPLOYMENT.json",
@@ -314,43 +363,43 @@
     },
     {
       "file": "Pillowfort-Protocol-Paper.html",
-      "bytes": 37839,
-      "sha256": "328b08294d4b4c91edfe0aa4cd411d055e0dee5d3bc2a0cc25d8293191701613"
+      "bytes": 38117,
+      "sha256": "994fa12feebf2427678ecb28fa3b9d38f1e834f69ce47b825dc4c95dd55aa354"
     },
     {
       "file": "Pillowfort-Protocol-Paper.md",
-      "bytes": 31103,
-      "sha256": "30f481ba894ab37f5de537091c020e1f150a97ff97dab514d69f74e58b049a2c"
+      "bytes": 30191,
+      "sha256": "954e52fe071eb8f3a5ba7d655adfd06d96c90a94431cd7789279402f2fb1620c"
     },
     {
       "file": "Pillowfort-Protocol-Paper.pdf",
-      "bytes": 644941,
-      "sha256": "77630e19f6c9ca567eb0406ba15d771310fe235db0b63f33b8ea4f120c5acd1f"
+      "bytes": 668224,
+      "sha256": "0f47818ea7fae2995a8544dcb04a3de55ffe12dd1498ed3b60983341f541ffc8"
     },
     {
       "file": "Protocol-Technical-Appendix.html",
       "bytes": 43254,
-      "sha256": "dbc152356a19a992f9697b8d3de922dc8a15dfb38fb2d5f26494c520bbe17466"
+      "sha256": "292ca525a4113d859b0beb071c46792b310f497404443d5a997e40bc9889b361"
     },
     {
       "file": "Protocol-Technical-Appendix.md",
       "bytes": 31523,
-      "sha256": "2105b72db02909c13679026883d5f3cfa881d2b2079b29f19400e7738f6a98c2"
+      "sha256": "ba49adff90be46d72f882bfc3eef86edecbb54fbab6663a4eb4daf4b728ebfb5"
     },
     {
       "file": "Protocol-Technical-Appendix.pdf",
-      "bytes": 558303,
-      "sha256": "862848a5aea1974853220b20dadbf4fd517cf6feaadd6a5e02cdacf0393d793d"
+      "bytes": 558383,
+      "sha256": "d63a666153bd98c763eab5722cc629c8e6c1035f6ae4645b0c225bad31eae9d3"
     },
     {
       "file": "Protocol-Verification-Matrix.md",
       "bytes": 12906,
-      "sha256": "851ea9079bda63c09ce4c6847d8eb3946b11c5242d3c7607d4dd9e6a0539dffd"
+      "sha256": "b4ef72c46062d5bc31a374440a5da1154019b62e8d9d9b85ac8acc1457eee86d"
     },
     {
       "file": "SOURCE_REVISION.txt",
-      "bytes": 1243,
-      "sha256": "6e54ac0c998096dbed5c22384c9eb9182028a88068024720b040c890fd7cfe9a"
+      "bytes": 1371,
+      "sha256": "2621b046c46e2bfd59bba0cf0d66c16178277f3dd854ca7a51b99193e5c98e4f"
     },
     {
       "file": "assets/fig-01-system-model.png",
@@ -424,8 +473,8 @@
     },
     {
       "file": "assets/paper.css",
-      "bytes": 2923,
-      "sha256": "eb9d197160cdd584e5a8a00bfb0809452431ed31104e1a8f66c748921a3963be"
+      "bytes": 3112,
+      "sha256": "e63de833bd379fff0e0385e7bef3908b0becfbcf02dede7839c02b8de10cf81f"
     },
     {
       "file": "evidence/benchmarks-final/browser-results.json",
