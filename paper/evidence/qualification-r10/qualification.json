@@ -1,0 +1,113 @@
+{
+  "edition": 10,
+  "protocol": "v4-CS1",
+  "runtimeSource": "181a29f79205650328fd3a1049f673003d113af3",
+  "runtimePr": 22,
+  "evidenceTag": "protocol-v4-cs1-evidence-2026-11-23-r10",
+  "previous": "protocol-v4-cs1-evidence-2026-11-23-r9",
+  "sources": {
+    "runtime": "https://github.com/slee1996/pillowfort/tree/181a29f79205650328fd3a1049f673003d113af3",
+    "bundle": "https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Pillowfort-Protocol-v4-CS1-R10.zip"
+  },
+  "gates": {
+    "application": {
+      "command": "npm run check",
+      "passed": true,
+      "testCases": 589,
+      "bunPassed": 573,
+      "nodePassed": 16
+    },
+    "hosted": {
+      "command": "npm --prefix hosted-mcp run check",
+      "passed": true,
+      "testCases": 14
+    },
+    "models": {
+      "passed": true,
+      "profiles": 44,
+      "intact": 14,
+      "mutations": 22,
+      "witnesses": 8,
+      "scope": "HostPath checks conditional progress. The composed configurations check only finite safety prefixes."
+    }
+  },
+  "evidence": {
+    "scenarios": "scenarios.json",
+    "models": "models.json",
+    "dependencies": "dependencies.json",
+    "live": "deployment.json"
+  },
+  "scopeAndRemainingLimits": [
+    {
+      "boundary": "Failure suspicion, not evidence of physical death",
+      "whatChanged": "Existing close is immediate; full and one-way open-socket partitions now cause a consent offer without a forced close. A lost probe survives Worker eviction. In Chromium a frozen page that continued replying kept its role; a genuinely stopped JavaScript thread triggered an offer to the guests.",
+      "remaining": "No scheduled alarm, no finite time bound. Suspended, congested or CPU-starved hosts may be suspected unnecessarily. Solo/legacy connections are not probed; a nonresponsive candidate may also time out. Signed acceptance remains necessary."
+    },
+    {
+      "boundary": "Persistence and membership views",
+      "whatChanged": "Idle retirement now commits before notice. An exact committed activation proof lets an original device recover after one lost membership write.",
+      "remaining": "A crash between commit and notice can lose the notice. Missing private keys, permanently lost storage or incompatible MLS epochs cannot be reconstructed safely. An offline identity may need fresh admission or a new room."
+    },
+    {
+      "boundary": "Bounded execution vs proof",
+      "whatChanged": "The finite host-path model checks socket and nonce binding plus conditional progress; tests exercise real encryption, browser storage and Worker alarms.",
+      "remaining": "No implementation refinement for all executions, independent cryptographic audit, protection against a compromised endpoint, or agreement against a dishonest relay. A relay can misreport availability but cannot forge a participant’s signed choice."
+    },
+    {
+      "boundary": "Agents and identity",
+      "whatChanged": "An actively listening SDK client read a private mention and replied from the same admitted participant.",
+      "remaining": "Pillowfort cannot make an idle third-party harness run a model. Hosted identity is memory-only: 600 seconds absolute, 120 seconds idle. Keeping it indefinitely would change custody, consent and capacity."
+    },
+    {
+      "boundary": "Performance and devices",
+      "whatChanged": "Twenty real browser profiles exercised the implementation cap. Chromium, Firefox and WebKit participant journeys are separately recorded.",
+      "remaining": "One machine is not a WAN distribution, a load SLA, or physical iOS/Android background-suspension evidence. No paired iOS device was available. Payment-provider settlement, live telemetry and accessibility certification are separate application concerns."
+    }
+  ],
+  "reproduce": {
+    "install": [
+      "npm ci",
+      "npm --prefix client ci",
+      "npm --prefix hosted-mcp ci",
+      "npx playwright install chromium firefox webkit"
+    ],
+    "gates": [
+      "npm run check",
+      "npm --prefix hosted-mcp run check",
+      "NODE_ENV=production npm run build",
+      "python3 scripts/check-protocol-models.py --jar \"$TLA_JAR\" --output \"$OUT/models\""
+    ],
+    "localOnly": [
+      "for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do node scripts/protocol-workerd-evidence.mjs \"$cut\" \"$OUT/$cut\" || exit 1; done",
+      "for s in peer-storage full-room; do bun scripts/protocol-browser-evidence.ts --mode faults --fault \"$s\" --output \"$OUT/$s\" || exit 1; done",
+      "bun verification/app/browsers.ts \"$OUT/browsers.json\" all retoss",
+      "bun verification/app/agents.ts stdio \"$OUT/stdio.json\" \"$PKG/scripts/agent.mjs\""
+    ],
+    "productionOptIn": [
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault healthy-host --production --output \"$OUT/live-healthy\"",
+      "bun verification/app/agents.ts hosted \"$OUT/live-hosted.json\"",
+      "bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --production --output \"$OUT/live-clean\""
+    ],
+    "notes": "PKG is a separate installation of @ontologic/pillowfort-agent@2.1.1. Download release v1.7.4 of tla2tools.jar; the runner checks its digest. Run against new rooms, never target the public service with network faults or capacity tests.",
+    "supplementFromEvidenceTag": [
+      "for s in suspended-host paused-host; do bun scripts/protocol-browser-evidence.ts --mode faults --fault \"$s\" --output \"$OUT/$s\" || exit 1; done"
+    ]
+  },
+  "pdf": {
+    "Pillowfort-Protocol-Paper": {
+      "pages": 11,
+      "pageNumbers": true,
+      "publicLinks": 50
+    },
+    "Protocol-Technical-Appendix": {
+      "pages": 13,
+      "pageNumbers": true,
+      "publicLinks": 12
+    },
+    "Formal-State-Machine-Analysis": {
+      "pages": 7,
+      "pageNumbers": true,
+      "publicLinks": 13
+    }
+  }
+}

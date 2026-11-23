@@ -1,3 +1,13 @@
+Evidence edition 10; protocol v4; profile pf-v4-cs1.
+
+Implementation, models, Worker fixture, participant and capacity checks: 181a29f79205650328fd3a1049f673003d113af3
+https://github.com/slee1996/pillowfort/tree/181a29f79205650328fd3a1049f673003d113af3
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-23-r10
+Results: evidence/qualification-r10/qualification.json
+The ZIP contains the exact tracked source (excluding paper/) as sources/source-181a29f792.tar.gz.
+
+Historical edition 9 provenance (unchanged):
+
 Evidence edition 9; protocol v4; profile pf-v4-cs1.
 
 Current implementation and verification harness: 8ba7ab7040da0522a02ea0c222801e2a072efa05

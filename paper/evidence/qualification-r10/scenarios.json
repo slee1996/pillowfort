@@ -1,0 +1,136 @@
+{
+  "runtime": "181a29f79205650328fd3a1049f673003d113af3",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "tests": {
+    "silent-host-loss": {
+      "fault": "silent-host-loss",
+      "lossToRelayDetectionMs": 23063,
+      "relayDetectionToObservedVisibleOfferMs": 315,
+      "forcedClose": false,
+      "direction": "both",
+      "transport": "Dropped application bytes on a still-open loopback path; no FIN/RST at onset.",
+      "maxConsecutiveCancellations": 0,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    },
+    "silent-host-uplink": {
+      "fault": "silent-host-uplink",
+      "lossToRelayDetectionMs": 23065,
+      "relayDetectionToObservedVisibleOfferMs": 313,
+      "forcedClose": false,
+      "direction": "uplink",
+      "transport": "Dropped application bytes on a still-open loopback path; no FIN/RST at onset.",
+      "maxConsecutiveCancellations": 0,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    },
+    "silent-host-downlink": {
+      "fault": "silent-host-downlink",
+      "lossToRelayDetectionMs": 23051,
+      "relayDetectionToObservedVisibleOfferMs": 328,
+      "forcedClose": false,
+      "direction": "downlink",
+      "transport": "Dropped application bytes on a still-open loopback path; no FIN/RST at onset.",
+      "maxConsecutiveCancellations": 0,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    },
+    "peer-storage": {
+      "fault": "peer-membership-storage-failure",
+      "outcome": "unacknowledged-Add-replayed-on-original-device",
+      "recoveredOriginalDevice": true,
+      "encryptedChatWithNewLeafBothDirections": true,
+      "scope": "One transient IndexedDB failure and an intact prior state. Does not merge divergent branches or restore a missing key."
+    },
+    "full-room": {
+      "fault": "full-room",
+      "admitted": 20,
+      "extraDeniedBeforeApproval": true,
+      "fullFanoutSamplesMs": [
+        167,
+        198,
+        169,
+        197,
+        213
+      ],
+      "scope": "20 isolated Chromium profiles, local relay, serial pace. UI measurement includes observer overhead; not maximum throughput."
+    },
+    "probe-restart": {
+      "fault": "probe-restart",
+      "sawFreshNonces": 2,
+      "noUnwantedOffer": true,
+      "deliveredBothDirections": true,
+      "eviction": {
+        "cutAfterCommit": true,
+        "socketsHibernated": true,
+        "recoveredExactPendingWork": true,
+        "originalIdleDeadlineUnchanged": true,
+        "evictionError": null
+      }
+    },
+    "healthy-host": {
+      "fault": "healthy-host",
+      "distinctEchoedChallenges": 2,
+      "offered": false,
+      "deliveredBothDirections": true
+    }
+  },
+  "idleEviction": {
+    "regression": "does not announce idle retirement until the storage transaction commits",
+    "before": "Observed one terminal frame during the aborted delete transaction; expected none.",
+    "after": "No terminal notice or socket close on failed commit; stored room remains. A successful retry clears storage and emits terminal notice.",
+    "passed": true,
+    "assertions": 7
+  },
+  "previousSilentResult": {
+    "tag": "protocol-v4-cs1-evidence-2026-11-22-r8",
+    "silentSeconds": 150,
+    "observedDisconnectBeforeForcedClose": false
+  },
+  "timing": "Cut onset to relay entering the successfully committed disconnect transition; then to first visible offer. Millisecond samples include loopback scheduling, not a WAN upper bound.",
+  "supplement": {
+    "harnessRevision": "protocol-v4-cs1-evidence-2026-11-23-r10",
+    "testedRuntime": "181a29f79205650328fd3a1049f673003d113af3",
+    "purpose": "Explicitly distinguish Chromium page freeze from a stopped JavaScript thread; neither is a physical handset.",
+    "tests": {
+      "suspended-host": {
+        "fault": "suspended-host",
+        "outcome": "frozen page answered challenges",
+        "distinctReplies": 2,
+        "offered": false,
+        "deliveredBothDirections": true
+      },
+      "paused-host": {
+        "fault": "paused-host",
+        "suspensionToFirstVisibleOfferMs": 23932,
+        "scope": "Debugger confirmed the original live host’s JavaScript was stopped; no simulated network fault.",
+        "signedChoices": [
+          "1:reject",
+          "2:accept"
+        ],
+        "deliveredBothDirections": true
+      }
+    }
+  }
+}

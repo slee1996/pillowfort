@@ -4,8 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pillowfort: Bounded State-Machine Analysis — Evidence edition
-9</title>
+  <title>Pillowfort: Bounded State-Machine Analysis</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -28,15 +27,15 @@
 <h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
 State-Machine Analysis</h1>
 <p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 9 · 23 November 2026</em></p>
-<p><strong>Status:</strong> Thirteen finite safety configurations have
-been checked; 18 deliberate guard weakenings yielded their expected
-violations and seven unweakened probes reached their designated states.
-The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json">edition
-9 record</a> names the source, bounds and outcomes. None is a
-cryptographic proof, implementation refinement, deadlock-freedom result
-or guarantee of eventual progress.</p>
+edition 10 · 23 November 2026</em></p>
+<p><strong>Status:</strong> Fourteen finite configurations passed; 22
+deliberately weakened configurations yielded their expected violations
+and eight unweakened reachability checks reached their targets. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json">qualification
+record</a> identifies each configuration, tested revision, and bound. A
+fair-alarm assumption supports one progress property; neither it nor the
+safety checks prove implementation refinement, cryptography, or
+whole-protocol liveness.</p>
 <h2 id="executed-analysis">Executed analysis</h2>
 <table>
 <thead>
@@ -88,6 +87,11 @@ or guarantee of eventual progress.</p>
 <td style="text-align: right;">370</td>
 </tr>
 <tr>
+<td>Watched host, two socket incarnations</td>
+<td style="text-align: right;">157</td>
+<td style="text-align: right;">96</td>
+</tr>
+<tr>
 <td>Composed M1, 12 steps</td>
 <td style="text-align: right;">15,297</td>
 <td style="text-align: right;">670</td>
@@ -133,6 +137,15 @@ with the first refusal receipt, replacing the stored invitation anchor
 on restore, and accepting a bootstrap from another admitted signer. Its
 positive witness activates a restored guest under the successor after a
 delayed refusal receipt.</p>
+<p><code>HostPath</code> abstracts one host, a guest, two sockets, and
+two challenge values. A timeout changes the path to <em>suspect</em>,
+not the owner. Only the nominated participant can accept. Three
+mutations admit an old socket, wrong challenge, or non-host reply; each
+violates safety. A fourth leaves a permanently silent host cycling
+forever and violates <code>SilentProgress</code> under weakly fair alarm
+dispatch. The positive witness includes socket replacement, Worker
+restart, suspicion and acceptance. Alarm fairness neither schedules a
+browser on a suspended phone nor bounds wall time.</p>
 <p>Reachability probes answer a different question: can the unmodified
 model make progress? Two traces recover a guest under a successor or on
 its second connection. Four more reach host-first recovery despite a
@@ -141,11 +154,11 @@ replay, and refusal followed by another candidate’s acceptance. None
 establishes that all executions terminate. Focused models are not
 multiplied into the composed state count.</p>
 <p>Exact model sources, configurations and traces are included in the <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Pillowfort-Protocol-v4-CS1-R9.zip">edition
-9 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Pillowfort-Protocol-v4-CS1-R10.zip">edition
+10 evidence bundle</a>. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the
@@ -430,8 +443,9 @@ offer atomically when the owner disappears or an eligible guest
 completes replay first. <code>ReconnectRace</code> distinguishes the old
 socket from its replacement, guest replay from activation, and stored
 offers from delivery and choice. The deadline belongs to the stored
-offer, not to the restarted instance. The model has no real-time failure
-detector.</p>
+offer, not to the restarted instance. <code>ReconnectRace</code> starts
+at detection; the separate <code>HostPath</code> model checks eventual
+suspicion, not real-time scheduling.</p>
 <p><strong>Actions:</strong> publish/replace signed policy; offer a
 manual target; disconnect/resume host; expire unclaimed recovery; fence
 the absent identity; select the earliest eligible candidate;

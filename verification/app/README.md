@@ -2,6 +2,8 @@
 
 The [edition 9 protocol qualification](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) supersedes the two protocol holds below. Refusal followed by a new manual offer and admission with a successor-exported link are now release gates. The earlier app-wide findings on visual baselines, physical devices, billing and telemetry are independent; a protocol pass does not close them.
 
+[Edition 10](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r10/paper/evidence/qualification-r10/qualification.json) adds silent and asymmetric host loss, healthy restart, same-device admission replay after a transient write failure, and operation at the 20-member limit. Its model establishes eventual suspicion only under fair alarm dispatch. Physical handsets, independent cryptographic review and third-party idle model scheduling are not inferred from those tests.
+
 ## Earlier app-wide baseline (before the protocol repairs)
 
 **Disposition: hold app-wide sign-off.** Ordinary room creation, chat, games and host handoff work in the tested environments. Two adjacent lifecycle paths do not. A passing protocol model or release gate is not evidence that either path works.
