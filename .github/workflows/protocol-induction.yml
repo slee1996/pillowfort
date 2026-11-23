@@ -9,7 +9,8 @@ permissions:
   contents: read
 jobs:
   proofs:
-    runs-on: ubuntu-24.04
+    # The pinned TLAPM build requires glibc >= 2.42.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
