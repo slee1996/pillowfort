@@ -21,7 +21,7 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host", "suspended-host", "paused-host", "idle-retirement", "idle-retirement-prefix", "lost-guest-keys", "natural-idle", "premature-succession", "terminal-storage", "manual-offer-readiness"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
@@ -523,6 +523,60 @@ async function plannedThenUnplanned(browser: Browser) {
     if (signedChoices.join(",") !== "0:reject,1:accept") throw Error("Wrong succession choices");
     return { fault: "planned-then-unplanned", formerHostRemainedAdmitted: true, manualAcceptancePreviewed: true,
       freshPolicyBoundToOffer: true, signedChoices, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
+// The signed manual offer and its independently delivered relay authorization are not atomic.
+// Hold only the authorization on loopback; the guest must have durably ACKed the signed offer.
+async function manualOfferReadiness(browser: Browser) {
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) throw Error("Requires private loopback");
+  const seenAcks = new Set<string>();
+  let offerId = "", release: (() => void) | null = null;
+  let held = Promise.withResolvers<void>();
+  let applied = Promise.withResolvers<void>();
+  const capabilities = new Set<string>();
+  const room = await setupRoom(browser, 2, async ({ page }, index) => {
+    if (index !== 1) return;
+    await page.routeWebSocket("**", ws => {
+      const remote = ws.connectToServer();
+      ws.onMessage(msg => {
+        const f = JSON.parse(msg.toString());
+        if (f.kind === "delivery-ack") {
+          seenAcks.add(f.lastMessageId);
+          if (f.lastMessageId === offerId) applied.resolve();
+        }
+        remote.send(msg);
+      });
+      remote.onMessage(msg => {
+        const f = JSON.parse(msg.toString());
+        if (f.type !== "host-transfer-authorized") { ws.send(msg); return; }
+        offerId = f.offerMessageId;
+        capabilities.add(f.authorizationId);
+        release = () => ws.send(msg);
+        if (seenAcks.has(offerId)) applied.resolve();
+        held.resolve();
+      });
+    });
+  });
+  const [host, guest] = room.participants.map(p => p.page);
+  try {
+    for (const choice of ["#btn-duck", "#btn-catch"]) {
+      held = Promise.withResolvers<void>(); applied = Promise.withResolvers<void>(); offerId = "";
+      await host.locator("#btn-room-menu").click();
+      await host.locator("#aim-btn-toss").click();
+      await host.locator("#member-picker-body .member-picker-item", { hasText: room.names[1] }).click();
+      await awaitBoundary(Promise.all([held.promise, applied.promise]), "processed offer with authorization still withheld");
+      await guest.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      if (await guest.locator("#host-offer-overlay").isVisible()) throw Error("Catch or Duck appeared before the bound authorization was available");
+      release!();
+      await guest.locator(choice).click();
+      if (choice === "#btn-duck") await host.getByText(`${room.names[1]} ducked.`, { exact: true }).last().waitFor();
+    }
+    if (capabilities.size !== 2) throw Error("Re-offer did not have a fresh authorization");
+    for (const page of [host, guest]) await page.locator(`.member-entry.is-host .member-name[title="${room.names[1]}"]`).first().waitFor({state:"attached"});
+    await deliver(host, guest, "former host after one catch");
+    await deliver(guest, host, "one catch completed the new offer");
+    return {fault:"manual-offer-readiness", withheldUntilSignedOfferApplied:true, distinctAuthorizations:2, choices:["decline","accept"], bothViewsChanged:true, deliveredBothDirections:true};
   } finally { await closeRoom(room); }
 }
 
@@ -1128,6 +1182,7 @@ try {
     if (selectedFault === "healthy-host") results.push(await healthyHost(browser!));
     if (selectedFault === "full-room") results.push(await fullRoom(browser!));
     if (selectedFault === "lost-guest-keys") results.push(await lostGuestKeys(browser!));
+    if (selectedFault === "manual-offer-readiness") results.push(await manualOfferReadiness(browser!));
     if (selectedFault === "terminal-storage") results.push(await retirementStorage(browser!));
     if (selectedFault === "premature-succession") results.push(await prematureSuccession(origin, (host, configure, gateway) =>
       setupRoom(browser!, 3, configure, gateway, 250, undefined, host), closeRoom, deliver));

@@ -414,6 +414,9 @@ When an idle room has connected members, the Worker commits deletion and a retry
 A manual pillow toss uses the existing signed offer, relay-bound authorization,
 target acceptance, and automatic validation by the current host. The previous
 host remains an admitted member unless it subsequently leaves or is removed.
+The target exposes Catch or Duck only after it has applied the signed offer and
+persisted the matching relay authorization. Receiving either in isolation is
+not an actionable choice; acknowledging the authorization does not accept it.
 
 The controller also maintains a signed `host-succession-policy` application
 event. Its device IDs must equal the current admitted member order, excluding

@@ -56,6 +56,9 @@ jobs:
             node verification/app/game-handoff.ts "$scenario" "$RUNNER_TEMP/$scenario.json" "$pkg"
           done
 
+      - name: Verify a manual host choice waits for its matching authorization
+        run: bun scripts/protocol-browser-evidence.ts --mode faults --fault manual-offer-readiness --output "$RUNNER_TEMP/pillowfort-manual-choice"
+
       - name: Verify a throttled participant resumes without duplicating delivery
         run: bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-backpressure --output "$RUNNER_TEMP/guest-backpressure"
 

@@ -2139,7 +2139,7 @@ export class SecureRoomController {
     // Host-transfer authorization is also a durable target backlog item. Its
     // ACK must precede the order request needed to encrypt the acceptance.
     this.ackDurableDelivery(frame.authorizationId);
-    if (frame.policyEventId !== undefined) await this.runAutomations();
+    await this.runAutomations();
   }
 
   private async handleHostTransferExpired(authorizationId: string): Promise<void> {
@@ -3033,33 +3033,24 @@ export class SecureRoomController {
         this.enqueueApplication({ type: "pillow-toss", targetDeviceId }, "host-offer");
         return;
       }
-      case "accept-host": {
-        const control = engine.pendingRelayControls.find((candidate) => candidate.kind === "transfer-host" &&
-          candidate.targetDeviceId === engine.deviceId && candidate.authorizationId !== null &&
-          candidate.acceptMessageId === null);
-        if (!control || control.kind !== "transfer-host" || !control.authorizationId) {
-          this.store.getState().showError("That host offer is no longer valid.");
-          return;
-        }
-        this.enqueueApplication(
-          control.policyEventId !== undefined
-            ? { type: "host-succession", action: "accept", policyEventId: control.policyEventId, authorizationId: control.authorizationId }
-            : { type: "host-transfer", action: "accept", authorizationId: control.authorizationId },
-          control.policyEventId !== undefined ? `host-succession:${control.authorizationId}` : `host-accept:${control.authorizationId}`,
-          true,
-        );
-        return;
-      }
+      case "accept-host":
       case "reject-host": {
         const control = engine.pendingRelayControls.find((candidate) => candidate.kind === "transfer-host" &&
           candidate.targetDeviceId === engine.deviceId && candidate.authorizationId !== null &&
           candidate.acceptMessageId === null);
-        if (control?.kind === "transfer-host" && control.policyEventId !== undefined && control.authorizationId !== null) {
-          this.enqueueApplication({
-            type: "host-succession", action: "reject", policyEventId: control.policyEventId,
-            authorizationId: control.authorizationId,
-          }, `host-succession:${control.authorizationId}`, true);
-        } else this.enqueueApplication({ type: "host-transfer", action: "reject" }, "host-reject", true);
+        if (control?.kind !== "transfer-host" || control.authorizationId === null) {
+          this.store.getState().showError("That host offer is no longer valid.");
+          return;
+        }
+        const action = type === "accept-host" ? "accept" : "reject";
+        this.enqueueApplication(
+          control.policyEventId !== undefined
+            ? { type: "host-succession", action, policyEventId: control.policyEventId, authorizationId: control.authorizationId }
+            : action === "accept" ? { type: "host-transfer", action, authorizationId: control.authorizationId }
+            : { type: "host-transfer", action },
+          control.policyEventId !== undefined ? `host-succession:${control.authorizationId}` : `host-choice:${control.authorizationId}`,
+          true,
+        );
         return;
       }
       case "start-vote": {
@@ -3319,16 +3310,18 @@ export class SecureRoomController {
   private async runAutomations(): Promise<void> {
     const engine = this.engine;
     if (!engine || !this.authenticated || this.replayingBacklog || !engine.isActive()) return;
-    const succession = engine.pendingRelayControls.find((control) => control.kind === "transfer-host" &&
-      control.policyEventId !== undefined && control.targetDeviceId === engine.deviceId &&
-      control.authorizationId !== null && control.acceptMessageId === null);
-    if (succession?.kind === "transfer-host" && succession.policyEventId !== undefined &&
-        succession.authorizationId !== null) {
-      if (!this.intentKeys.has(`host-succession:${succession.authorizationId}`)) {
+    const offer = engine.pendingRelayControls.find((control) => control.kind === "transfer-host" &&
+      control.targetDeviceId === engine.deviceId && control.authorizationId !== null && control.acceptMessageId === null);
+    if (offer?.kind === "transfer-host" && offer.authorizationId !== null) {
+      const succession = offer.policyEventId !== undefined;
+      const key = succession ? `host-succession:${offer.authorizationId}` : `host-choice:${offer.authorizationId}`;
+      // The signed manual offer alone cannot be answered. Its matching relay capability
+      // must be stored before either the browser or an agent sees an actionable choice.
+      if ((succession || !this.hasMembershipBarrier()) && !this.intentKeys.has(key) && !this.store.getState().hostOffer) {
         const oldHost = engine.state.members.find((member) => member.deviceId === engine.state.hostDeviceId);
         this.store.getState().setHostOffer({ oldHost: oldHost?.displayName ?? "The previous host" });
       }
-      return;
+      if (succession) return;
     }
     if (this.hasMembershipBarrier()) {
       this.activateMembershipBarrier();
