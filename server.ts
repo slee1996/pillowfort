@@ -1832,6 +1832,7 @@ async function onLocalSecureDisconnect(ws: any, d: WSData) {
     d.secureAuthenticated = false;
     syncLocalSecureRelayTimer(room);
     dispatchLocalSecureEffects(room, transition.effects);
+    if (room.state.lifecycle === "retired") destroyLocalSecureRoom(room, false);
   });
 }
 

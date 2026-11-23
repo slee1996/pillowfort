@@ -2333,15 +2333,19 @@ async function successionRoom() {
 }
 
 describe("preauthorized automatic host succession", () => {
-  it("preserves the host during grace, then authenticates the earliest joined successor and fences the old host", async () => {
+  it("offers immediately on host socket loss, fences the old host, and transfers only on signed acceptance", async () => {
     const setup = await successionRoom();
-    let lost = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+    const lost = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
     }));
     expect(lost.state.hostDeviceId).toBe(setup.host.deviceId);
-    expect(lost.state.pendingHostTransfer).toBeNull();
-    setup.clock.now = lost.state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-    lost = accepted(advanceSecureRelayV4(lost.state, { now: setup.clock.now, nextGrantTokenId: setup.ids() }));
+    expect(effect(lost.effects, "host-transfer-authorized")).toMatchObject({
+      toDeviceId: setup.first.deviceId, expiresAt: setup.clock.now + 30_000,
+    });
+    rejected(await reduceSecureRelayV4(lost.state, actor(setup.host.deviceId, setup.ids()), {
+      kind: "resume", v: 4, suite: 1, roomInstance: setup.roomInstance,
+      requestId: setup.ids(), deviceId: setup.host.deviceId,
+    }, { now: setup.clock.now, nextGrantTokenId: setup.ids() }), "fresh-admission-required");
     expect(lost.state.lifecycle).toBe("open");
     expect(lost.state.pendingHostTransfer).toMatchObject({
       targetDeviceId: setup.first.deviceId, policyEventId: setup.policy.eventId,
@@ -2397,6 +2401,47 @@ describe("preauthorized automatic host succession", () => {
     });
   });
 
+  it("offers immediately when an eligible guest completes resume while the host is still absent", async () => {
+    const { state: initial, host, first, second, ids, clock, roomInstance } = await successionRoom();
+    const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+    let state = initial;
+    for (const device of [first, second, host]) {
+      state = accepted(disconnectSecureRelayDeviceV4(state, device, options())).state;
+    }
+    expect(state.pendingHostTransfer).toBeNull();
+    expect(state.members.find(m => m.deviceId === host.deviceId)?.disconnectExpiresAt).toBe(clock.now + 120_000);
+    const guest = actor(second.deviceId, ids());
+    const resume = accepted(await reduceSecureRelayV4(state, guest, {
+      kind: "resume", v: 4, suite: 1, roomInstance, requestId: ids(), deviceId: guest.deviceId,
+    }, options()));
+    expect(resume.state.pendingHostTransfer).toBeNull();
+    const active = accepted(await reduceSecureRelayV4(resume.state, guest, {
+      kind: "resume-complete", v: 4, suite: 1, roomInstance, requestId: ids(),
+      lastMessageId: effect(resume.effects, "backlog-end").lastMessageId,
+    }, options()));
+    expect(effect(active.effects, "host-transfer-authorized").toDeviceId).toBe(guest.deviceId);
+    expect(active.state.hostDeviceId).toBe(host.deviceId);
+    expect(importSecureRelayStateV4(exportSecureRelayStateV4(active.state))?.pendingHostTransfer?.authorizedAt).toBe(clock.now);
+  });
+
+  for (const kind of ["application", "commit"] as const) {
+    it(`offers immediately despite an outstanding ${kind} preview and retains its exact rejection`, async () => {
+      const { state, first, second, ids, clock, host } = await successionRoom();
+      const options = () => ({ now: tick(clock), nextGrantTokenId: ids() });
+      const order = await requestGrant(state, second, ids, clock);
+      const frame = { ...applicationFrame(order.state, order.grant, ids), relayKind: kind };
+      const preview = accepted(await reduceSecureRelayV4(order.state, second, frame, options()));
+      const lost = accepted(disconnectSecureRelayDeviceV4(preview.state, host, options()));
+      expect(effect(lost.effects, "host-transfer-authorized").toDeviceId).toBe(first.deviceId);
+      const restored = importSecureRelayStateV4(exportSecureRelayStateV4(lost.state))!;
+      const retry = accepted(await reduceSecureRelayV4(restored, second, frame, options()));
+      expect(effect(retry.effects, kind === "commit" ? "commit-rejected" : "application-rejected")).toMatchObject({
+        deviceId: second.deviceId, messageId: frame.envelope.messageId, reason: "removal-pending",
+      });
+      expect(retry.state.pendingHostTransfer?.targetDeviceId).toBe(first.deviceId);
+    });
+  }
+
   it("skips disconnected members without changing admission order", async () => {
     const setup = await successionRoom();
     let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.first, {
@@ -2405,22 +2450,17 @@ describe("preauthorized automatic host succession", () => {
     state = accepted(disconnectSecureRelayDeviceV4(state, setup.host, {
       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
     })).state;
-    const deadline = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-    setup.clock.now = deadline;
-    const expired = accepted(advanceSecureRelayV4(state, { now: deadline, nextGrantTokenId: setup.ids() }));
-    expect(expired.state.pendingHostTransfer?.targetDeviceId).toBe(setup.second.deviceId);
-    expect(expired.state.members.find((member) => member.deviceId === setup.first.deviceId)!.joinedOrder)
-      .toBeLessThan(expired.state.members.find((member) => member.deviceId === setup.second.deviceId)!.joinedOrder);
-    expect(importSecureRelayStateV4(exportSecureRelayStateV4(expired.state))).not.toBeNull();
+    expect(state.pendingHostTransfer?.targetDeviceId).toBe(setup.second.deviceId);
+    expect(state.members.find((member) => member.deviceId === setup.first.deviceId)!.joinedOrder)
+      .toBeLessThan(state.members.find((member) => member.deviceId === setup.second.deviceId)!.joinedOrder);
+    expect(importSecureRelayStateV4(exportSecureRelayStateV4(state))).not.toBeNull();
   });
 
   it("persists the offered candidate and tries the next joined member after an unresponsive offer expires", async () => {
     const setup = await successionRoom();
-    let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
+    const state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
     })).state;
-    setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-    state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
     const firstOffer = state.pendingHostTransfer!;
     expect(firstOffer.targetDeviceId).toBe(setup.first.deviceId);
     const restored = importSecureRelayStateV4(exportSecureRelayStateV4(state));
@@ -2443,8 +2483,6 @@ it("does not revoke an accepted automatic succession when another recipient over
   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
   })).state;
-  setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-  state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
   state = await ackAll(state, setup.ids, setup.clock);
   const ordered = await requestGrant(state, setup.first, setup.ids, setup.clock);
   const authorizationId = ordered.state.pendingHostTransfer!.authorizationId;
@@ -2471,8 +2509,6 @@ for (const finalChoice of ["accept", "reject"] as const) {
     let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
       now: tick(setup.clock), nextGrantTokenId: setup.ids(),
     })).state;
-    setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-    state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
     expect(state.hostDeviceId).toBe(setup.host.deviceId);
     expect(state.pendingHostTransfer?.targetDeviceId).toBe(setup.first.deviceId);
     for (const [candidate, secret, action] of [
@@ -2520,8 +2556,6 @@ async function prepareSuccessionForRecovery() {
   let state = accepted(disconnectSecureRelayDeviceV4(setup.state, setup.host, {
     now: tick(setup.clock), nextGrantTokenId: setup.ids(),
   })).state;
-  setup.clock.now = state.members.find((member) => member.deviceId === setup.host.deviceId)!.disconnectExpiresAt!;
-  state = accepted(advanceSecureRelayV4(state, { now: setup.clock.now, nextGrantTokenId: setup.ids() })).state;
   state = await ackAll(state, setup.ids, setup.clock);
   const ordered = await requestGrant(state, setup.first, setup.ids, setup.clock);
   const authorizationId = ordered.state.pendingHostTransfer!.authorizationId;

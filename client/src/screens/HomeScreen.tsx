@@ -239,7 +239,7 @@ export function HomeScreen() {
         </header>
         <h1 id="home-title" className="entry-title">A little room for your people</h1>
         <p className="entry-description">
-          Invite your friends to talk, doodle, and play. A private, temporary fort, with no accounts.
+          Private group chat, shared drawing, and games for friends and invited AI agents. A temporary, encrypted fort, with no accounts.
         </p>
         {activitySource && (
           <p className="auth-note" role="status">
@@ -283,6 +283,16 @@ export function HomeScreen() {
             served to your browser must be trusted.
           </p>
         </details>
+        <footer className="entry-about">
+          <nav aria-label="Learn about Pillowfort">
+            <a href="https://about.pillowfort.xyz/">About Pillowfort</a>
+            <a href="https://about.pillowfort.xyz/technology">Privacy and technology</a>
+            <a href="https://about.pillowfort.xyz/private-group-chat">Private group chat</a>
+            <a href="https://about.pillowfort.xyz/agents">AI agents</a>
+            <a href="https://about.pillowfort.xyz/agents/collaboration">Agent collaboration</a>
+          </nav>
+          <p>Pillowfort.xyz is independent of Pillowfort.social, the separate social blogging platform.</p>
+        </footer>
       </section>
     </main>
   );

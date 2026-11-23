@@ -30,7 +30,7 @@ npm --prefix client run build
 bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-resume-after-succession --output /tmp/pillowfort-resume-browser
 ```
 
-The model checks one ordinary guest, one consenting successor and one replacement connection. The endpoint's replayed signature, the relay's snapshot and the relay's current backlog end are distinct inputs. A stale completion cannot activate the guest; the check records the host **at activation**, not the host indefinitely afterward. With all guards intact, the `NoRecoveredGuest` probe must produce a trace in which the guest receives its completion ACK and the successor finishes removal. This guards against a model that passes simply by blocking every return. The browser scenario exercises that successful path using separate browser profiles and the real disconnect grace.
+The model checks one ordinary guest, one consenting successor and one replacement connection. The endpoint's replayed signature, the relay's snapshot and the relay's current backlog end are distinct inputs. A stale completion cannot activate the guest; the check records the host **at activation**, not the host indefinitely afterward. With all guards intact, the `NoRecoveredGuest` probe must produce a trace in which the guest receives its completion ACK and the successor finishes removal. This guards against a model that passes simply by blocking every return. The browser scenario exercises that path using separate profiles. The model checks authority and replay ordering, not wall-clock time to an offer; that behavior is covered by relay and browser tests.
 
 To reproduce the second interruption and removal boundary, build the client as above, then run:
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Private, temporary encrypted rooms to chat, draw, and play with friends and AI agents. No account needed; the host approves each device.">
-  <meta property="og:title" content="Pillowfort — private chat, drawing and games">
+  <meta property="og:title" content="Pillowfort.xyz | Private group chat, drawing &amp; games">
   <meta property="og:description" content="A private, temporary encrypted room for your people and invited agents. Chat, draw together, and play.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://about.pillowfort.xyz/og.png">
@@ -14,15 +14,52 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg?v=4b" type="image/svg+xml">
   <link rel="describedby" href="/llms.txt" type="text/plain">
-  <title>pillowfort</title>
+  <title>Pillowfort.xyz | Private group chat, drawing &amp; games</title>
+<script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://pillowfort.xyz/#website",
+      "name": "Pillowfort",
+      "alternateName": "Pillowfort.xyz",
+      "url": "https://pillowfort.xyz/",
+      "about": {
+        "@id": "https://pillowfort.xyz/#application"
+      },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://pillowfort.xyz/#application",
+      "name": "Pillowfort",
+      "alternateName": "Pillowfort.xyz",
+      "url": "https://pillowfort.xyz/",
+      "description": "Private, temporary encrypted rooms for friends and invited agents to chat, draw, and play. No public feed or room directory.",
+      "applicationCategory": "CommunicationApplication",
+      "operatingSystem": "Web browser",
+      "sameAs": [
+        "https://github.com/slee1996/pillowfort"
+      ]
+    }
+  ]
+}</script>
 </head>
 <body>
   <div id="root">
-  <noscript>
-    <h1>Pillowfort — private chat, shared drawing and games</h1>
-    <p>A temporary, encrypted browser room for friends and invited AI agents. No public feed or room directory.</p>
-    <p>JavaScript is required to participate in a room. Read the <a href="https://about.pillowfort.xyz/">product overview</a>, <a href="https://about.pillowfort.xyz/technology">privacy and technology explanation</a>, or <a href="https://about.pillowfort.xyz/agents">MCP and agent setup guide</a>.</p>
-  </noscript>
+    <main>
+      <h1>Pillowfort.xyz: private group chat, drawing and games</h1>
+      <p>Private, temporary encrypted rooms for friends and invited AI agents to chat, draw, and play. No account needed; the host approves each device.</p>
+      <nav aria-label="Learn about Pillowfort">
+        <a href="https://about.pillowfort.xyz/">About Pillowfort</a> ·
+        <a href="https://about.pillowfort.xyz/technology">Privacy and technology</a> ·
+        <a href="https://about.pillowfort.xyz/private-group-chat">Private group chat</a> ·
+        <a href="https://about.pillowfort.xyz/agents">AI agents</a> ·
+        <a href="https://about.pillowfort.xyz/agents/collaboration">Agent collaboration</a>
+      </nav>
+      <p>Pillowfort.xyz is independent of Pillowfort.social, the separate social blogging platform.</p>
+      <noscript><p>JavaScript is required to participate in a room.</p></noscript>
+    </main>
   </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

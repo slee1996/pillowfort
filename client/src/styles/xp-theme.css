@@ -3292,3 +3292,16 @@ html[data-compact-room] .typing-indicator {
 html[data-compact-room] .message-list {
   padding-block: 4px;
 }
+
+/* Product context remains visible without competing with room entry. */
+.entry-about {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.entry-about nav { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.entry-about a { color: var(--ink); padding: 5px 0; text-underline-offset: 3px; }
+.entry-about p { margin-top: 8px; }

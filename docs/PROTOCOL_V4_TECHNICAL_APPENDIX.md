@@ -9,7 +9,7 @@ This appendix specifies the consent-based succession profile of protocol v4. It 
 | Contract | Earlier host-available design | v4-CS1 |
 |---|---|---|
 | Planned transfer | Signed offer and target acceptance; outgoing host validates | Unchanged |
-| Host disappears | No disconnected-host delegation in that design | Signed join-order policy permits offers after disconnect grace |
+| Host disappears | No disconnected-host delegation in that design | Offer the role immediately on observed host loss if a signed-policy candidate is available |
 | Recipient consent | Explicit acceptance | Explicit acceptance or refusal, including after host loss |
 | Public application metadata | Ordinary application content remains inside MLS | Only signed succession policy/response metadata may appear in `authorityEvent` |
 | Strict-schema compatibility | Does not recognize the added event variants and sidecar fields | Requires matching endpoints and relay; no legacy fallback |
@@ -167,8 +167,9 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | State / input | Guard | Persisted outcome / next step |
 |---|---|---|
 | Host connected; policy update | Host signature, exact current admission order, valid ordered application | Retain signed policy and outer frame message ID |
-| Host disconnects | Owning socket closes | Preserve authority during 120-second reconnect grace |
-| Grace expires | Current host still absent | Fence old identity; stop its resume; cancel conflicting pending work |
+| Host disconnects | Owning socket closes; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
+| No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
+| Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
 | Authorization delivered | Exact policy/capability/offer binding | Candidate stores before delivery ACK; show catch-or-duck choice, not promotion |
 | Candidate explicitly accepts | Valid signed response, target/socket/grant/order, current policy, unexpired capability | Commit new authority and consume capability **before** delivery; invalidate old policy; retire old host; retain exact removal marker |
@@ -194,7 +195,7 @@ The candidate has no authority merely because its position was selected. Host so
 | Relay switch committed; result not received/ACKed | New relay host; exact accepted result; candidate outbox; former-host removal marker; old policy invalid | Device resume reconciles exact result and retained cleanup, then publishes own policy | No new policy exists: room retires rather than reuse predecessor delegation |
 | Acceptance reconciled; removal unstarted | New host and exact historical removal obligation | Resume, process marker, complete exact Remove and lifecycle notification | Same safe termination; uninterrupted availability is not promised |
 | Removal accepted/completed; new policy not relayed | New host, removal outcome/control; possibly durable unsent policy ciphertext | Resume reconciles old socket-bound grant and retries/recreates the policy under a fresh valid grant | Room retires if no new policy was accepted |
-| New policy accepted | New host's signed policy | Resume normally | A new consent-based offer may proceed under that policy |
+| New policy accepted | New host's signed policy | Can resume only if no eligible recipient has triggered fencing | If a candidate is eligible, make the offer immediately; otherwise retire at expiry |
 
 **A dishonest relay can induce an authorized but unnecessary succession by falsely representing that a connected host is unavailable.** It cannot forge candidate acceptance, but acceptance is not cryptographic evidence that replacement was necessary. This consequence follows directly from making the relay the connectivity/deadline oracle.
 
@@ -233,7 +234,7 @@ bun scripts/protocol-browser-evidence.ts --mode benchmark --output /tmp/pillowfo
 bun scripts/protocol-browser-evidence.ts --mode faults --output /tmp/pillowfort-browser-faults
 ```
 
-Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it neither disables production rate limits nor shortens the 120-second grace.
+Use Node/Bun versions required by the checked lockfiles, Java 21 or compatible, the pinned TLC JAR hash enforced by the runner, and the Chromium installed for pinned Playwright 1.65.0. Models, raw logs, exact generated configurations, sample arrays and platform data are included in the public evidence artifact. The browser script uses temporary local rooms, actual host approval and explicit candidate acceptance; it uses the relay’s real deadlines. The historical runs at `1ba68f23` used a 120-second pre-offer delay; that delay no longer applies when a recipient is eligible.
 
 Latency is measured from UI submission to observed application in a recipient DOM. It includes grant exchange, persistence, MLS, host preview, queueing and rendering. The slow-host profile adds 100 ms before delivering each host preview without changing cryptography. Each run sends one message at a time, then waits 500 ms after completion; there is no catch-up burst after a scheduler stall. Reported throughput is the **achieved closed-loop paced rate**, not a maximum-capacity or stable open-loop two-messages/second claim. Measurements use one local machine and shared Chromium/hardware; they are not WAN, Cloudflare or mobile results.
 

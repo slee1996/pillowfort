@@ -2319,13 +2319,11 @@ function emitZombieRemovalBarrier(
   }
 }
 
-function activateZombieRemovalBarrier(
+function cancelWorkForRemoval(
   state: SecureRelayStateV4,
   now: number,
   effects: SecureRelayEffectV4[],
 ): void {
-  if (state.pendingZombieRemovals.length === 0) return;
-
   // Grants do not encode their intended operation. Cancel every grant/queue
   // that predates the barrier so no application intent can race the removal;
   // the host must request a fresh grant after seeing removal-required.
@@ -2440,7 +2438,7 @@ function persistZombieRemoval(
       removalCommitMessageId: null,
     });
     if (wasEmpty) {
-      activateZombieRemovalBarrier(state, requestedAt, effects);
+      cancelWorkForRemoval(state, requestedAt, effects);
       emitZombieRemovalBarrier(state, effects);
     }
   }
@@ -3019,6 +3017,17 @@ function retireRoomAfterHostLoss(
   effects.push({ type: "room-retired" });
 }
 
+function nextSuccessionCandidate(state: SecureRelayStateV4): SecureRelayMemberStateV4 | null {
+  const policy = state.hostSuccession;
+  if (!policy || policy.event.deviceId !== state.hostDeviceId || policy.event.content.type !== "host-succession-policy") return null;
+  for (const id of policy.event.content.deviceIds) {
+    const member = memberById(state, id);
+    if (member?.status === "active" && member.connectionId !== null && !member.requiresFreshAdmission &&
+        !policy.attemptedDeviceIds.includes(id) && !state.pendingZombieRemovals.some(marker => marker.deviceId === id)) return member;
+  }
+  return null;
+}
+
 function continueHostSuccession(
   state: SecureRelayStateV4,
   now: number,
@@ -3027,16 +3036,12 @@ function continueHostSuccession(
   const host = state.hostDeviceId === null ? null : memberById(state, state.hostDeviceId);
   const policy = state.hostSuccession;
   if (!host?.requiresFreshAdmission || !policy || state.pendingHostTransfer) return;
-  if (policy.event.deviceId !== host.deviceId || policy.event.content.type !== "host-succession-policy" ||
-      now > Number.MAX_SAFE_INTEGER - SECURE_HOST_TRANSFER_TTL_MS_V4) {
+  if (now > Number.MAX_SAFE_INTEGER - SECURE_HOST_TRANSFER_TTL_MS_V4) {
     retireRoomAfterHostLoss(state, effects);
     return;
   }
-  for (const deviceId of policy.event.content.deviceIds) {
-    const target = memberById(state, deviceId);
-    if (!target || target.status !== "active" || target.connectionId === null ||
-        target.requiresFreshAdmission || policy.attemptedDeviceIds.includes(deviceId) ||
-        state.pendingZombieRemovals.some((marker) => marker.deviceId === deviceId)) continue;
+  for (let target = nextSuccessionCandidate(state); target; target = nextSuccessionCandidate(state)) {
+    const deviceId = target.deviceId;
     const authorizationDigest = sha256(new TextEncoder().encode(
       `Pillowfort host succession v4\0${state.roomInstance}\0${policy.event.eventId}\0${deviceId}`,
     ));
@@ -3078,21 +3083,17 @@ function expireActiveDisconnects(
 ): boolean {
   const expired = state.members.filter((member) => member.status === "disconnected"
     && member.resumeStatus === "active" && !member.requiresFreshAdmission
-    && member.disconnectExpiresAt !== null && now >= member.disconnectExpiresAt);
+    && member.disconnectExpiresAt !== null && (now >= member.disconnectExpiresAt
+      || (member.deviceId === state.hostDeviceId && nextSuccessionCandidate(state) !== null)));
   if (expired.length === 0) return false;
   if (expired.some((member) => member.deviceId === state.hostDeviceId)) {
     if (!state.hostSuccession) {
       retireRoomAfterHostLoss(state, effects);
       return true;
     }
-    expireCurrentGrant(state, now, effects);
-    expirePendingApplication(state, now, effects);
-    expirePendingCommit(state, now, effects);
-    expirePendingHostTransfer(state, now, effects);
-    for (const pending of state.members) {
-      if (pending.admissionId !== null) retirePendingAdmission(state, pending, now, effects);
-    }
-    for (const entry of [...state.orderQueue]) removeDeviceFromOrdering(state, entry.deviceId, "removal-pending");
+    // A prompt offer can preempt an unexpired preview or manual transfer. Retain
+    // exact cancellations before exposing the new authorization to its recipient.
+    cancelWorkForRemoval(state, now, effects);
   }
   for (const member of expired) {
     if (state.pendingApplication?.fromDeviceId === member.deviceId) {
@@ -3959,6 +3960,8 @@ export async function reduceSecureRelayV4(
     });
     effects.push({ type: "member-lifecycle", deviceId: actor.deviceId, status: "active" });
     effects.push({ type: "frame-accepted", deviceId: actor.deviceId, messageId: frame.requestId });
+    // A returning candidate is eligible only after its exact replay ACK.
+    if (state.hostDeviceId !== member.deviceId) expireActiveDisconnects(state, now, effects);
     emitHostPendingWork(state, member, effects);
     const grantError = issueNextGrant(state, now, options.nextGrantTokenId, effects);
     if (grantError) return reject(grantError);
@@ -4363,9 +4366,11 @@ export function disconnectSecureRelayDeviceV4(
   member.resumeRequestId = null;
   member.disconnectExpiresAt = options.now + SECURE_ACTIVE_DISCONNECT_GRACE_MS_V4;
   removeDeviceFromOrdering(state, member.deviceId, "connection-lost");
-  const effects: SecureRelayEffectV4[] = [
-    { type: "member-lifecycle", deviceId: member.deviceId, status: "disconnected" },
-  ];
+  const effects: SecureRelayEffectV4[] = [];
+  expireActiveDisconnects(state, options.now, effects);
+  if (!member.requiresFreshAdmission && state.lifecycle === "open") {
+    effects.push({ type: "member-lifecycle", deviceId: member.deviceId, status: "disconnected" });
+  }
   const grantError = issueNextGrant(state, options.now, options.nextGrantTokenId, effects);
   if (grantError) return reject(grantError);
   return { ok: true, state, effects };
@@ -4414,6 +4419,9 @@ export function advanceSecureRelayV4(
 export function nextSecureRelayDeadlineV4(stateValue: SecureRelayStateV4): number | null {
   const state = parseSecureRelayStateV4(stateValue);
   if (!state || state.lifecycle !== "open") return null;
+  // Snapshots written before prompt succession can still carry a future host deadline.
+  const host = state.hostDeviceId && memberById(state, state.hostDeviceId);
+  if (host && host.disconnectExpiresAt !== null && nextSuccessionCandidate(state)) return state.clockHighWater;
   const deadlines = [
     state.currentGrant?.expiresAt,
     state.pendingApplication?.decisionExpiresAt,
