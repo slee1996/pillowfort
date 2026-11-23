@@ -42,7 +42,7 @@ export interface SecureAuthChallengeFrameV4 {
   roomInstance: string | null;
 }
 
-export type SecureAuthenticateFrameV4 =
+export type SecureAuthenticateFrameV4 = { hostProbe?: true } & (
   | {
       kind: "secure-authenticate";
       v: 4;
@@ -68,7 +68,13 @@ export type SecureAuthenticateFrameV4 =
       mode: "resume";
       frame: SecureResumeFrameV4;
       resumeProof: string;
-    };
+    });
+
+export type HostPathReply = { kind: "host-path-reply"; nonce: string };
+
+export function isHostPathReply(value: unknown): value is HostPathReply {
+  return isPlainRecord(value) && exactKeys(value, ["kind", "nonce"]) && value.kind === "host-path-reply" && fixedId(value.nonce);
+}
 
 export type SecureServerErrorCodeV4 = SecureRelayErrorCodeV4
   | "authentication-expired"
@@ -81,6 +87,7 @@ export type SecureServerErrorCodeV4 = SecureRelayErrorCodeV4
   | "internal-error";
 
 export type SecureServerFrameV4 =
+  | { kind: "secure-server"; v: 4; suite: 1; type: "host-path-probe"; nonce: string }
   | {
       kind: "secure-server";
       v: 4;
@@ -346,10 +353,12 @@ export function parseSecureAuthChallengeFrameV4(value: unknown): SecureAuthChall
 export function parseSecureAuthenticateFrameV4(value: unknown): SecureAuthenticateFrameV4 | null {
   if (!isPlainRecord(value) || value.kind !== "secure-authenticate" || value.v !== 4 || value.suite !== 1 ||
       (value.mode !== "setup" && value.mode !== "join" && value.mode !== "resume")) return null;
+  if ("hostProbe" in value && value.hostProbe !== true) return null;
+  const feature = value.hostProbe === true ? { hostProbe: true as const } : {};
   const frame = parseSecureClientFrameV4(value.frame);
   if (value.mode === "setup") {
     if (!exactKeys(value, ["kind", "v", "suite", "mode", "frame", "auth"], [
-      "fortPassSessionId", "fortPassClaimSecret",
+      "fortPassSessionId", "fortPassClaimSecret", "hostProbe",
     ]) ||
         frame?.kind !== "setup") return null;
     const auth = parseRoomInvitationAuthPayloadV4(value.auth, "setup");
@@ -361,7 +370,7 @@ export function parseSecureAuthenticateFrameV4(value: unknown): SecureAuthentica
           typeof value.fortPassClaimSecret !== "string" ||
           !/^[a-f0-9]{64}$/u.test(value.fortPassClaimSecret)))) return null;
     return {
-      kind: "secure-authenticate", v: 4, suite: 1, mode: "setup", frame, auth,
+      kind: "secure-authenticate", v: 4, suite: 1, mode: "setup", frame, auth, ...feature,
       ...(hasFortPassSession && {
         fortPassSessionId: value.fortPassSessionId as string,
         fortPassClaimSecret: value.fortPassClaimSecret as string,
@@ -369,15 +378,15 @@ export function parseSecureAuthenticateFrameV4(value: unknown): SecureAuthentica
     };
   }
   if (value.mode === "join") {
-    if (!exactKeys(value, ["kind", "v", "suite", "mode", "frame", "auth"]) || frame?.kind !== "join") return null;
+    if (!exactKeys(value, ["kind", "v", "suite", "mode", "frame", "auth"], ["hostProbe"]) || frame?.kind !== "join") return null;
     const auth = parseRoomInvitationAuthPayloadV4(value.auth, "join");
-    return auth ? { kind: "secure-authenticate", v: 4, suite: 1, mode: "join", frame, auth } : null;
+    return auth ? { kind: "secure-authenticate", v: 4, suite: 1, mode: "join", frame, auth, ...feature } : null;
   }
-  if (!exactKeys(value, ["kind", "v", "suite", "mode", "frame", "resumeProof"]) ||
+  if (!exactKeys(value, ["kind", "v", "suite", "mode", "frame", "resumeProof"], ["hostProbe"]) ||
       frame?.kind !== "resume" || !fixedId(value.resumeProof, 64)) return null;
   return {
     kind: "secure-authenticate", v: 4, suite: 1, mode: "resume", frame,
-    resumeProof: value.resumeProof as string,
+    resumeProof: value.resumeProof as string, ...feature,
   };
 }
 
@@ -385,6 +394,9 @@ export function parseSecureServerFrameV4(value: unknown): SecureServerFrameV4 | 
   if (!isPlainRecord(value) || !commonServerFrame(value)) return null;
   const base = ["kind", "v", "suite", "type"];
   switch (value.type) {
+    case "host-path-probe":
+      return exactKeys(value, [...base, "nonce"]) && fixedId(value.nonce)
+        ? { kind: "secure-server", v: 4, suite: 1, type: "host-path-probe", nonce: value.nonce } : null;
     case "authenticated":
       if (!exactKeys(
         value,

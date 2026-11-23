@@ -131,7 +131,7 @@ Roster absence is not a receipt. A successor can see the former host absent from
 
 If one endpoint rejects an incoming commit, its engine restores its last valid committed snapshot and the controller fails that connection closed. It does not acknowledge the rejected delivery or continue ordinary sending. Other members may already have advanced. There is no automatic epoch merge, rollback of those peers, or quorum agreement protocol. Replaying a consistently invalid commit is not a repair mechanism. An irrecoverably divergent member needs fresh admission after retirement; loss of the necessary coordinator/state can require room termination. Outbound commit rejection and inbound validation failure are different cases and must not be conflated.
 
-Storage failure during incoming commit processing likewise withholds acknowledgment and stops that receiver. A storage-failure experiment can establish isolation of that failed path, not agreement among arbitrary MLS forks. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
+Storage failure during incoming commit processing withholds acknowledgment and stops that receiver. The relay routes a group join proof only after the host’s exact activation has committed. On replay the receiver authenticates the Add and signed proof, releases their matching admission barrier before acknowledging the proof, and can process following traffic without the live activation notice. Verification exercised one failed write with the original durable state intact; it does not establish agreement among arbitrary MLS forks. An unrelated active-lifecycle signal must not attempt an admission mutation: doing so would reject a returning device's durable application before its retry/result reconciliation.
 
 ## F. M4 host transfer and public sidecars
 
@@ -171,7 +171,7 @@ The relay cannot decrypt MLS to establish equality between public sidecar and en
 | State / input | Guard | Persisted outcome / next step |
 |---|---|---|
 | Host connected; policy update | Host signature, exact current admission order, valid ordered application | Retain signed policy and outer frame message ID |
-| Host disconnects | Owning socket closes; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
+| Host disconnects | Owning socket closes or its negotiated path check expires; a signed-policy candidate is active and eligible | Fence old identity, cancel conflicting work, and persist the first offer in this transition; no pre-offer timer |
 | No eligible recipient at disconnect | No signed policy or no active eligible member | Keep the host recoverable for at most 120 seconds. A returning eligible member starts the offer on exact resume completion; a host that resumes first keeps the role |
 | Recovery expires | Host still absent; no eligible candidate | Retire the room; no role is assigned |
 | Offer candidate | Current policy; first connected active eligible unattempted device | Persist attempted candidate and 30-second authorization; backlog delivery |
@@ -203,6 +203,19 @@ The candidate has no authority merely because its position was selected. Host so
 | New policy accepted | New host's signed policy | Can resume only if no eligible recipient has triggered fencing | If a candidate is eligible, make the offer immediately; otherwise retire at expiry |
 
 **A dishonest relay can induce an authorized but unnecessary succession by falsely representing that a connected host is unavailable.** It cannot forge candidate acceptance, but acceptance is not cryptographic evidence that replacement was necessary. This consequence follows directly from making the relay the connectivity/deadline oracle.
+
+### F.3 Detecting an unresponsive host
+
+| State / input | Guard | Action |
+|---|---|---|
+| Unwatched → quiet | Open room, another connected participant, current host advertised `hostProbe:true` at authentication | Bind watch to this host and socket; schedule ten seconds |
+| Quiet deadline | Same owner | Store a fresh canonical 16-byte nonce and a five-second deadline, then send `host-path-probe` |
+| Retry deadline | Same owner, same outstanding challenge | Store a ten-second final deadline and retransmit the identical nonce |
+| `host-path-reply` | Exact current authenticated host device/socket and nonce; before final expiry | Clear challenge and schedule the next ten-second check; do not touch the room idle deadline |
+| Final deadline | Same owner, no valid reply | Commit the existing disconnect transition before closing the socket or emitting an offer; continue under F.2 |
+| Owner replaced, another participant no longer connected, or room retired | Watch no longer applies | Replace or cancel the watch; an old nonce cannot establish reachability of a new socket |
+
+The Worker writes this small record and its alarm in one transaction. Probes do not change MLS or ordering state. A healthy watched room incurs roughly one round trip and two small storage transactions per ten seconds; solo rooms incur none. A late alarm, storage outage, or throttled client prevents a wall-clock bound. An old client without the capability still relies on a transport close. Neither a timeout nor an acknowledgment transfers authority. Idle eviction is separate: storage deletion must commit before terminal notices or socket closure; an aborted transaction leaves the room intact.
 
 ## G. Executed model scope and implementation mapping
 

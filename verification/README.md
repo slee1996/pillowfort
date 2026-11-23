@@ -52,10 +52,15 @@ To exercise the production Worker locally (ephemeral storage, no live credential
 ```sh
 npm run build
 node scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pillowfort-worker-restart
-node scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pillowfort-worker-loss
+for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
+  node scripts/protocol-workerd-evidence.mjs "$cut" "/tmp/pillowfort-$cut"
+done
+bun scripts/protocol-browser-evidence.ts --mode faults --fault peer-storage --output /tmp/pillowfort-peer
+bun scripts/protocol-browser-evidence.ts --mode faults --fault full-room --output /tmp/pillowfort-full
+python3 scripts/check-protocol-models.py --model HostPath --jar /tmp/tla2tools-1.7.4.jar --output /tmp/pillowfort-hostpath
 ```
 
-The first cut discards the initial post-commit dispatch and evicts the real Durable Object with the guest sockets hibernated. The second discards bytes on the host path without sending a WebSocket close and records the relay close callback separately from the visible offer. If no callback arrives within 150 seconds, the measurement is censored and a separately labeled forced-close control checks the remaining path. Neither experiment injects a fault in production.
+The offer test evicts the production Durable Object between commit and dispatch with its sockets hibernated. The three silent cuts discard bytes on both legs, on the uplink, or on the downlink of an open TCP path; none forces a transport close. Each must see an offer within the local scenario budget, a signed refusal then acceptance, and two-way encrypted chat. `probe-restart` loses the original challenge after commit, evicts the object, and requires the original nonce on retry and healthy chat without succession. `HostPath` checks eventual suspicion for a permanently silent watched host under weakly fair alarm dispatch; it cannot bound wall-clock delay. Its three reply-binding mutations violate safety; suppressing detection violates the temporal property. The room-limit exercise uses only local browser contexts. No public fault injection or load test.
 
 ## Bounds and exclusions
 

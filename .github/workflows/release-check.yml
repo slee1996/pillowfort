@@ -62,6 +62,14 @@ jobs:
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"
 
+      - name: Verify silent and one-way host loss without a transport close; tolerate a lost probe across hibernation
+        run: |
+          for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart; do
+            node scripts/protocol-workerd-evidence.mjs "$cut" "$RUNNER_TEMP/pillowfort-$cut"
+          done
+      - name: Verify recovery after a peer cannot store a committed membership change
+        run: bun scripts/protocol-browser-evidence.ts --mode faults --fault peer-storage --output "$RUNNER_TEMP/peer-storage"
+
   protocol-models:
     runs-on: ubuntu-latest
     steps:

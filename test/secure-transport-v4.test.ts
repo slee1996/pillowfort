@@ -3,10 +3,14 @@ import { toBase64Url } from "../src/roomAuth";
 import { ROOM_INVITATION_AUTH_KDF_V4 } from "../src/roomInvitationAuthV4";
 import { roomInvitationKeyPackageDigestV4 } from "../src/roomInvitationMemberBindingV4";
 import {
+  isHostPathReply,
   parseSecureAuthChallengeFrameV4,
   parseSecureAuthenticateFrameV4,
   parseSecureServerFrameV4,
 } from "../src/secureTransportV4";
+
+import { acknowledgeHostPath, advanceHostPath, reconcileHostPath, validHostPathWatch } from "../src/hostPathWatch";
+import type { SecureRelayStateV4 } from "../src/secureRelayV4";
 
 const id = (byte: number) => toBase64Url(new Uint8Array(16).fill(byte));
 const challenge = toBase64Url(new Uint8Array(32).fill(9));
@@ -59,6 +63,41 @@ async function binding(mode: "founder" | "admission") {
   };
 }
 
+describe("authenticated host path", () => {
+  const old = { deviceId, connectionId }, peer = { deviceId: id(7), connectionId: id(8) };
+  const room = (members: typeof old[]) => ({ lifecycle: "open", hostDeviceId: deviceId, members }) as SecureRelayStateV4;
+  test("solo and legacy hosts incur no watch; room traffic cannot refresh a negotiated watch", () => {
+    expect(reconcileHostPath(null, room([old]), 0, () => true)).toBeNull();
+    expect(reconcileHostPath(null, room([old, peer]), 0, () => false)).toBeNull();
+    const w = reconcileHostPath(null, room([old, peer]), 0, () => true)!;
+    expect(reconcileHostPath(w, room([old, peer]), 9999, () => false)).toBe(w);
+    expect(reconcileHostPath(w, room([old]), 9999, () => true)).toBeNull();
+    const changed = reconcileHostPath(w, room([{ ...old, connectionId: id(12) }, peer]), 1000, () => true)!;
+    expect([changed.connectionId, changed.dueAt]).toEqual([id(12), 11000]);
+  });
+  test("only the exact authenticated host can renew the outstanding nonce, strictly before final expiry", () => {
+    const w = reconcileHostPath(null, room([old, peer]), 0, () => true)!;
+    const nonce = id(9), another = id(10);
+    const probed = advanceHostPath(w, w.dueAt + 3000, () => nonce)!; // alarm arrived late
+    const retry = advanceHostPath(probed, probed.dueAt, () => another)!;
+    expect([probed.dueAt, retry.nonce, retry.dueAt]).toEqual([18000, nonce, 28000]);
+    expect(validHostPathWatch(retry)).toBe(true);
+    for (const [d, c, n] of [[deviceId, peer.connectionId, nonce], [peer.deviceId, connectionId, nonce], [deviceId, connectionId, another]]) {
+      expect(acknowledgeHostPath(retry, d, c, n, 27999)).toBe(retry);
+    }
+    const fresh = acknowledgeHostPath(retry, deviceId, connectionId, nonce, 27999)!;
+    expect([fresh.phase, fresh.dueAt, fresh.nonce]).toEqual(["quiet", 37999, null]);
+    expect(acknowledgeHostPath(fresh, deviceId, connectionId, nonce, 28001)).toBe(fresh);
+    expect(acknowledgeHostPath(retry, deviceId, connectionId, nonce, 28000)).toBe(retry);
+    expect(advanceHostPath(retry, 28000, () => another)).toBeNull();
+    const frame = { kind: "secure-server", type: "host-path-probe", v: 4, suite: 1, nonce };
+    expect(parseSecureServerFrameV4(frame)).toEqual(frame);
+    expect(parseSecureServerFrameV4({ ...frame, nonce: nonce + "=" })).toBeNull();
+    expect(isHostPathReply({ kind: "host-path-reply", nonce })).toBe(true);
+    expect(isHostPathReply({ kind: "host-path-reply", nonce, connectionId })).toBe(false);
+  });
+});
+
 describe("protocol-v4 transport frames", () => {
   test("strictly parses setup authentication and challenge frames", async () => {
     const challengeFrame = { kind: "secure-auth-challenge", v: 4, suite: 1, connectionId, challenge, roomInstance: null };
@@ -76,7 +115,10 @@ describe("protocol-v4 transport frames", () => {
       fortPassSessionId: "cs_test_safe-token:1",
       fortPassClaimSecret: "a".repeat(64),
     };
-    expect(parseSecureAuthenticateFrameV4(setup)).toEqual(setup);
+    expect(parseSecureAuthenticateFrameV4(setup)).toEqual(setup); // A legacy v4 client opts out.
+    const optedIn = { ...setup, hostProbe: true };
+    expect(parseSecureAuthenticateFrameV4(optedIn)).toEqual(optedIn);
+    expect(parseSecureAuthenticateFrameV4({ ...setup, hostProbe: "true" })).toBeNull();
     expect(parseSecureAuthenticateFrameV4({ ...setup, fortPassSessionId: " bad " })).toBeNull();
     const { fortPassClaimSecret: _missingClaim, ...missingClaim } = setup;
     expect(parseSecureAuthenticateFrameV4(missingClaim)).toBeNull();

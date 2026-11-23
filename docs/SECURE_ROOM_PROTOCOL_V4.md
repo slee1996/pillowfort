@@ -374,7 +374,14 @@ advance. While a removal is pending, only the host's exact Remove commit for
 the bound `(deviceId, admissionCommitMessageId)` may advance, except for an
 exact, preauthorized automatic host succession needed to restore that host.
 Normal grants, queued operations, conflicting commits, pending admissions, and
-manual transfers are cancelled or blocked as required by the barrier.
+manual transfers are cancelled or blocked as required by the barrier. The relay
+delivers the signed join proof to other members only after committing the
+host’s exact `activate` operation. A receiver authenticates that group proof
+(or an exact previously stored delivery digest) and clears only its matching
+admission/device barrier **before** acknowledging the proof. A proof preview is
+not group delivery. A returning peer can therefore replay a committed admission
+and following traffic without the ephemeral activation broadcast; a snapshot
+alone cannot substitute for the proof.
 
 If an admitted device disappears before finishing or an expired/disconnected
 member still exists in the MLS roster, the relay persists a FIFO historical
@@ -415,8 +422,28 @@ When the relay observes the owning host socket close, it immediately offers the
 role to the earliest connected, active member eligible under the signed policy.
 The disconnect transition fences the former host from resuming and persists the
 room- and policy-bound 30-second offer before delivery. There is no pre-offer
-timer. Detection of a silent network failure and delivery to the recipient can
-still take time. A close from a replaced socket cannot start succession.
+timer. A close from a replaced socket cannot start succession.
+
+If another device is connected and the host authenticated with the optional
+outer field `hostProbe:true`, the relay also checks the bidirectional application
+path. After ten seconds it persists a fresh 16-byte nonce and sends
+`{kind:"secure-server",v:4,suite:1,type:"host-path-probe",nonce}`. With no
+matching reply after five seconds it resends the same challenge; after ten
+more seconds without a reply it applies the ordinary disconnect transition to
+that exact host connection. A normal socket close takes effect immediately.
+Only `{kind:"host-path-reply",nonce}` on the current authenticated host socket
+before final expiry renews the watch. Ordinary traffic, stale replies, and
+another device cannot renew it. A replacement host starts a fresh watch.
+
+Each interval starts when its alarm runs. Twenty-five seconds is the nominal
+interval from a successful check to suspicion, not a WAN deadline or proof of
+host failure. A suspended but connected host may lose the role. A solitary
+host and a client that omits `hostProbe` get no application probes. The Worker
+stores the watch and next alarm atomically before sending; a restart preserves
+the outstanding nonce. These controls carry no room content, require no MLS
+order or model turn, and do not renew room inactivity or hosted identity.
+Deploy the new relay before clients that send the optional field: older
+strict parsers need not accept it.
 
 Only when there is no eligible recipient does the absent host retain its
 120-second recovery window. If an authorized member finishes authenticated

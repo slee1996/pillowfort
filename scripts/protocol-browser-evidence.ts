@@ -19,16 +19,16 @@ if (selectedProfile !== null && !["2:0", "3:0", "3:100", "6:0"].includes(selecte
 }
 const faultIndex = process.argv.indexOf("--fault");
 const selectedFault = faultIndex < 0 ? null : process.argv[faultIndex + 1];
-if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "guest-backpressure"].includes(selectedFault)) {
+if (selectedFault !== null && !["acceptance-result-unreceived", "removal-before-policy", "permanent-no-policy", "peer-storage", "guest-resume-after-succession", "second-resume", "former-host-removal", "prompt-host-succession", "planned-then-unplanned", "persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart", "guest-backpressure", "full-room", "healthy-host"].includes(selectedFault)) {
   throw new Error("Unknown fault scenario");
 }
 const live = process.argv.includes("--production");
-if (live && (mode !== "faults" || selectedFault !== "prompt-host-succession")) {
-  throw new Error("--production is only for the prompt-host-succession public UI check");
+if (live && (mode !== "faults" || !["prompt-host-succession", "healthy-host"].includes(selectedFault ?? ""))) {
+  throw new Error("Production permits only the normal healthy-host and voluntary succession journeys");
 }
 await mkdir(output, { recursive: true });
 const report: Record<string, unknown> = {
-  scope: live ? "One production room, three browser profiles, public UI. Not a latency distribution or capacity test."
+  scope: live ? "One self-created production room, production browser clients. Not a latency distribution or capacity test."
     : "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
   environment: { os: platform(), release: release(), cpu: cpus()[0]?.model, logicalCpus: cpus().length,
     memoryBytes: totalmem(), bun: Bun.version, playwright: "1.65.0" },
@@ -37,7 +37,10 @@ const report: Record<string, unknown> = {
 const staged = process.env.PILLOWFORT_QUALIFICATION_ORIGIN;
 const cuts = process.env.PILLOWFORT_QUALIFICATION_CUTS;
 if (staged && (live || !cuts || !/^http:\/\/127\.0\.0\.1:\d+$/.test(staged))) throw Error("Qualification requires an isolated loopback Worker");
-if (["persisted-offer", "silent-host-loss"].includes(selectedFault ?? "") && !staged) throw Error("Use protocol-workerd-evidence.mjs");
+const workerCuts = ["persisted-offer", "silent-host-loss", "silent-host-uplink", "silent-host-downlink", "probe-restart"] as const;
+type WorkerCut = typeof workerCuts[number];
+const workerCut = workerCuts.find(cut => cut === selectedFault);
+if (workerCut && !staged) throw Error("Use protocol-workerd-evidence.mjs");
 const server = live || staged ? null : startLocalServer(0);
 const origin = staged ?? (server ? `http://127.0.0.1:${server.port}` : "https://pillowfort.xyz");
 if (staged) report.scope = "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.";
@@ -119,7 +122,7 @@ async function newParticipant(browser: Browser): Promise<Participant> {
   });
   return { context, page };
 }
-async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin): Promise<RoomEvidence> {
+async function setupRoom(browser: Browser, count: number, configure?: (participant: Participant, index: number) => Promise<void>, hostOrigin = origin, interAdmissionMs = 250): Promise<RoomEvidence> {
   const participants: Participant[] = [];
   const names = Array.from({ length: count }, (_, i) => i === 0 ? "Evidence Host" : `Evidence Guest ${i}`);
   const host = await newParticipant(browser);
@@ -151,7 +154,7 @@ async function setupRoom(browser: Browser, count: number, configure?: (participa
       (globalThis as typeof globalThis & { __pillowfortEvidenceActive: boolean }).__pillowfortEvidenceActive,
       undefined, { timeout: 20_000 });
     await host.page.getByText(`Buddies (${i + 1})`, { exact: true }).waitFor();
-    await wait(250);
+    await wait(interAdmissionMs);
   }
   return { participants, invitation, names };
 }
@@ -484,7 +487,7 @@ async function plannedThenUnplanned(browser: Browser) {
 
 // Drop WebSocket bytes in both directions on the host's dedicated loopback TCP
 // path. Keep both TCP legs open; do not forward FIN/RST or answer WebSocket pings.
-async function hostPath(destination: string) {
+async function hostPath(destination: string, direction: "both" | "uplink" | "downlink") {
   let blocked = false;
   const sockets = new Set<Socket>();
   const sink = createServer(client => {
@@ -492,7 +495,7 @@ async function hostPath(destination: string) {
     const upstream = connect(Number(new URL(destination).port), "127.0.0.1");
     for (const [from, to] of [[client, upstream], [upstream, client]]) {
       sockets.add(from);
-      from.on("data", data => { if (!blocked && !to.destroyed && !to.write(data)) from.pause(); });
+      from.on("data", data => { if ((!blocked || direction === "uplink" && from === upstream || direction === "downlink" && from === client) && !to.destroyed && !to.write(data)) from.pause(); });
       to.on("drain", () => from.resume());
       from.on("error", () => {});
       from.on("close", () => { sockets.delete(from); if (!blocked) to.destroy(); });
@@ -506,8 +509,11 @@ async function hostPath(destination: string) {
     stop() { this.closePaths(); sink.close(); } };
 }
 
-async function workerdHandoff(browser: Browser, fault: "persisted-offer" | "silent-host-loss") {
-  const path = fault === "silent-host-loss" ? await hostPath(origin) : null;
+async function workerdHandoff(browser: Browser, fault: WorkerCut) {
+  const direction = fault === "silent-host-uplink" ? "uplink" : fault === "silent-host-downlink" ? "downlink" : "both";
+  const path = fault.startsWith("silent-host-") ? await hostPath(origin, direction) : null;
+  const hostProbes = new Set<string>(), hostReplies = new Set<string>();
+  const healthy = Promise.withResolvers<void>();
   const policyReady = Promise.withResolvers<void>();
   const choices: string[] = [], notices: any[] = [], resumes: string[] = [], switches = new Set<string>();
   let consecutiveCancellations = 0, maxConsecutiveCancellations = 0;
@@ -516,11 +522,16 @@ async function workerdHandoff(browser: Browser, fault: "persisted-offer" | "sile
     page.on("websocket", socket => {
       socket.on("framesent", ({ payload }) => {
         const f = JSON.parse(payload.toString()), action = f.authorityEvent?.content;
+        if (index === 0 && f.kind === "host-path-reply" && hostProbes.has(f.nonce)) {
+          hostReplies.add(f.nonce);
+          if (hostReplies.size >= 2) healthy.resolve();
+        }
         if (index === 0 && action?.type === "host-succession-policy" && action.deviceIds.length === 2) policyId = f.envelope.messageId;
         if (action?.type === "host-succession") choices.push(`${index}:${action.action}`);
       });
       socket.on("framereceived", ({ payload }) => {
         const f = JSON.parse(payload.toString());
+        if (index === 0 && f.type === "host-path-probe") hostProbes.add(f.nonce);
         if (policyId && f.type === "application-result" && f.messageId === policyId && f.result === "accepted") policyReady.resolve();
         if (index === 1) {
           if (f.type === "order-cancelled") maxConsecutiveCancellations = Math.max(maxConsecutiveCancellations, ++consecutiveCancellations);
@@ -537,23 +548,24 @@ async function workerdHandoff(browser: Browser, fault: "persisted-offer" | "sile
     const [host, first, second] = room.participants;
     const offer = first.page.locator("#host-offer-overlay");
     const metrics: Record<string, unknown> = {};
+    if (fault === "probe-restart") {
+      // The first challenge is persisted but never sent. Evict the object;
+      // the retry must reach the healthy host and start another fresh round.
+      await Promise.race([healthy.promise, wait(36_000).then(() => { throw Error("restored host did not answer two probes"); })]);
+      if (notices.length || switches.size || choices.length) throw Error("healthy host lost authority during restore");
+      await deliver(first.page, host.page, "reachable after probe retry");
+      await deliver(host.page, first.page, "host survived hibernation");
+      return { fault, sawFreshNonces: hostReplies.size, noUnwantedOffer: true, deliveredBothDirections: true };
+    }
     if (path) {
-      const windowMs = 150_000;
+      // No forced close is allowed to turn a missed detector into a passing run.
       const onset = Date.now(); path.block();
-      let forced: number | null = null;
-      try { await offer.waitFor({ timeout: windowMs }); } catch (error) {
-        if ((error as Error).name !== "TimeoutError") throw error;
-        forced = Date.now(); path.closePaths();
-        await offer.waitFor({ timeout: 15_000 });
-      }
+      await offer.waitFor({ timeout: 32_000 });
       const observed = Date.now();
       const detected = JSON.parse(await readFile(resolve(cuts!, "detected.json"), "utf8"));
-      const silent = forced === null || detected < forced;
       if (detected < onset || detected > observed) throw Error("Inconsistent host loss clock");
-      Object.assign(metrics, { observationWindowMs: windowMs, actualSilentObservationMs: (forced ?? detected) - onset,
-        lossToRelayDetectionMs: silent ? detected - onset : null, rightCensored: !silent,
-        forcedCloseToRelayDetectionMs: silent ? null : detected - forced!, relayDetectionToObservedVisibleOfferMs: observed - detected,
-        transport: "Two loopback TCP legs ACK locally; dropped WebSocket bytes, no forwarded FIN/RST at onset. Not packet-level WAN loss." });
+      Object.assign(metrics, { lossToRelayDetectionMs: detected - onset, relayDetectionToObservedVisibleOfferMs: observed - detected,
+        forcedClose: false, direction, transport: "Dropped application bytes on a still-open loopback path; no FIN/RST at onset." });
     } else {
       await host.context.close();
       await offer.waitFor({ timeout: 17_000 }); // Must precede the original 30-second authorization deadline.
@@ -806,8 +818,81 @@ async function guestBackpressure(browser: Browser) {
   } finally { await closeRoom(room); }
 }
 
+async function healthyHost(browser: Browser) {
+  const seen = new Set<string>(), echoed = new Set<string>();
+  const two = Promise.withResolvers<void>();
+  let offered = false;
+  const room = await setupRoom(browser, 2, async ({ page }, index) => {
+    page.on("websocket", socket => {
+      socket.on("framereceived", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (index === 0 && f.type === "host-path-probe") seen.add(f.nonce);
+        if (f.type === "host-transfer-authorized") offered = true;
+      });
+      if (index === 0) socket.on("framesent", ({ payload }) => {
+        const f = JSON.parse(payload.toString());
+        if (f.kind === "host-path-reply" && seen.has(f.nonce)) echoed.add(f.nonce);
+        if (echoed.size >= 2) two.resolve();
+      });
+    });
+  });
+  try {
+    await Promise.race([two.promise, wait(38_000).then(() => { throw Error("two healthy path exchanges not observed"); })]);
+    await deliver(room.participants[1].page, room.participants[0].page, "still here after two checks");
+    await deliver(room.participants[0].page, room.participants[1].page, "room remains active");
+    if (offered) throw Error("unexpected host offer on a healthy path");
+    return { fault: "healthy-host", distinctEchoedChallenges: echoed.size, offered, deliveredBothDirections: true };
+  } finally { await closeRoom(room); }
+}
+
+async function fullRoom(browser: Browser) {
+  const room = await setupRoom(browser, 20, undefined, origin, 3_000);
+  try {
+    const [host, ...peers] = room.participants;
+    const extra = await newParticipant(browser);
+    const denied = Promise.withResolvers<void>();
+    extra.page.on("websocket", s => s.on("framereceived", ({ payload }) => {
+      const f = JSON.parse(payload.toString());
+      if (f.type === "error" && f.code === "member-limit") denied.resolve();
+    }));
+    try {
+      await extra.page.goto(room.invitation);
+      await extra.page.locator("#join-name").fill("Capacity Guest");
+      await extra.page.getByRole("button", { name: "Join fort", exact: true }).click();
+      await awaitBoundary(denied.promise, "21st device is refused");
+      if (await host.page.locator("#btn-approve-admission").isVisible()) throw Error("over-capacity device offered for approval");
+    } finally { await extra.context.close(); }
+    const submittedToLastPeerMs: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const mark = `full-room message ${i}`, sender = peers[i].page;
+      const start = performance.now();
+      await deliver(sender, host.page, mark);
+      await Promise.all(room.participants.map(({ page }) => page.waitForFunction(m => document.body.innerText.includes(m), mark, { timeout: 15_000 })));
+      submittedToLastPeerMs.push(Math.round(performance.now() - start));
+      await wait(1200);
+    }
+    await deliver(host.page, peers.at(-1)!.page, "room remains usable at capacity");
+    return { fault: "full-room", admitted: 20, extraDeniedBeforeApproval: true, fullFanoutSamplesMs: submittedToLastPeerMs,
+      scope: "20 isolated Chromium profiles, local relay, serial pace. UI measurement includes observer overhead; not maximum throughput." };
+  } finally { await closeRoom(room); }
+}
+
 async function peerStorageFailure(browser: Browser) {
-  const room = await setupRoom(browser, 3);
+  let original = "", resumed = "";
+  const trace: string[] = [];
+  const room = await setupRoom(browser, 3, async ({ page }, index) => {
+    if (index !== 2) return;
+    page.on("websocket", socket => {
+      socket.on("close", () => trace.push("close"));
+      socket.on("framesent", ({ payload }) => { const f = JSON.parse(payload.toString()); trace.push(["out", f.kind, f.mode, f.relayKind].filter(Boolean).join("/")); });
+      socket.on("framereceived", ({ payload }) => {
+      const f = JSON.parse(payload.toString());
+      trace.push(["in", f.type ?? f.kind, f.mode, f.code, f.frame?.kind, f.frame?.relayKind].filter(Boolean).join("/"));
+      if (f.type === "authenticated" && f.mode === "join") original ||= f.deviceId;
+      if (f.type === "authenticated" && f.mode === "resume") resumed = f.deviceId;
+      });
+    });
+  });
   const [host, sender, failingPeer] = room.participants;
   try {
     await deliver(sender.page, host.page, "before-peer-storage-failure");
@@ -845,8 +930,17 @@ async function peerStorageFailure(browser: Browser) {
     }
     await deliver(sender.page, host.page, "remaining-members-after-peer-failure");
     await failingPeer.page.screenshot({ path: resolve(output, "peer-membership-storage-failure.png"), fullPage: true });
-    return { fault: "peer-membership-storage-failure", outcome: "affected-peer-failed-closed-other-members-continued",
-      scope: "A real IndexedDB write failure during delivery of an Add commit; not proof of automatic repair of arbitrary epoch disagreement." };
+    await reopen(room, 2);
+    await failingPeer.page.waitForFunction(() => (globalThis as any).__pillowfortEvidenceFrames.some((f: any) => f.direction === "send" && f.kind === "resume-complete"), null, {timeout: 15_000}).catch(error => {
+      report.storageTrace = trace; // Kinds only; never include private configuration or decrypted content.
+      throw error;
+    });
+    await deliver(failingPeer.page, joiner.page, "retained device can reach newly added leaf");
+    await deliver(joiner.page, failingPeer.page, "recovered device processes new epoch");
+    if (!original || original !== resumed) throw Error("lost the retained guest after temporary storage failure");
+    return { fault: "peer-membership-storage-failure", outcome: "unacknowledged-Add-replayed-on-original-device",
+      recoveredOriginalDevice: true, encryptedChatWithNewLeafBothDirections: true,
+      scope: "One transient IndexedDB failure and an intact prior state. Does not merge divergent branches or restore a missing key." };
   } finally { await closeRoom(room); }
 }
 
@@ -875,7 +969,9 @@ try {
     if (selectedFault === null || selectedFault === "second-resume") results.push(await secondResume(browser!));
     if (selectedFault === null || selectedFault === "former-host-removal") results.push(await formerHostRemoval(browser!));
     if (selectedFault === null || selectedFault === "prompt-host-succession") results.push(await promptHostSuccession(browser!));
-    if (selectedFault === "persisted-offer" || selectedFault === "silent-host-loss") results.push(await workerdHandoff(browser!, selectedFault));
+    if (selectedFault === "healthy-host") results.push(await healthyHost(browser!));
+    if (selectedFault === "full-room") results.push(await fullRoom(browser!));
+    if (workerCut) results.push(await workerdHandoff(browser!, workerCut));
     (report.faults as unknown[]).push(...results);
   }
   report.passed = true;

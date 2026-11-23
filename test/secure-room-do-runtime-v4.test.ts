@@ -707,6 +707,30 @@ describe("protocol-v4 Durable Object runtime", () => {
     expect(socket.attachment.secureAuthenticated).toBe(false);
   });
 
+  it("does not announce idle retirement until the storage transaction commits", async () => {
+    const state = new TestState();
+    const room = new Room(state as unknown as DurableObjectState, env());
+    await state.ready;
+    const deviceId = generateSecureRelayIdV4(), connectionId = generateSecureRelayIdV4();
+    const socket = new TestSocket({ protocol: "v4", secureAuthenticated: true, secureDeviceId: deviceId,
+      secureConnectionId: connectionId }, state.storage.events);
+    state.sockets.push(socket);
+    (room as any).secureRelayState = { lifecycle: "open", members: [{ deviceId, connectionId, status: "active" }] };
+    await state.storage.put("alarmSchedule", { idle: Date.now() - 1 });
+    await state.storage.put("roomId", "still-present");
+    const transaction = state.storage.transaction.bind(state.storage);
+    state.storage.transaction = async () => { throw Error("storage unavailable"); };
+    await expect(room.alarm()).rejects.toThrow("storage unavailable");
+    expect(socket.sent).toHaveLength(0);
+    expect(socket.closed).toBeNull();
+    expect(await state.storage.get("roomId")).toBe("still-present");
+    state.storage.transaction = transaction;
+    await room.alarm();
+    expect(await state.storage.get("roomId")).toBeUndefined();
+    expect(socket.sent.map(s => JSON.parse(s).type)).toEqual(["room-retired"]);
+    expect(state.storage.events.indexOf("transaction-committed")).toBeLessThan(state.storage.events.indexOf("socket-send"));
+  });
+
   it("delivers terminal retirement after persisted connection ids are cleared", async () => {
     const state = new TestState();
     const room = new Room(state as unknown as DurableObjectState, env());
