@@ -1367,6 +1367,26 @@ describe("protocol-v4 durable secure room engine", () => {
       const replayedMarkerRestoredExactBarrier =
         host.currentRetirementBarrier?.deviceId === retirementBarrier.deviceId &&
         host.currentRetirementBarrier?.admissionCommitMessageId === retirementBarrier.admissionCommitMessageId;
+      const { SecureRoomController } = await import(window.participantTestRoot + "/src/participant/secureRoomController.ts");
+      const { createControllerEnvironment } = await import(window.participantTestRoot + "/test/participant-environment.ts");
+      const retried: any[] = [];
+      const resumeWithoutBob = async () => {
+        const controller = new SecureRoomController(createControllerEnvironment()) as any;
+        controller.engine = host;
+        controller.replayingBacklog = true;
+        controller.handleZombieRemovalRequired(bob.deviceId, admissionId);
+        await controller.handleRoomStateSnapshot({ hostDeviceId: host.deviceId, pendingHostTransfer: null,
+          members: host.roster().map(member => ({ deviceId: member.deviceId, status: "active" })) });
+        await controller.handleMemberLifecycle(bob.deviceId, "retired");
+        controller.replayingBacklog = false;
+        controller.authenticated = true;
+        controller.sendClientFrame = (frame: unknown) => retried.push(frame);
+        return controller;
+      };
+      const beforeCommitAck = await resumeWithoutBob();
+      beforeCommitAck.sendPendingEntry(removal.messageId);
+      const retriedBoundRemove = retried.some(f => f.relayKind === "commit" && f.envelope.messageId === removal.messageId &&
+        f.retirementDeviceId === bob.deviceId && f.retirementAdmissionCommitMessageId === admissionId);
       await host.acknowledgeOutbound(removal.messageId);
       host.resolveRetirementBarrier(retirementBarrier);
       const retirementControlSurvivedCommitAck = host.pendingRelayControls.some((control) =>
@@ -1402,7 +1422,15 @@ describe("protocol-v4 durable secure room engine", () => {
           retirementAdmissionCommitMessageId: retirementBarrier.admissionCommitMessageId,
         },
       });
-      await host.completeRelayControl({ kind: "member-lifecycle", deviceId: bob.deviceId, status: "retired" });
+      // MLS already excludes Bob, but the relay's cleanup marker can still be pending.
+      const recovering = await resumeWithoutBob();
+      await recovering.retryRelayControls();
+      const retriedExactRetirement = retried.some(f => f.kind === "retire-member" &&
+        f.deviceId === bob.deviceId && f.requestId === removal.relayRequestId && f.commitMessageId === removal.messageId);
+      await recovering.handleFrameAccepted(randomId());
+      const unrelatedAckPreservedRetirement = host.pendingRelayControls.some(c =>
+        c.kind === "retire-member" && c.requestId === removal.relayRequestId);
+      await recovering.handleFrameAccepted(removal.relayRequestId);
       const retirementControlCleared = !host.pendingRelayControls.some((control) =>
         control.kind === "retire-member" && control.deviceId === bob.deviceId);
       const removedOpaqueErased = await bobStore.loadOpaqueState(storeKey) === null;
@@ -1559,6 +1587,9 @@ describe("protocol-v4 durable secure room engine", () => {
         replayedMarkerAfterAckCode,
         retirementControlSurvivedCommitAck,
         retirementControlSurvivedRestart,
+        retriedBoundRemove,
+        retriedExactRetirement,
+        unrelatedAckPreservedRetirement,
         retirementControlCleared,
         closeControlAtomic,
         closeControlSurvivedRestart,
@@ -1669,6 +1700,9 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.replayedMarkerAfterAckCode).toBe("accepted");
     expect(result.retirementControlSurvivedCommitAck).toBe(true);
     expect(result.retirementControlSurvivedRestart).toBe(true);
+    expect(result.retriedBoundRemove).toBe(true);
+    expect(result.retriedExactRetirement).toBe(true);
+    expect(result.unrelatedAckPreservedRetirement).toBe(true);
     expect(result.retirementControlCleared).toBe(true);
     expect(result.closeControlAtomic).toBe(true);
     expect(result.closeControlSurvivedRestart).toBe(true);
@@ -2622,7 +2656,11 @@ describe("protocol-v4 durable secure room engine", () => {
         markAuthenticationAttempted: async () => {},
         dispose: () => {},
       };
-      const controller = new SecureRoomController((await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment());
+      const replacementSocket = { readyState: WebSocket.OPEN };
+      const controller = new SecureRoomController({
+        ...(await import(window.participantTestRoot + "/test/participant-environment.ts")).createControllerEnvironment(),
+        createWebSocket: () => replacementSocket,
+      });
       const harness = controller as any;
       const generation = 17;
       const socketEpoch = 23;
@@ -2682,12 +2720,9 @@ describe("protocol-v4 durable secure room engine", () => {
         pendingOutbox.length === 0 &&
         (settlements[0] as { status?: string } | undefined)?.status === "connected";
       const fortPassClaimClearedAfterResume = harness.config.fortPassClaimSecret === undefined;
-      await harness.handleWire(socket, generation, socketEpoch, JSON.stringify({
-        kind: "secure-server", v: 4, suite: 1, type: "room-state-snapshot",
-        hostDeviceId: deviceId,
-        members: [{ deviceId, status: "active" }],
-        pendingHostTransfer: null,
-      }), handshake, {});
+      const snapshot = JSON.stringify({ kind: "secure-server", v: 4, suite: 1, type: "room-state-snapshot",
+        hostDeviceId: deviceId, members: [{ deviceId, status: "active" }], pendingHostTransfer: null });
+      await harness.handleWire(socket, generation, socketEpoch, snapshot, handshake, {});
       const backlogCursor = stateModule.randomSecureRoomIdV4(16);
       await harness.handleWire(socket, generation, socketEpoch, JSON.stringify({
         kind: "secure-server", v: 4, suite: 1, type: "backlog-end", lastMessageId: backlogCursor,
@@ -2695,10 +2730,20 @@ describe("protocol-v4 durable secure room engine", () => {
       const resumeComplete = sentFrames.find((frame) => frame.kind === "resume-complete");
       const snapshotPrecedesResumeComplete = harness.roomStateSnapshotReceived &&
         resumeComplete?.lastMessageId === backlogCursor && harness.replayingBacklog;
-      await harness.handleWire(socket, generation, socketEpoch, JSON.stringify({
-        kind: "secure-server", v: 4, suite: 1, type: "frame-accepted",
-        messageId: resumeComplete.requestId,
-      }), handshake, {});
+      // A's completion was sent; its ACK is still in flight when B authenticates.
+      harness.openSocket(generation);
+      const wireB = (wire: string) => harness.handleWire(replacementSocket, generation, harness.socketEpoch, wire, undefined, {});
+      await wireB(JSON.stringify({ ...challenge, connectionId: stateModule.randomSecureRoomIdV4(16) }));
+      await wireB(JSON.stringify({ kind: "secure-server", v: 4, suite: 1, type: "authenticated",
+        mode: "resume", roomInstance, deviceId, status: "pending" }));
+      await wireB(snapshot);
+      await wireB(JSON.stringify({ kind: "secure-server", v: 4, suite: 1, type: "backlog-end", lastMessageId: backlogCursor }));
+      const secondCompletion = sentFrames.filter(frame => frame.kind === "resume-complete")[1];
+      const ack = (messageId: string) => JSON.stringify({ kind: "secure-server", v: 4, suite: 1, type: "frame-accepted", messageId });
+      await harness.handleWire(socket, generation, socketEpoch, ack(resumeComplete.requestId), undefined, {});
+      await wireB(ack(resumeComplete.requestId));
+      const oldAckKeptReplayBlocked = secondCompletion.requestId !== resumeComplete.requestId && harness.replayingBacklog && durableRetries === 0;
+      await wireB(ack(secondCompletion.requestId));
       const resumeActivatedOnlyAfterAck = !harness.replayingBacklog && durableRetries === 1;
 
       const restoredPendingOutbox = [{
@@ -2938,6 +2983,7 @@ describe("protocol-v4 durable secure room engine", () => {
         preAuthResponseAccepted,
         fortPassClaimClearedAfterResume,
         snapshotPrecedesResumeComplete,
+        oldAckKeptReplayBlocked,
         resumeActivatedOnlyAfterAck,
         crashRestoredActiveAdmissionResumes,
         resumeCannotBypassSnapshotPhase,
@@ -2952,6 +2998,7 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.preAuthResponseAccepted).toBe(true);
     expect(result.fortPassClaimClearedAfterResume).toBe(true);
     expect(result.snapshotPrecedesResumeComplete).toBe(true);
+    expect(result.oldAckKeptReplayBlocked).toBe(true);
     expect(result.resumeActivatedOnlyAfterAck).toBe(true);
     expect(result.crashRestoredActiveAdmissionResumes).toBe(true);
     expect(result.resumeCannotBypassSnapshotPhase).toBe(true);

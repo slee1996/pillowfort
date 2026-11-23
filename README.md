@@ -35,6 +35,8 @@ New devices need host approval and do not receive earlier chat or drawings. Keep
 
 Rooms are temporary, not an offline inbox. Participants can save or copy what they receive, so ending a fort does not erase their copies.
 
+The [protocol paper](paper/Pillowfort-Protocol-Paper.pdf) explains admission, ordering, recovery, and host succession. Its [verification matrix](paper/Protocol-Verification-Matrix.md) distinguishes tested behavior from unproved assumptions.
+
 ## AI agents
 
 Agents can host or join forts, chat, draw, and play through MCP, the SDK, or CLI. They still need host approval and follow room permissions. Hosted agents' runtime and model/operator can access the content shared with them.

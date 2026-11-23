@@ -1,0 +1,195 @@
+
+> pillowfort@0.0.1 check
+> npm run typecheck && npm test && npm run build && npm run agent:catalog:check
+
+
+> pillowfort@0.0.1 typecheck
+> npm --prefix client run typecheck
+
+
+> typecheck
+> tsc -p ../tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit
+
+
+> pillowfort@0.0.1 test
+> bun test --timeout 60000 --max-concurrency 1 test/unit.test.ts test/room-invitation.test.ts test/participant-state.test.ts test/webmcp.test.ts test/participant-key-derivation.test.ts test/crypto.test.ts test/worker.test.ts test/e2e.test.ts test/games.test.ts test/integration.test.ts test/telemetry.test.ts && npm run test:security
+
+bun test v1.4.4 (38afee6c8)
+
+test/unit.test.ts:
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room"}}
+[analytics] {"event":"ws_rejected","props":{}}
+
+test/worker.test.ts:
+[analytics] {"event":"fort_pass_status_checked","props":{"source":"setup"}}
+[analytics] {"event":"probe_blocked","props":{"reason":"dotfile","surface":"http","status":404}}
+[analytics] {"event":"probe_blocked","props":{"reason":"dotfile","surface":"http","status":404}}
+[analytics] {"event":"probe_blocked","props":{"reason":"dotfile","surface":"http","status":404}}
+[analytics] {"event":"probe_blocked","props":{"reason":"wordpress","surface":"http","status":404}}
+[analytics] {"event":"probe_blocked","props":{"reason":"cgi","surface":"http","status":404}}
+[analytics] {"event":"probe_blocked","props":{"reason":"php","surface":"http","status":404}}
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"fulfillment_failed","status":502}}
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"session_binding","status":200}}
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"bad_signature","status":400}}
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"bad_signature","status":400}}
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"not_configured","status":501}}
+
+ 316 pass
+ 0 fail
+ 1557 expect() calls
+Ran 316 tests across 11 files. [26.33s]
+
+> pillowfort@0.0.1 test:security
+> node scripts/run-security-tests.mjs
+
+✔ unknown agent resources return the MCP 2026 InvalidParams error (0.837208ms)
+✔ the CLI refuses unpatched and unsupported Node releases before starting a participant (3939.037208ms)
+✔ direct SDK consumers enforce the same runtime boundaries before browser startup or app connection (3208.666625ms)
+✔ unsupported CLI runtimes keep structured failures and MCP stdout protocol-safe (1475.025292ms)
+✔ packaging changed documentation cannot replace a published versioned archive (803.571625ms)
+✔ release gate rejects missing-tool against the real participant runtime (133.479ms)
+✔ release gate rejects wrong-schema against the real participant runtime (128.921625ms)
+✔ release gate rejects wrong-read-only against the real participant runtime (129.858458ms)
+(node:61279) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/spencerlee/pillowfort-recovery-r3/test/replay-persistence.node.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/spencerlee/pillowfort-recovery-r3/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ durable replay and cryptographic state
+  ✔ derives opaque v4 store keys and erases secrets without erasing replay tombstones (249.415417ms)
+  ✔ rejects the same replay position after a persistent browser profile restarts (308.055666ms)
+  ✔ serializes concurrent compare-and-advance operations across tabs (204.04425ms)
+  ✔ uses revision CAS for opaque state and migrates one room from the strict v1 ledger (171.982458ms)
+  ✔ bounds provisional identities without evicting established or ambiguous state (189.821625ms)
+  ✔ fails closed for unavailable, corrupt, saturated, and transaction-failing storage (169.056542ms)
+✔ durable replay and cryptographic state (1355.381709ms)
+▶ single-writer room cryptographic lock
+  ✔ reports busy, cooperatively transfers ownership, and aborts the old lease (217.349791ms)
+  ✔ does not silently fall back when Web Locks or takeover signaling are unavailable (194.172291ms)
+✔ single-writer room cryptographic lock (411.749042ms)
+ℹ tests 16
+ℹ suites 2
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9942.924667
+bun test v1.4.4 (38afee6c8)
+
+ 5 pass
+ 0 fail
+ 36 expect() calls
+Ran 5 tests across 2 files. [988.00ms]
+bun test v1.4.4 (38afee6c8)
+
+ 26 pass
+ 0 fail
+ 310 expect() calls
+Ran 26 tests across 1 file. [2.45s]
+bun test v1.4.4 (38afee6c8)
+
+test/security-boundaries.test.ts:
+pillowfort :55781
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"bad_signature","status":400}}
+[analytics] {"event":"room_setup_failed","props":{"reason":"paid_redemption","surface":"local"}}
+[analytics] {"event":"room_setup_failed","props":{"reason":"paid_redemption","surface":"local"}}
+pillowfort :55786
+[analytics] {"event":"stripe_webhook_failed","props":{"reason":"fulfillment_failed","status":409}}
+pillowfort :55788
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room","surface":"local","status":400}}
+[analytics] {"event":"ws_rejected","props":{"reason":"invalid_room","surface":"local","status":400}}
+[analytics] {"event":"ws_rejected","props":{"reason":"unexpected_parameters","surface":"local","status":400}}
+pillowfort :55790
+[analytics] {"event":"probe_blocked","props":{"reason":"traversal","surface":"http","status":404}}
+pillowfort :55792
+pillowfort :55794
+pillowfort :55796
+[analytics] {"event":"room_join_failed","props":{"reason":"bad_auth","surface":"local"}}
+[analytics] {"event":"room_join_failed","props":{"reason":"bad_auth","surface":"local"}}
+pillowfort :55799
+[analytics] {"event":"fort_pass_status_checked","props":{"source":"test"}}
+[analytics] {"event":"ws_rejected","props":{"reason":"bad_origin","surface":"local","status":403}}
+
+ 15 pass
+ 0 fail
+ 137 expect() calls
+Ran 15 tests across 1 file. [166.00ms]
+bun test v1.4.4 (38afee6c8)
+
+test/secure-server-runtime-v4.test.ts:
+pillowfort :55801
+[analytics] {"event":"ws_rejected","props":{"reason":"rate_limited","surface":"local","status":429}}
+pillowfort :55810
+pillowfort :55823
+pillowfort :55826
+pillowfort :55829
+pillowfort :55838
+
+ 9 pass
+ 0 fail
+ 444 expect() calls
+Ran 9 tests across 1 file. [1219.00ms]
+bun test v1.4.4 (38afee6c8)
+
+ 179 pass
+ 0 fail
+ 2329 expect() calls
+Ran 179 tests across 18 files. [2.81s]
+security gate passed across 25 isolated test files
+
+> pillowfort@0.0.1 build
+> npm run agent:docs && npm run verify:openmls && npm --prefix client run build
+
+
+> pillowfort@0.0.1 agent:docs
+> node scripts/build-agent-docs.mjs
+
+Built app agent discovery assets (65 tools). Marketing snapshots are maintained separately.
+
+> pillowfort@0.0.1 verify:openmls
+> node scripts/verify-openmls-artifacts.mjs
+
+verified 4 pinned OpenMLS browser artifacts against 51 reviewed source inputs
+
+> build
+> tsc -b && vite build
+
+vite v6.4.5 building for production...
+transforming...
+✓ 126 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                      1.79 kB │ gzip:   0.81 kB
+dist/assets/pillowfort_openmls_bg-BxD-mDtq.wasm  1,132.38 kB │ gzip: 381.46 kB
+dist/assets/index-C7odaOco.css                      54.39 kB │ gzip:  10.95 kB
+dist/assets/index-Cg_wn1a0.js                      736.52 kB │ gzip: 203.74 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 938ms
+
+> pillowfort@0.0.1 agent:catalog:check
+> bun scripts/check-agent-catalog.ts
+
+{"ok":true,"release":{"version":"2.1.1","sourceTag":"v2.1.1","sourceUrl":"https://github.com/slee1996/pillowfort/tree/v2.1.1","toolsSha256":"90e63f8d1ca4403561583fff9de447e14b70ecf10a1e5ca637e81647b5c620b2"},"hostedTools":61,"browserTools":65,"roomActionsPerformed":false}

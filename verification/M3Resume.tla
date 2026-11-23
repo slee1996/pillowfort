@@ -11,10 +11,15 @@ Ready == s.phase = "ready" /\ ~s.down
 Disconnect == /\ Ready /\ s.connection = 1
               /\ s' = [s EXCEPT !.phase = "disconnected", !.connection = 2,
                                  !.acknowledged = FALSE]
-Begin == /\ ~s.down /\ s.phase = "disconnected"
-         /\ s' = [s EXCEPT !.phase = "replay", !.request = 1, !.terminator = 2]
-PersistPrefix == /\ ~s.down /\ s.phase = "replay"
-                 /\ s' = [s EXCEPT !.persisted = TRUE, !.phase = "snapshot"]
+BeginAt(t) == /\ ~s.down /\ s.phase = "disconnected"
+              /\ s' = [s EXCEPT !.phase = "replay", !.request = 1, !.terminator = t]
+Begin == BeginAt(2)
+\* The verified view comes from the persisted signed prefix, not the snapshot.
+PersistPrefixWith(verifiedHost) ==
+    /\ ~s.down /\ s.phase = "replay"
+    /\ s' = [s EXCEPT !.persisted = TRUE, !.authenticatedHost = verifiedHost,
+                       !.phase = "snapshot"]
+PersistPrefix == PersistPrefixWith(s.authenticatedHost)
 Snapshot(h) == /\ ~s.down /\ s.phase = "snapshot" /\ h \in {1, 2}
                /\ (h = s.authenticatedHost \/ Broken = "Snapshot")
                /\ s' = [s EXCEPT !.snapshotHost = h, !.reconciled = TRUE, !.phase = "terminator"]

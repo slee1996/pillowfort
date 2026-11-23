@@ -1,0 +1,19 @@
+bun test v1.4.4 (38afee6c8)
+
+test/secure-room-engine.test.ts:
+error: evaluate: SecureRoomEngineError: MLS removal does not match the FIFO relay retirement barrier
+    at SecureRoomEngine.assertCurrentRetirementBarrier (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomEngine.ts:2015:13)
+    at SecureRoomEngine.resolveRetirementBarrier (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomEngine.ts:619:10)
+    at eval (eval at evaluate (:370:30), <anonymous>:495:12)
+    at async <anonymous>:381:23
+  log: [],
+
+      at SecureRoomEngine.assertCurrentRetirementBarrier (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomEngine.ts:2015:13)
+      at SecureRoomEngine.resolveRetirementBarrier (http://127.0.0.1:PORT/@fsSOURCE/src/participant/secureRoomEngine.ts:619:10)
+      at eval (eval at evaluate (:370:30), <anonymous>:495:12)
+(fail) protocol-v4 durable secure room engine > admits a member privately, inspects without mutation, rejects replay/reorder/forgeries, and authorizes commit summaries [605.79ms]
+
+ 0 pass
+ 25 filtered out
+ 1 fail
+Ran 1 test across 1 file. [1417.00ms]

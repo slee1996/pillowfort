@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pillowfort Protocol Paper — Evidence edition 2</title>
+  <title>Pillowfort Protocol Paper — Evidence edition 3</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -28,7 +28,7 @@
 id="pillowfort-an-mls-based-protocol-for-ephemeral-rooms">Pillowfort: An
 MLS-Based Protocol for Ephemeral Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 2 · 9 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 3 · 22 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
 <p>Pillowfort is an encrypted room protocol for human-operated and
@@ -284,7 +284,9 @@ its retained identity, processes and persists the backlog prefix,
 reconciles the relay snapshot with its MLS roster and signed host view,
 and accepts the exact replay terminator. The relay activates the device
 only after matching resume completion; ordinary outbound work remains
-blocked until the corresponding acknowledgment.</p>
+blocked until the corresponding acknowledgment. A replacement socket
+starts a new completion even when the last replayed message is
+unchanged.</p>
 <p>Historical removal markers must remain paired with the membership
 transition that justifies removal. Backlog acknowledgment is
 prefix-based: acknowledging a later identifier cannot discard an
@@ -437,15 +439,13 @@ host-available design; the transport integer <code>4</code> is not a
 compatibility negotiation. Implementation references identify the tested
 source revision. The companion artifact supplies commands, lockfiles,
 raw results, and a claim-to-test matrix.</p>
-<p>At implementation revision <code>c726c5eccafa</code>, five protocol
-suites passed <strong>87 tests and 746 assertions</strong>. The real-MLS
-engine suite passed <strong>26 tests and 306 assertions</strong>,
-including storage failure, restart, rejection, and revision-conflict
-paths. The complete <code>npm run check</code> gate also passed. Signed
-fixtures in <code>examples.json</code> cover chat, a transfer offer, and
-acceptance; changing the signed order or expected room invalidates
-verification. Their deterministic test seeds are not production
-keys.</p>
+<p>At implementation revision <code>1ba68f236163</code>, five protocol
+suites passed <strong>90 tests and 768 assertions</strong>. The real-MLS
+engine suite (26 tests, 310 assertions) and the full project gate also
+passed. Signed fixtures in <code>examples.json</code> cover chat, a
+transfer offer, and acceptance; changing the signed order or expected
+room invalidates verification. Their deterministic test seeds are not
+production keys.</p>
 <h3 id="crash-boundary-executions">10.2 Crash-boundary executions</h3>
 <p>Six relay regressions cover successor return and permanent absence at
 three boundaries: authority committed but result unacknowledged, removal
@@ -468,6 +468,22 @@ mutation on a resumed device with a pending application but no admission
 barrier. Both were reproduced before correction and retain regressions.
 The latter run exercises the successor’s previously unspecified
 unsent-policy boundary.</p>
+<p>Cross-host recovery was exercised separately with three browser
+profiles. A returning guest applied the signed handoff before accepting
+the new host snapshot. On a second interruption, an ACK from the first
+connection did not release ordinary sends; the ACK for the current
+completion did. The original implementation instead stopped at the
+second terminator because the previous request ID survived the socket
+change.</p>
+<p>The removal experiment interrupted the successor before it received
+the Remove grant and again after the relay stored the Remove but before
+its result reached the browser. Roster absence did not establish relay
+cleanup: the successor had to retain the exact retirement request until
+its receipt. A third browser received the Remove immediately before
+close. It applied the membership change before reconnecting and matched
+the duplicate by its stored delivery digest. The successor published its
+new policy and encrypted delivery resumed in both directions. These are
+local executions, not a claim about every crash schedule.</p>
 <p>A separate production shutdown execution found retained succession
 authority after the host was cleared, so the retired snapshot could not
 be persisted. The corrected path removes that policy before storage. A
@@ -477,11 +493,13 @@ composer. This concrete serialization boundary is not represented by the
 reduced TLC models.</p>
 <h3 id="bounded-state-analysis">10.3 Bounded state analysis</h3>
 <p>The M1–M4 analysis separates endpoint state, committed storage, relay
-decisions, and network effects. Nine finite TLC configurations completed
-without an invariant violation. Seven deliberately weakened
-configurations produced counterexamples for persistence, grant binding,
-preview readiness, KeyPackage reuse, snapshot reconciliation, target
-binding, and membership interlocks.</p>
+decisions, and network effects. Eleven finite TLC configurations
+completed without an invariant violation. Eleven deliberately weakened
+configurations produced counterexamples. Two unmodified models also
+reached a recovered guest under the new host: one after handoff during
+replay, the other after a second interruption with an earlier ACK still
+in flight. These witnesses establish possibility, not eventual
+progress.</p>
 <p>The largest composed configuration explored <strong>1,202,973
 distinct abstract states</strong>, with backlog capacity two and a
 16-step bound. The companion report records all configurations and maps
@@ -571,24 +589,24 @@ href="https://www.rfc-editor.org/rfc/rfc9420.html">rfc-editor.org/rfc/rfc9420</a
 9750. <a
 href="https://www.rfc-editor.org/rfc/rfc9750.html">rfc-editor.org/rfc/rfc9750</a>.</li>
 <li>Pillowfort. <em>Secure Room Protocol v4</em>. Implementation
-contract, revision <code>c726c5eccafa</code>. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
+contract for the tested revision. <a
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/SECURE_ROOM_PROTOCOL_V4.md">Source</a>.</li>
 <li>Pillowfort. <em>Application Event Encoding and Signatures</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/applicationEventsV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/applicationEventsV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Relay State and Transitions</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureRelayV4.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureRelayV4.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Secure Room Engine</em>. Persistence, rejection, and
 recovery. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomEngine.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomEngine.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Participant Controller</em>. Admission and host
 succession. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomController.ts">Pinned
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomController.ts">Pinned
 source</a>.</li>
 <li>Pillowfort. <em>Agent Security and Custody</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/agents/security.md">Pinned
+href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/agents/security.md">Pinned
 source</a>.</li>
 <li>Model Context Protocol. <em>Subscriptions</em>, protocol revision
 2026-07-28. <a
@@ -597,7 +615,7 @@ href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/su
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
 <li>Pillowfort. <em>Protocol v4-CS1: Wire Contract and Failure
 Semantics</em>. <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Technical-Appendix.pdf">Technical
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Technical-Appendix.pdf">Technical
 appendix</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
@@ -605,11 +623,11 @@ href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>
 href="https://signal.org/blog/signal-private-group-system/">Design</a>.</li>
 </ol>
 <p><strong>Companion artifacts:</strong> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Formal-State-Machine-Analysis.pdf">bounded
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Formal-State-Machine-Analysis.pdf">bounded
 analysis report</a>; <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>; <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
+href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
 evidence bundle</a>.</p>
 </body>
 </html>

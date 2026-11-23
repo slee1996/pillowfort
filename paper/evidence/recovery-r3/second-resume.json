@@ -1,0 +1,23 @@
+{
+  "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "second-resume",
+      "sameDeviceResumes": 2,
+      "staleAckRefusedSend": true,
+      "currentAckReleasedSend": true
+    }
+  ],
+  "passed": true
+}

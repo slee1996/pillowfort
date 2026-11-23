@@ -1,0 +1,197 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 98 and seed 1 with 1 worker on 14 cores with 910MB heap and 64MB offheap memory [pid: 58166] (Mac OS X 27.0 aarch64, Homebrew 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-ed3-u4t6wjw8/models-all/RepeatedResume.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/Naturals.tla
+Parsing file /private/var/folders/yh/rsct3x5n68lgy09fdkywfl4h0000gn/T/pillowfort-ed3-u4t6wjw8/models-all/M3Resume.tla
+Semantic processing of module Naturals
+Semantic processing of module M3Resume
+Semantic processing of module RepeatedResume
+Starting... (2026-11-22 19:02:46)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-22 19:02:46.
+Error: Invariant Safety is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 1,
+  phase |-> "ready",
+  request |-> 0,
+  terminator |-> 0,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 1,
+  snapshotHost |-> 1,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 2: <FirstLoss line 16, col 14 to line 16, col 91 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "disconnected",
+  request |-> 0,
+  terminator |-> 0,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 1,
+  snapshotHost |-> 1,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 3: <Replay line 23, col 11 to line 25, col 75 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "replay",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 1,
+  snapshotHost |-> 1,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 4: <Replay line 23, col 11 to line 25, col 75 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "snapshot",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> TRUE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 1,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 5: <Replay line 23, col 11 to line 25, col 75 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "terminator",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> TRUE,
+  persisted |-> TRUE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 6: <Replay line 23, col 11 to line 25, col 75 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "complete",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> TRUE,
+  persisted |-> TRUE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 7: <Submit line 26, col 11 to line 29, col 65 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {[socket |-> 2, endId |-> 10, id |-> 22]}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 2,
+  phase |-> "waiting",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> TRUE,
+  reconciled |-> TRUE,
+  persisted |-> TRUE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 8: <SecondLoss line 17, col 15 to line 22, col 54 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {[socket |-> 2, endId |-> 10, id |-> 22]}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 3,
+  phase |-> "disconnected",
+  request |-> 0,
+  terminator |-> 0,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 9: <Replay line 23, col 11 to line 25, col 75 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {}
+/\ requests = {[socket |-> 2, endId |-> 10, id |-> 22]}
+/\ activatedBy = 0
+/\ guest = [ connection |-> 3,
+  phase |-> "replay",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = FALSE
+
+State 10: <Next line 39, col 57 to line 39, col 85 of module RepeatedResume>
+/\ releasedBy = 0
+/\ acks = {[socket |-> 2, endId |-> 10, id |-> 22]}
+/\ requests = {[socket |-> 2, endId |-> 10, id |-> 22]}
+/\ activatedBy = 2
+/\ guest = [ connection |-> 3,
+  phase |-> "replay",
+  request |-> 1,
+  terminator |-> 10,
+  sent |-> FALSE,
+  reconciled |-> FALSE,
+  persisted |-> FALSE,
+  acknowledged |-> FALSE,
+  authenticatedHost |-> 2,
+  snapshotHost |-> 2,
+  down |-> FALSE ]
+/\ cleared = TRUE
+
+31 states generated, 26 distinct states found, 4 states left on queue.
+The depth of the complete state graph search is 10.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+Finished in 00s at (2026-11-22 19:02:46)

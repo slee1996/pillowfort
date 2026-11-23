@@ -1,8 +1,8 @@
 # Pillowfort: Bounded State-Machine Analysis
 
-*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 2 · 9 November 2026*
+*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 3 · 22 November 2026*
 
-**Status:** the M1–M4 models and staged composition were checked from revision `c726c5eccafa` with TLC 2.19 (tla2tools v1.7.4). Nine finite safety configurations completed without an invariant violation; seven deliberately weakened configurations produced counterexamples. The host-preview readiness check maps to a separately reproduced and fixed relay scheduling race. This is bounded analysis of abstractions, not a cryptographic proof, implementation refinement, deadlock-freedom result, independent audit, or unbounded liveness proof. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-Paper.pdf).
+**Status:** TLC 2.19 checked eleven finite safety configurations of the models at `1ba68f236163`. Eleven deliberate guard weakenings produced invariant counterexamples. Two separate probes, with the safeguards intact, reached successful guest recovery. These are bounded coordination results, not a cryptographic proof, implementation refinement, deadlock-freedom result, or guarantee of eventual progress. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Pillowfort-Protocol-Paper.pdf).
 
 ## Executed analysis
 
@@ -12,6 +12,8 @@
 | M2 admission | 267 | 122 |
 | M3 resume | 24 | 16 |
 | M4 succession | 991 | 362 |
+| Guest resume during handoff | 627 | 268 |
+| Two guest replacement sockets after handoff | 41 | 38 |
 | Composed M1, 12 steps | 15,297 | 670 |
 | Composed M1+M2, 12 steps | 39,141 | 3,976 |
 | Composed M1+M2+M3, 12 steps | 40,268 | 19,336 |
@@ -20,11 +22,13 @@
 
 Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. Composition uses one operation token and the stated depth bound. Counts are per configuration; they must not be interpreted as disjoint implementation states.
 
-The seven sensitivity checks weaken persistence ordering, connection-bound grants, host preview readiness, KeyPackage reuse prevention, snapshot reconciliation, transfer-target binding, and admission send interlocks. All produced invariant counterexamples. Only the host-preview check maps to the implementation bug reproduced during this evaluation; deliberate mutations alone are not evidence of implementation vulnerabilities.
+The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Each produced the expected counterexample.
 
-Exact models, configurations, tool identity, commands and traces are in `evidence/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-09-r2/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+The two positive traces address a different question: can the unmodified model actually recover? One reaches a guest ready under the successor after removal; the other reaches a ready second connection with the first ACK still in flight. Neither trace establishes that every execution terminates. The largest composition excludes these focused models; its state count is not a product of theirs.
 
-Two concrete boundaries lie outside these reduced models: repeated active-lifecycle signals during restored applications, and serialization of explicit retirement after a succession policy. Real-MLS/relay regressions and browser executions cover those defects; neither is claimed as a TLC-discovered issue.
+Exact models, configurations, tool identity, commands and traces are in `evidence/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r3/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+
+Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 
 The remainder records the broader analysis plan and properties. A listed obligation is not automatically a proved property: consult the coverage matrix for the executed subset. Deadlock checking was explicitly disabled for these bounded-prefix safety runs; no unrestricted idle action is used to manufacture a liveness result.
 
@@ -142,7 +146,7 @@ Use authenticated admission order. Reconnection does not change it. Only a curre
 - **M4.5 — Reconcile views:** a snapshot cannot substitute an unknown policy, target, capability, or host view for the client's authenticated state and exact in-flight acceptance.
 - **M4.6 — Honest-relay priority:** selection uses the earliest eligible admitted device in the current policy, independent of UI sorting and reconnect time; expired attempts are not silently retried as new grants.
 - **M4.7 — Tenure binding:** an earlier host policy cannot authorize succession after the host changes. Capability expiry, role changes, and old-host resume races cannot produce two accepted authorities at an honest relay.
-- **M4.8 — Barrier completion:** a retirement lifecycle notification releases a replayed historical marker even when the former host was already retired. Ordinary work remains blocked until required removal is reconciled; only the exact authorized succession may bypass the barrier to restore its coordinator.
+- **M4.8 — Barrier completion:** a repeated lifecycle notice may release a matching historical marker after local removal; it does not acknowledge an outstanding Remove or retirement request. Ordinary work remains blocked until the exact cleanup receipt. Only authorized succession may bypass the barrier to restore its coordinator.
 
 Do **not** require every device's host view to change simultaneously. Temporary differences while acceptance and results propagate are legitimate. Check one authoritative host at an honest relay and allowed per-client reconciliation states. Signatures cannot prove that another endpoint is offline.
 
@@ -173,21 +177,8 @@ Represent time as relevant deadline regions—before, at, and after expiry—and
 
 Check that the model is sensitive to the failures it claims to cover. Deliberately remove one safeguard at a time and require a counterexample: persist-before-ACK, exact grant binding, snapshot reconciliation, single-use KeyPackage tracking, or transfer-target binding. These are proposed model mutations, not known implementation vulnerabilities.
 
-For each discovered trace:
-
-1. Classify it as an implementation issue, modeling error, or documented limitation.
-2. Map every model action to concrete code and storage/effect boundaries.
-3. Replay a real bug as a deterministic implementation regression where feasible.
-4. Fix the implementation and model, then rerun both the affected checks and composed configurations.
+For each trace, distinguish model error, implementation error and an explicit limit. Map the sequence to storage and network boundaries. Turn a reproducible implementation fault into a regression and rerun the affected models.
 
 **A completed analysis must publish:** the source snapshot, readable specifications, exact TLC/tool versions and configurations, abstraction assumptions, checked bounds, named properties, state/transition counts, outcomes, counterexample traces and their disposition, and implementation mappings. Record excluded properties and intentional liveness limits alongside successes.
 
-Keep the existing functional tests. Concrete regression and browser evidence supplements these models, but neither substitutes for the other. Cryptographic proof, independent audit, whole-profile rollback resistance, endpoint secrecy, full implementation refinement, and deployment correctness remain outside the executed bounded analysis.
-
-## Source map
-
-- [Secure-room contract](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/docs/SECURE_ROOM_PROTOCOL_V4.md)
-- [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureRelayV4.ts)
-- [Participant controller](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomController.ts)
-- [Participant engine](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/participant/secureRoomEngine.ts)
-- [Application reducer](https://github.com/slee1996/pillowfort/blob/c726c5eccafacb6fe6c881be3fcc174287c2f86f/src/secureGameReducer.ts)
+Implementation references: [Secure-room contract](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/SECURE_ROOM_PROTOCOL_V4.md), [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureRelayV4.ts), [Participant controller](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomController.ts), [Participant engine](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomEngine.ts), [Application reducer](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureGameReducer.ts).

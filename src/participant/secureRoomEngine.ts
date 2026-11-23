@@ -260,7 +260,7 @@ export interface SecureRoomInboundCommitInspection {
 }
 
 export type SecureRoomRelayControlCompletionV1 =
-  | { kind: "member-lifecycle"; deviceId: string; status: "retired" }
+  | { kind: "retire-member-accepted"; requestId: string }
   | { kind: "host-changed"; deviceId: string }
   | { kind: "host-transfer-expired"; authorizationId: string }
   | { kind: "room-retired" };
@@ -745,6 +745,11 @@ export class SecureRoomEngine {
     return cloneSecureRoomPendingOutboxV1(this.durable.pendingOutbox);
   }
 
+  get hasPendingRetirement(): boolean {
+    this.assertUsable();
+    return this.durable.pendingRelayControls.some(control => control.kind === "retire-member");
+  }
+
   get pendingRelayControls(): readonly SecureRoomPendingRelayControlV1[] {
     this.assertUsable();
     return cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
@@ -926,7 +931,7 @@ export class SecureRoomEngine {
     // replays the exact marker on resume, while the restored roster already
     // proves that the target has been erased. Retaining the marker is
     // idempotent and lets the controller bind a pending commit retry (or wait
-    // for the authoritative retired lifecycle) without resurrecting the leaf.
+    // for the exact retire-member request ACK) without resurrecting the leaf.
     this.retirementBarriers.set(barrier.deviceId, barrier.admissionCommitMessageId);
     return true;
   }
@@ -2000,12 +2005,15 @@ export class SecureRoomEngine {
       await this.persistDurable(this.nextDurable(undefined, { pendingRelayControls }));
       return;
     }
-    if (canonicalBase64UrlByteLength(completion.deviceId) !== SECURE_DEVICE_ID_BYTES) {
-      throw new SecureRoomEngineError("invalid-input", "invalid relay-control completion device");
+    const validBinding = completion.kind === "retire-member-accepted"
+      ? canonicalBase64UrlByteLength(completion.requestId) === SECURE_MESSAGE_ID_BYTES
+      : completion.kind === "host-changed" && canonicalBase64UrlByteLength(completion.deviceId) === SECURE_DEVICE_ID_BYTES;
+    if (!validBinding) {
+      throw new SecureRoomEngineError("invalid-input", "invalid relay-control completion binding");
     }
     const pendingRelayControls = cloneSecureRoomPendingRelayControlsV1(this.durable.pendingRelayControls);
-    const index = pendingRelayControls.findIndex((control) => completion.kind === "member-lifecycle"
-      ? control.kind === "retire-member" && control.deviceId === completion.deviceId
+    const index = pendingRelayControls.findIndex((control) => completion.kind === "retire-member-accepted"
+      ? control.kind === "retire-member" && control.requestId === completion.requestId
       : control.kind === "transfer-host" && control.targetDeviceId === completion.deviceId);
     if (index < 0) throw new SecureRoomEngineError("invalid-input", "matching relay control is not pending");
     pendingRelayControls.splice(index, 1);

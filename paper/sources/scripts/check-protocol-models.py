@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jar", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--model", help="run only configurations for this TLA+ module")
     args = parser.parse_args()
     jar = args.jar.resolve()
     if hashlib.sha256(jar.read_bytes()).hexdigest() != JAR_SHA256:
@@ -34,10 +35,23 @@ def main():
                  [("M1Delivery", "Persistence"), ("M1Delivery", "Grant"), ("M1Delivery", "Preview"),
                   ("M2Admission", "KeyReuse"), ("M3Resume", "Snapshot"), ("M4Succession", "Target")]]
     profiles += [("mutation-Interlock", "Coordination", 1, 1, "Interlock", 2, 8)]
+    coupled = "ResumeAcrossSuccession"
+    witnesses = {"witness-RecoveredGuest": "NoRecoveredGuest", "witness-SecondRecovery": "NoSecondRecovery"}
+    profiles += [(name, coupled, 1, 1, mutation, None, None) for name, mutation in
+                 [(coupled, "None"), ("mutation-ResumeSnapshot", "Snapshot"),
+                  ("mutation-StaleEnd", "StaleEnd"), ("witness-RecoveredGuest", "None")]]
+    profiles += [(name, "RepeatedResume", 1, 1, mutation, None, None) for name, mutation in
+                 [("RepeatedResume", "None"), ("mutation-OldCompletion", "OldCompletion"),
+                  ("mutation-OldAck", "OldAck"), ("witness-SecondRecovery", "None")]]
+    if args.model:
+        profiles = [p for p in profiles if p[1] == args.model]
+        if not profiles:
+            parser.error(f"unknown model: {args.model}")
     results = []
     for name, module, capacity, operations, mutant, stage, depth in profiles:
         config = output / (name + ".cfg")
-        config.write_text("INIT Init\nNEXT Next\nINVARIANT Safety\nCONSTANTS\n"
+        invariants = "Safety" + (" " + witnesses[name] if name in witnesses else "")
+        config.write_text(f"INIT Init\nNEXT Next\nINVARIANTS {invariants}\nCONSTANTS\n"
                           f' Capacity = {capacity}\n MaxOps = {operations}\n Broken = "{mutant}"\n' +
                           (f" Stage = {stage}\n MaxDepth = {depth}\n" if stage is not None else ""))
         with tempfile.TemporaryDirectory(prefix="pillowfort-tlc-") as states:
@@ -47,21 +61,26 @@ def main():
             run = subprocess.run(command, cwd=output, capture_output=True, text=True, timeout=300)
         log = run.stdout + run.stderr
         (output / (name + ".log")).write_text(log)
-        counterexample = "Invariant Safety is violated" in log
+        expected = witnesses.get(name, "Safety" if mutant != "None" else None)
+        match = re.search(r"Invariant (\w+) is violated", log)
+        violated = match[1] if match else None
         exhaustive = "Model checking completed. No error has been found." in log
-        success = counterexample if mutant != "None" else run.returncode == 0 and exhaustive
+        success = (run.returncode == 12 and violated == expected if expected
+                   else run.returncode == 0 and exhaustive)
         counts = re.search(r"([\d,]+) states generated, ([\d,]+) distinct states found", log)
         result = {"name": name, "module": module, "capacity": capacity, "maxOperations": operations,
                   "stage": stage, "maxCompositionSteps": depth, "mutation": mutant,
                   "exitCode": run.returncode, "expectedCounterexample": mutant != "None",
-                  "counterexampleFound": counterexample, "passed": success,
+                  "counterexampleFound": violated == "Safety", "expectedViolation": expected,
+                  "observedViolation": violated, "passed": success,
                   "statesGenerated": int(counts[1].replace(",", "")) if counts else None,
                   "distinctStates": int(counts[2].replace(",", "")) if counts else None,
                   "config": config.name, "log": name + ".log", "command": command}
         results.append(result)
         print(json.dumps(result), flush=True)
         report = {"checker": "TLC 2.19 / tla2tools v1.7.4", "jarSha256": JAR_SHA256,
-                  "platform": platform.platform(), "java": subprocess.run(["java", "-version"], capture_output=True, text=True).stderr,
+                  "selectedModel": args.model, "platform": platform.platform(),
+                  "java": subprocess.run(["java", "-version"], capture_output=True, text=True).stderr,
                   "scope": "Finite coordination safety abstraction; no cryptographic proof, deadlock freedom, fairness or unbounded liveness claim.",
                   "results": results, "passed": len(results) == len(profiles) and all(r["passed"] for r in results)}
         (output / "model-results.json").write_text(json.dumps(report, indent=2) + "\n")
