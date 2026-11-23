@@ -1,0 +1,124 @@
+{
+  "source": "8ba7ab7040da0522a02ea0c222801e2a072efa05",
+  "environment": {
+    "os": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M3 Max",
+    "logicalCpus": 14,
+    "memoryBytes": 38654705664,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "browserAndWorker": {
+    "acceptance-result-unreceived": {
+      "fault": "acceptance-result-unreceived",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    "former-host-removal": {
+      "fault": "former-host-removal",
+      "successorReloads": 2,
+      "sameDevice": true,
+      "exactMarkerReplayed": true,
+      "withheldAcceptedRemoveResult": true,
+      "rosterChangedBeforePeerReplay": true,
+      "successorPolicyAccepted": true,
+      "deliveredBothDirections": true
+    },
+    "guest-resume-after-succession": {
+      "fault": "guest-resume-after-succession",
+      "restoredSameDevice": true,
+      "replay": [
+        "signed acceptance",
+        "snapshot",
+        "terminator",
+        "exact completion",
+        "completion ACK"
+      ],
+      "deliveredBothDirections": true
+    },
+    "peer-storage": {
+      "fault": "peer-membership-storage-failure",
+      "outcome": "affected-peer-failed-closed-other-members-continued",
+      "scope": "A real IndexedDB write failure during delivery of an Add commit; not proof of automatic repair of arbitrary epoch disagreement."
+    },
+    "permanent-no-policy": {
+      "fault": "permanent-no-policy",
+      "boundaryReached": true,
+      "outcome": "room-retired-after-successor-grace",
+      "noOldPolicyReused": true
+    },
+    "persisted-offer": {
+      "fault": "persisted-offer",
+      "sameAuthorizationPolicyTargetAndDeadline": true,
+      "originalTtlMs": 30000,
+      "remainingMsWhenVisible": 24701,
+      "sameDeviceResume": true,
+      "maxConsecutiveCancellations": 1,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    },
+    "planned-then-unplanned": {
+      "fault": "planned-then-unplanned",
+      "formerHostRemainedAdmitted": true,
+      "manualAcceptancePreviewed": true,
+      "freshPolicyBoundToOffer": true,
+      "signedChoices": [
+        "0:reject",
+        "1:accept"
+      ],
+      "deliveredBothDirections": true
+    },
+    "prompt-host-succession": {
+      "fault": "prompt-host-succession",
+      "closeToFirstVisibleOfferMs": 27,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "deliveredBothDirections": true
+    },
+    "removal-before-policy": {
+      "fault": "removal-before-policy",
+      "boundaryReached": true,
+      "outcome": "same-identity-recovery-and-encrypted-delivery",
+      "restoredSameDevice": true
+    },
+    "second-resume": {
+      "fault": "second-resume",
+      "sameDeviceResumes": 2,
+      "staleAckRefusedSend": true,
+      "currentAckReleasedSend": true
+    },
+    "silent-host-loss": {
+      "fault": "silent-host-loss",
+      "observationWindowMs": 150000,
+      "actualSilentObservationMs": 150002,
+      "lossToRelayDetectionMs": null,
+      "rightCensored": true,
+      "forcedCloseToRelayDetectionMs": 7,
+      "relayDetectionToObservedVisibleOfferMs": 16,
+      "transport": "Two loopback TCP legs ACK locally; dropped WebSocket bytes, no forwarded FIN/RST at onset. Not packet-level WAN loss.",
+      "maxConsecutiveCancellations": 0,
+      "signedChoices": [
+        "1:reject",
+        "2:accept"
+      ],
+      "distinctNewHosts": 1,
+      "deliveredBothDirections": true
+    }
+    },
+    "guest-backpressure": {
+      "fault": "guest-backpressure",
+      "retryDelayMs": 5005,
+      "sameDevice": true,
+      "receivedCopies": 1,
+      "deliveredBothDirections": true
+  }
+}

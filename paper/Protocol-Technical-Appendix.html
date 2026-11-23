@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>Pillowfort v4-CS1: Wire Contract and Failure Semantics —
-Evidence edition 8</title>
+Evidence edition 9</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -93,7 +93,7 @@ Evidence edition 8</title>
 id="pillowfort-v4-cs1-wire-contract-and-failure-semantics">Pillowfort
 v4-CS1: Wire Contract and Failure Semantics</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 8 · 22 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 9 · 23 November 2026
 </div>
 <p>This appendix specifies the consent-based succession profile of
 protocol v4. It separates required wire checks, endpoint persistence,
@@ -102,17 +102,16 @@ exact source, executable M1–M4 models, configurations, counterexamples
 for deliberately weakened models, implementation tests, and browser
 measurements. None is an independent security audit or an unbounded
 proof.</p>
-<p><strong>Tested implementation and models:</strong> <a
-href="https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5"><code>f03fa147</code></a>.
+<p><strong>Implementation:</strong> <a
+href="https://github.com/slee1996/pillowfort/tree/8ba7ab7040da0522a02ea0c222801e2a072efa05"><code>8ba7ab70</code></a>.
 The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md">claim-to-test
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Verification-Matrix.md">claim-to-test
 matrix</a>, <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Formal-State-Machine-Analysis.pdf">bounded
-analysis report</a>, and <a
-href="https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip">complete
-evidence bundle</a> identify the checked scope. Retained light-load
-latency and browser-fault records identify their earlier measured
-revision separately.</p>
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Formal-State-Machine-Analysis.pdf">bounded
+analysis</a> and <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json">qualification
+record</a> identify tested contracts and exclusions. Historical fault
+experiments and latency samples retain their original revisions.</p>
 <h2 id="a.-profile-and-interoperability">A. Profile and
 interoperability</h2>
 <p><strong>Profile identifier: <code>pf-v4-cs1</code> (9 November
@@ -434,6 +433,20 @@ same artifact, never silently replace it</td>
 </tr>
 </tbody>
 </table>
+<p>After a handoff, an admitted member can export a new private link.
+Its fragment adds
+<code>host=&lt;roomInstance&gt;.&lt;deviceId&gt;.&lt;signaturePublicKey&gt;</code>
+(canonical unpadded base64url; 16, 16 and 32 bytes). The sharer reads
+the current host from settled signed room state and its credential from
+the MLS roster. Without this field a new join trusts only the
+invitation-authorized founder. With it the joiner retains the exact pin
+with its encrypted KeyPackage, still verifies the founder binding, and
+checks the pinned device and key against the Welcome roster and signed
+bootstrap sender. It never learns its trust anchor from the relay. The
+optional <code>join.expectedHostId</code> lets the relay refuse an
+obsolete link before Add (<code>invitation-host-changed</code>); it is a
+routing guard, not proof of authority. An existing admitted device
+resumes with its own identity, not a new invitation.</p>
 <p>The first-party host approval window is 180 seconds; relay admission
 expires at 185 seconds from joining. Delay consumes the five-second
 completion margin. Expiry does not authorize reuse of the old approval,
@@ -548,6 +561,17 @@ admission mutation: doing so would reject a returning device’s durable
 application before its retry/result reconciliation.</p>
 <h2 id="f.-m4-host-transfer-and-public-sidecars">F. M4 host transfer and
 public sidecars</h2>
+<p>For a planned handoff, a refusal is an ordinary signed, encrypted
+<code>host-transfer</code> application event. Only after the outgoing
+host validates the target’s refusal may its authenticated
+<code>application-decision</code> carry <code>decision:"approve"</code>
+and <code>declinedAuthorizationId</code>. The relay consumes the
+matching outstanding manual offer in the same decision; it does not
+change authority. Duplicate decisions retain the original outcome and
+cannot cancel a later offer. A pending catch expires at the earlier of
+its normal decision deadline and the offer expiry; it cannot transfer
+authority after either. This receipt is not the signed succession
+response used after disconnection.</p>
 <h3 id="f.1-exact-application-content">F.1 Exact application
 content</h3>
 <pre><code>{type:&quot;host-succession-policy&quot;, deviceIds:[...]}
@@ -966,6 +990,41 @@ exact retry; production terminal-screen execution</td>
 </table>
 <h2 id="h.-reproduction-and-measurement-interpretation">H. Reproduction
 and measurement interpretation</h2>
+<h3 id="h.0-edition-9-release-qualification">H.0 Edition 9 release
+qualification</h3>
+<p>The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json">qualification
+record</a> identifies the application and Worker builds, the independent
+clients, and the live checks. For the deployed implementation, check out
+<code>8ba7ab7040da0522a02ea0c222801e2a072efa05</code>. Run
+<code>npm ci</code>, <code>npm --prefix client ci</code>,
+<code>npm --prefix hosted-mcp ci</code>, and install Chromium, Firefox
+and WebKit for the locked Playwright version. Run
+<code>npm run check</code>,
+<code>npm --prefix hosted-mcp run check</code>, then
+<code>NODE_ENV=production npm run build</code>. Use a new output
+directory. The model runner verifies the TLC JAR digest before
+execution.</p>
+<p>Run
+<code>python3 scripts/check-protocol-models.py --jar /path/to/tla2tools.jar --output "$OUT/models"</code>
+and
+<code>bun verification/app/browsers.ts "$OUT/retoss.json" all retoss</code>.
+Install the published <code>@ontologic/pillowfort-agent@2.1.1</code>
+into an isolated directory; set <code>PKG</code> to its installed
+package directory and run
+<code>node "$PKG/scripts/agent.mjs" install-browser</code>. Then
+run:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> game <span class="kw">in</span> fresh-admission ttt rps koth vote saboteur breakout<span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">node</span> verification/app/game-handoff.ts <span class="st">&quot;</span><span class="va">$game</span><span class="st">&quot;</span> <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/</span><span class="va">$game</span><span class="st">.json&quot;</span> <span class="st">&quot;</span><span class="va">$PKG</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> verification/app/agents.ts stdio <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/stdio.json&quot;</span> <span class="st">&quot;</span><span class="va">$PKG</span><span class="st">/scripts/agent.mjs&quot;</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs persisted-offer <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/persisted-offer&quot;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs silent-host-loss <span class="st">&quot;</span><span class="va">$OUT</span><span class="st">/silent-host-loss&quot;</span></span></code></pre></div>
+<p>The edition 9 tagged checkout additionally supplies
+<code>all-decline</code>, the isolated <code>guest-backpressure</code>
+browser cut, and opt-in public acceptance commands. No fault injection
+runs on production. The subsections below identify their own measured
+source; they are not instructions for checking the current revision.</p>
 <h3 id="h.1-retained-model-and-recovery-executions">H.1 Retained model
 and recovery executions</h3>
 <pre><code>git clone https://github.com/slee1996/pillowfort.git
@@ -985,9 +1044,10 @@ measure prompt succession. Each output directory contains its own result
 and environment. The observer case checks its roster before admitting
 any replacement-socket replay; receipt of a frame alone is not the
 assertion.</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> fault <span class="kw">in</span> guest-resume-after-succession second-resume former-host-removal<span class="kw">;</span> <span class="cf">do</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> <span class="st">&quot;</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="at">--output</span> <span class="st">&quot;/tmp/pillowfort-</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> fault <span class="kw">in</span> guest-resume-after-succession second-resume former-host-removal<span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> <span class="st">&quot;</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="at">--output</span> <span class="st">&quot;/tmp/pillowfort-</span><span class="va">$fault</span><span class="st">&quot;</span> <span class="kw">||</span> <span class="bu">exit</span> 1</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span></code></pre></div>
 <p>Use Node/Bun versions required by the lockfiles, Java 21 or
 compatible, the pinned TLC JAR hash enforced by the runner, and Chromium
 for pinned Playwright 1.65.0. The source archive omits the earlier
@@ -1024,10 +1084,10 @@ full sample arrays when comparing estimators.</p>
 <h3 id="h.3-immediate-offers">H.3 Immediate offers</h3>
 <p>Check out <code>0df3215d98139861831c6e3f68eb0b0997c584ad</code> in
 the clone, install the locked dependencies as above, and run:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> test ./test/secure-relay-v4.test.ts</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> prompt-host-succession <span class="at">--output</span> /tmp/pillowfort-offer</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> test ./test/secure-relay-v4.test.ts</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--fault</span> prompt-host-succession <span class="at">--output</span> /tmp/pillowfort-offer</span></code></pre></div>
 <p>The relay tests distinguish immediate offers from the 120-second
 no-recipient recovery window. The browser check closes the host,
 observes the first offer, declines it, accepts the next offer, and
@@ -1052,13 +1112,13 @@ Install the three locked workspaces (<code>npm ci</code>,
 Chromium. Use the SHA-checked TLC JAR from H.1. The <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json">qualification
 record</a> links the logs, environment and limits.</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode sh"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run check</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> <span class="at">--prefix</span> hosted-mcp run check</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> scripts/check-protocol-models.py <span class="at">--jar</span> /tmp/tla2tools-1.7.4.jar <span class="at">--output</span> /tmp/pf-models</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--output</span> /tmp/pf-browsers</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run check</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> <span class="at">--prefix</span> hosted-mcp run check</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> scripts/check-protocol-models.py <span class="at">--jar</span> /tmp/tla2tools-1.7.4.jar <span class="at">--output</span> /tmp/pf-models</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ex">bun</span> scripts/protocol-browser-evidence.ts <span class="at">--mode</span> faults <span class="at">--output</span> /tmp/pf-browsers</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs persisted-offer /tmp/pf-eviction</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> scripts/protocol-workerd-evidence.mjs silent-host-loss /tmp/pf-silent</span></code></pre></div>
 <p>The eviction fixture interrupts the first effect dispatch
 <strong>after</strong> the production room transaction. Miniflare evicts
 the real local Durable Object with both guest sockets hibernated; a

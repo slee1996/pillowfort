@@ -1,8 +1,8 @@
 # Pillowfort: Bounded State-Machine Analysis
 
-*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 8 · 22 November 2026*
+*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 9 · 23 November 2026*
 
-**Status:** TLC 2.19 checked 12 finite safety configurations at [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). All 15 deliberately weakened variants violated their expected invariant. Six unweakened probes reached their recovery or race outcome. These results are not a cryptographic proof, TypeScript refinement, deadlock-freedom result, or guarantee of eventual progress. The companion description is [Pillowfort: An MLS-Based Protocol for Ephemeral Rooms](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-Paper.pdf).
+**Status:** Thirteen finite safety configurations have been checked; 18 deliberate guard weakenings yielded their expected violations and seven unweakened probes reached their designated states. The [edition 9 record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) names the source, bounds and outcomes. None is a cryptographic proof, implementation refinement, deadlock-freedom result or guarantee of eventual progress.
 
 ## Executed analysis
 
@@ -10,6 +10,7 @@
 |---|---:|---:|
 | M1 delivery | 1,186 | 338 |
 | M2 admission | 267 | 122 |
+| Re-offer and re-invitation | 24 | 19 |
 | M3 resume | 24 | 16 |
 | M4 succession | 499 | 201 |
 | Guest resume during handoff | 492 | 214 |
@@ -23,11 +24,11 @@
 
 Standalone models use at most two operation/KeyPackage tokens, backlog capacity two, three succession identities, and before/after deadline regions. Composition uses one operation token and the stated depth bound. Counts are per configuration; they must not be interpreted as disjoint implementation states.
 
-The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Four further mutations delay the first offer, accept a stale socket close, nominate a guest before it completes replay, or renew the deadline during restart. Each produced its expected counterexample.
+The seven original sensitivity checks cover persistence ordering, grant and transfer binding, host preview readiness, KeyPackage reuse, snapshot reconciliation and admission interlocks. The handoff model adds two: accepting a snapshot without signed authority, and accepting an obsolete backlog end. The two-socket model adds two more: accepting a completion from the old socket and releasing the guest on the old ACK. Four further mutations delay the first offer, accept a stale socket close, nominate a guest before it completes replay, or renew the deadline during restart. Each produced its expected counterexample. The `Reinvite` model adds three checks: consuming a second offer with the first refusal receipt, replacing the stored invitation anchor on restore, and accepting a bootstrap from another admitted signer. Its positive witness activates a restored guest under the successor after a delayed refusal receipt.
 
 Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
 
-Exact models, configurations, tool identity, commands and traces are in `evidence/qualification-r8/models/` in the [public evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Pillowfort-Protocol-v4-CS1-Evidence.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact model sources, configurations and traces are included in the [edition 9 evidence bundle](https://raw.githubusercontent.com/slee1996/pillowfort/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Pillowfort-Protocol-v4-CS1-R9.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
 Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 

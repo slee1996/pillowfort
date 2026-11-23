@@ -52,9 +52,12 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/pf-npm" --ignore-scripts --no-audit --no-fund https://registry.npmjs.org/@ontologic/pillowfort-agent/-/pillowfort-agent-2.1.1.tgz
           pkg="$RUNNER_TEMP/pf-npm/node_modules/@ontologic/pillowfort-agent"
           node "$pkg/scripts/agent.mjs" install-browser
-          for scenario in fresh-admission saboteur; do
+          for scenario in fresh-admission saboteur all-decline; do
             node verification/app/game-handoff.ts "$scenario" "$RUNNER_TEMP/$scenario.json" "$pkg"
           done
+
+      - name: Verify a throttled participant resumes without duplicating delivery
+        run: bun scripts/protocol-browser-evidence.ts --mode faults --fault guest-backpressure --output "$RUNNER_TEMP/guest-backpressure"
 
       - name: Verify a committed host offer across Worker eviction
         run: node scripts/protocol-workerd-evidence.mjs persisted-offer "$RUNNER_TEMP/pillowfort-offer"

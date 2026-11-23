@@ -1,10 +1,10 @@
-// Explicitly opt in: occupies one otherwise-unused production lease for 125 seconds. Never creates a room.
+// Opt-in production lifetime probes: one otherwise-unused participant, no room.
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { setTimeout as wait } from "node:timers/promises";
-const [mode, output] = process.argv.slice(2);
-if (mode !== "--production" || !output)
-  throw Error("Usage: node verification/app/idle.mjs --production OUTPUT");
+const [mode, output, policy = "idle"] = process.argv.slice(2);
+if (mode !== "--production" || !output || !["idle", "absolute"].includes(policy))
+  throw Error("Usage: node verification/app/idle.mjs --production OUTPUT [idle|absolute]");
 const issuer = "https://mcp.pillowfort.xyz",
   version = "2026-07-28";
 const preflight = async () => (await (await fetch(issuer + "/preflight")).json()).quota;
@@ -58,9 +58,22 @@ try {
   assert.equal(before, 200);
   assert.equal(observed.result.structuredContent.ok, true);
   const start = Date.now();
-  await wait(125000);
+  if (policy === "absolute") {
+    // Scheduled observations are ordinary authenticated reads: the participant
+    // must remain live well past idle expiry, but the absolute limit must win.
+    result.successfulActiveReads = 0;
+    for (const seconds of [75, 150, 225, 300, 375, 450, 525, 585]) {
+      await wait(Math.max(0, start + seconds * 1000 - Date.now()));
+      const [status, reply] = await call("session_observe", { session });
+      assert.equal(status, 200);
+      assert.equal(reply.result.structuredContent.ok, true);
+      result.successfulActiveReads++;
+      result.lastLiveSeconds = Math.floor((Date.now() - start) / 1000);
+    }
+    await wait(Math.max(0, start + 605000 - Date.now()));
+  } else await wait(125000);
   const [after, lost] = await call("session_observe", { session });
-  result.secondsIdle = Math.floor((Date.now() - start) / 1000);
+  result[policy === "absolute" ? "elapsedSeconds" : "secondsIdle"] = Math.floor((Date.now() - start) / 1000);
   result.status = after;
   result.identityRestorable = lost.error?.data?.identityRestorable;
   assert.equal(after, 404);

@@ -61,4 +61,6 @@ The first cut discards the initial post-commit dispatch and evicts the real Dura
 
 Standalone models use at most two operation/KeyPackage tokens, backlog capacities up to two and three succession identities. Time is abstracted into relevant deadline regions. The composition checks bounded prefixes; it is not a refinement proof of the TypeScript implementation. Cryptographic correctness, malicious endpoint equivocation, full host/epoch view agreement, all historical-marker identities, repeated arbitrary reconnects, deadlock freedom, fairness, unbounded liveness and physical storage durability remain outside this analysis. The coverage matrix marks those exclusions rather than treating every property in the broader plan as proved.
 
+The `guest-backpressure` cut intercepts one ordinary guest ACK on loopback, not a flood. It emulates the relay’s limit response and close, waits for authenticated recovery, and checks that the exact original device can exchange fresh chat without displaying the replayed delivery twice. It is never enabled in production.
+
 The relay regressions and actual browser fault script are separate evidence. Run their documented commands rather than inferring an implementation pass from TLC results.

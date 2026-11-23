@@ -1,6 +1,6 @@
-# Protocol v4-CS1 verification matrix — evidence edition 8
+# Protocol v4-CS1 verification matrix — evidence edition 9
 
-Current source: [`f03fa147`](https://github.com/slee1996/pillowfort/tree/f03fa147f79847dda5dac5b0a8ed37c8d040cee5). [Qualification records](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) cover the bounded models, implementation gates and local browser/Worker faults. Rows below distinguish executable evidence from assumptions. Both deployed Workers passed [live checks](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/deployment.json). Earlier measurements retain their original attribution.
+Current source: [`8ba7ab70`](https://github.com/slee1996/pillowfort/tree/8ba7ab7040da0522a02ea0c222801e2a072efa05). [Edition 9 results](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r9/paper/evidence/qualification-r9/qualification.json) cover the M2/M4 re-invitation boundary, browser and Worker recovery cuts and participant journeys. The [previous qualification](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r8/paper/evidence/qualification-r8/qualification.json) retains historical measurements at their own revisions.
 
 | Plan obligation | Model coverage | Concrete implementation evidence | Explicit exclusion |
 |---|---|---|---|
