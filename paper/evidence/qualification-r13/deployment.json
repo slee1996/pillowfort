@@ -1,0 +1,208 @@
+{
+  "runtime": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "pullRequest": {
+    "headRefOid": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+    "mergeCommit": {
+      "oid": "07d9040ccb8329d56c20a2a2663924265cc2704f"
+    },
+    "mergedAt": "2026-11-23T21:09:55Z",
+    "state": "MERGED",
+    "url": "https://github.com/slee1996/pillowfort/pull/29"
+  },
+  "requiredChecks": [
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010786367",
+      "name": "check",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010785260",
+      "name": "protocol-models",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010785852",
+      "name": "hosted-mcp",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265383410/job/138010786125",
+      "name": "dependency-audit",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010733058",
+      "name": "check",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010732598",
+      "name": "protocol-models",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010733150",
+      "name": "hosted-mcp",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    },
+    {
+      "link": "https://github.com/slee1996/pillowfort/actions/runs/45265369961/job/138010732822",
+      "name": "dependency-audit",
+      "state": "SUCCESS",
+      "workflow": "Release check"
+    }
+  ],
+  "rollout": {
+    "app": {
+      "before": {
+        "created_on": "2026-11-23T20:46:51.164903Z",
+        "versions": [
+          {
+            "version_id": "749f28d6-6801-4628-9d75-dea467328766",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T21:10:06.605171Z",
+        "versions": [
+          {
+            "version_id": "9c5afd21-3dc5-465d-942a-a05bcbe9436d",
+            "percentage": 100
+          }
+        ]
+      }
+    },
+    "hosted": {
+      "before": {
+        "created_on": "2026-11-23T20:47:19.000053Z",
+        "versions": [
+          {
+            "version_id": "91ddc8e9-b427-4e06-81b3-a3f2deee38da",
+            "percentage": 100
+          }
+        ]
+      },
+      "after": {
+        "created_on": "2026-11-23T21:10:16.881344Z",
+        "versions": [
+          {
+            "version_id": "5dcddfba-ec56-428e-86c1-38516e404261",
+            "percentage": 100
+          }
+        ]
+      }
+    }
+  },
+  "publicBytes": [
+    {
+      "asset": "/assets/index-DZeI2l0x.css",
+      "bytes": 54756,
+      "sha256": "09c00245cfb53f5580da79bfcd23bfbf109467d642c33af5b3b21f76696ec4d6"
+    },
+    {
+      "asset": "/assets/index-LmbDTvfx.js",
+      "bytes": 742594,
+      "sha256": "2337f00c6c73d128b42ae1e4a165df8992833f0a3d3bedcdf5544b943953c75a"
+    },
+    {
+      "asset": "/assets/pillowfort_openmls_bg-BxD-mDtq.wasm",
+      "bytes": 1132383,
+      "sha256": "6cbbe00c300191247272031c754bb2e1d2013ab9ff52e0f6c615712a2bb35a94"
+    }
+  ],
+  "ordinaryPrivateRoom": [
+    {
+      "host": "chromium",
+      "guest": "firefox",
+      "retoss": true,
+      "versions": [
+        "158.0.8127.18",
+        "159.0"
+      ],
+      "hostChangeFrames": {
+        "host": 1,
+        "guest": 1
+      },
+      "resumePhases": [
+        {
+          "phase": "authentication-sent",
+          "elapsedMs": 10852
+        },
+        {
+          "phase": "authenticated",
+          "elapsedMs": 10950
+        },
+        {
+          "phase": "room-state-snapshot",
+          "elapsedMs": 10950
+        },
+        {
+          "phase": "backlog-end",
+          "elapsedMs": 10950
+        },
+        {
+          "phase": "completion-sent",
+          "elapsedMs": 10973
+        },
+        {
+          "phase": "current-socket-completion-ack",
+          "elapsedMs": 11053
+        },
+        {
+          "phase": "guest-applied-host-chat",
+          "elapsedMs": 12023
+        },
+        {
+          "phase": "host-applied-guest-chat",
+          "elapsedMs": 12831
+        }
+      ],
+      "failureTrace": [],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host admits from a fresh member-exported link",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    }
+  ],
+  "hostedPrivateRoom": {
+    "mode": "hosted",
+    "passed": [
+      "native focused/full selection and preflight",
+      "authenticated discovery / guides / prompts",
+      "native encrypted host",
+      "exact admission",
+      "original name visible in chat but absent from new guest's mention resource",
+      "subscribe and reconcile baseline",
+      "cancel independent Task",
+      "notification-driven private read and reply",
+      "independent Task fan-out and cursor read",
+      "cancel listen without losing identity",
+      "encrypted drawing and browser PNG export",
+      "terminal room observation",
+      "participant closed",
+      "grant revoked"
+    ],
+    "errors": [],
+    "counts": {
+      "catalog": 61
+    }
+  },
+  "productionFaultInjection": false
+}

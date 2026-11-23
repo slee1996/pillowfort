@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pillowfort: Bounded State-Machine Analysis</title>
+  <title>Pillowfort: Safety of the Room State Machines</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -24,19 +24,70 @@
   <link rel="stylesheet" href="assets/paper.css" />
 </head>
 <body>
-<h1 id="pillowfort-bounded-state-machine-analysis">Pillowfort: Bounded
-State-Machine Analysis</h1>
-<p><em>Bounded coordination analysis · Protocol v4-CS1 · Evidence
-edition 12 · 23 November 2026</em></p>
-<p><strong>Status:</strong> Eighteen finite configurations passed; 34
-deliberately weakened configurations yielded their expected violations
-and eleven unweakened reachability checks reached their targets. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json">qualification
-record</a> identifies each configuration, tested revision, and bound.
-Two models check progress under fair scheduling; neither they nor the
-safety checks prove implementation refinement, cryptography, or
-whole-protocol liveness.</p>
-<h2 id="executed-analysis">Executed analysis</h2>
+<h1 id="pillowfort-safety-of-the-room-state-machines">Pillowfort: Safety
+of the Room State Machines</h1>
+<p><em>Induction and finite exploration · Protocol v4-CS1 · Evidence
+edition 13 · 23 November 2026</em></p>
+<p>For each of the four model machines, we prove that its initial state
+satisfies an invariant and that each permitted step preserves it. A
+product step either takes the corresponding component step or leaves
+that component unchanged. Along with the product’s own send interlock,
+this establishes <strong>safety at every step</strong>, not a promise
+that any particular step will occur. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/induction.json">Proof
+record</a>.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">Machine</th>
+<th style="text-align: left;">What the induction preserves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">M1: delivery</td>
+<td style="text-align: left;">A send follows storage; grants belong to
+the current connection; prefix acknowledgment follows application.</td>
+</tr>
+<tr>
+<td style="text-align: left;">M2: admission</td>
+<td style="text-align: left;">Activation follows approval, a stored Add,
+Welcome and proof. A reserved key token is not reused.</td>
+</tr>
+<tr>
+<td style="text-align: left;">M3: resume</td>
+<td style="text-align: left;">Reconciled replay precedes completion; the
+replacement connection cannot become ready without its matching
+acknowledgment.</td>
+</tr>
+<tr>
+<td style="text-align: left;">M4: succession</td>
+<td style="text-align: left;">An offer fences rather than promotes. A
+switch consumes the nominated member’s stored acceptance, discards the
+old policy and initiates removal.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Composition</td>
+<td style="text-align: left;">Every product transition projects to a
+permitted action or stutter in each component; ordinary sends obey the
+enabled interlocks.</td>
+</tr>
+</tbody>
+</table>
+<p>The proof quantifies over all natural operation and backlog bounds
+and all trace lengths. It does <strong>not</strong> turn three modeled
+succession identities into an arbitrary roster or one modeled
+replacement into unbounded socket churn. <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/guards.json">Concrete
+guard equivalence</a> covers selected decisions in the source. Storage,
+cryptography and unexamined control flow are not proved by that
+equivalence.</p>
+<h2 id="finite-exploration-and-reachable-failure-schedules">Finite
+exploration and reachable failure schedules</h2>
 <table>
 <colgroup>
 <col style="width: 27%" />
@@ -190,11 +241,11 @@ replay, and refusal followed by another candidate’s acceptance. None
 establishes that all executions terminate. Focused models are not
 multiplied into the composed state count.</p>
 <p>Exact model sources, configurations and traces are included in the <a
-href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r12/Pillowfort-Protocol-v4-CS1-R12.zip">edition
-12 evidence bundle</a>. The <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Technical-Appendix.pdf">technical
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r13/Pillowfort-Protocol-v4-CS1-R13.zip">evidence
+bundle</a>. The <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Technical-Appendix.pdf">technical
 appendix</a> specifies concrete fields and transitions; the <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Verification-Matrix.md">verification
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md">verification
 matrix</a> distinguishes model coverage from implementation tests and
 unmodeled obligations. The reduced M3 model omits concrete
 historical-removal IDs and receive-before-close event scheduling; the
@@ -616,16 +667,16 @@ configurations, abstraction assumptions, checked bounds, named
 properties, state/transition counts, outcomes, counterexample traces and
 their disposition, and implementation mappings. Record excluded
 properties and intentional liveness limits alongside successes.</p>
-<p>Implementation references: <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/SECURE_ROOM_PROTOCOL_V4.md">Secure-room
+<p>Deployed implementation: <a
+href="https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/docs/SECURE_ROOM_PROTOCOL_V4.md">Secure-room
 contract</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureRelayV4.ts">Relay
+href="https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/secureRelayV4.ts">Relay
 types and transitions</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomController.ts">Participant
+href="https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/participant/secureRoomController.ts">Participant
 controller</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomEngine.ts">Participant
+href="https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/participant/secureRoomEngine.ts">Participant
 engine</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureGameReducer.ts">Application
+href="https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/secureGameReducer.ts">Application
 reducer</a>.</p>
 </body>
 </html>

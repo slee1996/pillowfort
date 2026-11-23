@@ -1,0 +1,254 @@
+{
+  "runtime": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "redSource": "1ea3a4fed6783d273117811059922842512939f8",
+  "red": [
+    {
+      "case": "second-resume",
+      "observation": "Resume discarded a draft before accepting it for delivery",
+      "exit": 1
+    },
+    {
+      "case": "succession-during-leave",
+      "observation": "Second candidate never got a choice within the test window after explicit refusal; no signed response observed.",
+      "exit": 1
+    }
+  ],
+  "green": [
+    {
+      "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "benchmarks": [],
+      "faults": [
+        {
+          "fault": "second-resume",
+          "sameDeviceResumes": 2,
+          "staleAckRefusedSend": true,
+          "draftRetainedBeforeCurrentAck": true,
+          "currentAckReleasedSend": true,
+          "peerCopiesAfterExplicitResubmission": 1
+        }
+      ],
+      "passed": true
+    },
+    {
+      "scope": "Actual local Bun relay, production browser bundle, WebSockets, MLS and IndexedDB. Not WAN or production capacity.",
+      "environment": {
+        "os": "darwin",
+        "release": "27.0.0",
+        "cpu": "Apple M3 Max",
+        "logicalCpus": 14,
+        "memoryBytes": 38654705664,
+        "bun": "1.4.4",
+        "playwright": "1.65.0",
+        "chromium": "158.0.8127.18"
+      },
+      "benchmarks": [],
+      "faults": [
+        {
+          "fault": "succession-during-leave",
+          "removalUnsentAtHostLoss": true,
+          "signedChoices": [
+            "1:reject",
+            "2:accept"
+          ],
+          "survivingMembers": 2,
+          "ordinaryChatBothDirections": true
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "crossEngine": [
+    {
+      "host": "chromium",
+      "guest": "firefox",
+      "retoss": true,
+      "versions": [
+        "158.0.8127.18",
+        "159.0"
+      ],
+      "hostChangeFrames": {
+        "host": 1,
+        "guest": 1
+      },
+      "resumePhases": [
+        {
+          "phase": "authentication-sent",
+          "elapsedMs": 2743
+        },
+        {
+          "phase": "authenticated",
+          "elapsedMs": 2744
+        },
+        {
+          "phase": "room-state-snapshot",
+          "elapsedMs": 2744
+        },
+        {
+          "phase": "backlog-end",
+          "elapsedMs": 2744
+        },
+        {
+          "phase": "completion-sent",
+          "elapsedMs": 2771
+        },
+        {
+          "phase": "current-socket-completion-ack",
+          "elapsedMs": 2771
+        },
+        {
+          "phase": "guest-applied-host-chat",
+          "elapsedMs": 2920
+        },
+        {
+          "phase": "host-applied-guest-chat",
+          "elapsedMs": 2978
+        }
+      ],
+      "failureTrace": [],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host admits from a fresh member-exported link",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "firefox",
+      "guest": "webkit",
+      "retoss": true,
+      "versions": [
+        "159.0",
+        "27.2"
+      ],
+      "hostChangeFrames": {
+        "host": 1,
+        "guest": 1
+      },
+      "resumePhases": [
+        {
+          "phase": "authentication-sent",
+          "elapsedMs": 3081
+        },
+        {
+          "phase": "authenticated",
+          "elapsedMs": 3083
+        },
+        {
+          "phase": "room-state-snapshot",
+          "elapsedMs": 3083
+        },
+        {
+          "phase": "backlog-end",
+          "elapsedMs": 3083
+        },
+        {
+          "phase": "completion-sent",
+          "elapsedMs": 3196
+        },
+        {
+          "phase": "current-socket-completion-ack",
+          "elapsedMs": 3204
+        },
+        {
+          "phase": "guest-applied-host-chat",
+          "elapsedMs": 3283
+        },
+        {
+          "phase": "host-applied-guest-chat",
+          "elapsedMs": 3343
+        }
+      ],
+      "failureTrace": [],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    },
+    {
+      "host": "webkit",
+      "guest": "chromium",
+      "retoss": true,
+      "versions": [
+        "27.2",
+        "158.0.8127.18"
+      ],
+      "hostChangeFrames": {
+        "host": 1,
+        "guest": 1
+      },
+      "resumePhases": [
+        {
+          "phase": "authentication-sent",
+          "elapsedMs": 4469
+        },
+        {
+          "phase": "authenticated",
+          "elapsedMs": 4471
+        },
+        {
+          "phase": "room-state-snapshot",
+          "elapsedMs": 4471
+        },
+        {
+          "phase": "backlog-end",
+          "elapsedMs": 4471
+        },
+        {
+          "phase": "completion-sent",
+          "elapsedMs": 4571
+        },
+        {
+          "phase": "current-socket-completion-ack",
+          "elapsedMs": 4574
+        },
+        {
+          "phase": "guest-applied-host-chat",
+          "elapsedMs": 4698
+        },
+        {
+          "phase": "host-applied-guest-chat",
+          "elapsedMs": 4816
+        }
+      ],
+      "failureTrace": [],
+      "passed": [
+        "create and retain own password",
+        "private invite and masked password",
+        "admit and withhold earlier content",
+        "styled mention while away from chat and private reply",
+        "away presence reaches the other device",
+        "export transcript and clear only one copy",
+        "reopen stored guest and exchange fresh chat",
+        "refuse, re-offer, then catch without evicting the host",
+        "new host retires the room for all participants"
+      ],
+      "errors": []
+    }
+  ],
+  "limits": "The historical production guest timeout had no phase-specific frames. These cases demonstrate defects and their repairs, not the unique cause of that earlier timeout. Faults were tested only on loopback. A locally queued send is not a peer receipt."
+}

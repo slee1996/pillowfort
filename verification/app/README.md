@@ -6,6 +6,8 @@ The [edition 9 protocol qualification](https://github.com/slee1996/pillowfort/bl
 
 [Edition 11](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r11/paper/evidence/qualification-r11/qualification.json) covers restart during delivery of an idle-room closure and fresh admission after a guest loses its keys. Interrupted delivery was tested only in a local Worker; production evidence is reported separately.
 
+The [current release](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/deployment.json) also records a matching resume receipt followed by applied encrypted traffic at each peer. A [four-person private room](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/participants.json) exercised explicit refusal and acceptance during an unfinished membership removal. The production test uses normal room actions, not fault injection.
+
 ## Earlier app-wide baseline (before the protocol repairs)
 
 **Disposition: hold app-wide sign-off.** Ordinary room creation, chat, games and host handoff work in the tested environments. Two adjacent lifecycle paths do not. A passing protocol model or release gate is not evidence that either path works.

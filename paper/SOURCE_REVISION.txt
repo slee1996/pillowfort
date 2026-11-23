@@ -1,3 +1,15 @@
+Evidence edition 13; protocol v4; profile pf-v4-cs1.
+Release source, production participants and both runtime regression tests: ccc195d8c069eeec5ff7190009837c6b93039deb
+https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb
+Inductive proof modules, TypeScript decision checker and proof workflow: f5404890bfc142fdb513d6b952595c49f063a6e4
+https://github.com/slee1996/pillowfort/tree/f5404890bfc142fdb513d6b952595c49f063a6e4
+The model relations and proof files do not change the deployed protocol. The 24 detector trials retain their edition-12 revisions; no physical laptop was suspended. See their trial record for the browser, Worker and fixture commits.
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-23-r13
+Current results, source archive digests and reproduction commands: evidence/qualification-r13/qualification.json
+The ZIP includes sources/runtime-ccc195d8c0.tar.gz, sources/method-f5404890bf.tar.gz, proof logs, machine-readable guards, full recorded timing trials, and SHA256SUMS.
+
+Historical edition 12 provenance (unchanged):
+
 Evidence edition 12; protocol v4; profile pf-v4-cs1.
 Release source, private Worker, models and terminal-storage browser: cbd7977df9df29bb6e80baf34a3f32b9f4dc4708
 https://github.com/slee1996/pillowfort/tree/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708

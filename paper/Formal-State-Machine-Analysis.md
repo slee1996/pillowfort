@@ -1,10 +1,20 @@
-# Pillowfort: Bounded State-Machine Analysis
+# Pillowfort: Safety of the Room State Machines
 
-*Bounded coordination analysis · Protocol v4-CS1 · Evidence edition 12 · 23 November 2026*
+*Induction and finite exploration · Protocol v4-CS1 · Evidence edition 13 · 23 November 2026*
 
-**Status:** Eighteen finite configurations passed; 34 deliberately weakened configurations yielded their expected violations and eleven unweakened reachability checks reached their targets. The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/qualification.json) identifies each configuration, tested revision, and bound. Two models check progress under fair scheduling; neither they nor the safety checks prove implementation refinement, cryptography, or whole-protocol liveness.
+For each of the four model machines, we prove that its initial state satisfies an invariant and that each permitted step preserves it. A product step either takes the corresponding component step or leaves that component unchanged. Along with the product’s own send interlock, this establishes **safety at every step**, not a promise that any particular step will occur. [Proof record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/induction.json).
 
-## Executed analysis
+| Machine | What the induction preserves |
+|:--|:--|
+| M1: delivery | A send follows storage; grants belong to the current connection; prefix acknowledgment follows application. |
+| M2: admission | Activation follows approval, a stored Add, Welcome and proof. A reserved key token is not reused. |
+| M3: resume | Reconciled replay precedes completion; the replacement connection cannot become ready without its matching acknowledgment. |
+| M4: succession | An offer fences rather than promotes. A switch consumes the nominated member’s stored acceptance, discards the old policy and initiates removal. |
+| Composition | Every product transition projects to a permitted action or stutter in each component; ordinary sends obey the enabled interlocks. |
+
+The proof quantifies over all natural operation and backlog bounds and all trace lengths. It does **not** turn three modeled succession identities into an arbitrary roster or one modeled replacement into unbounded socket churn. [Concrete guard equivalence](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/guards.json) covers selected decisions in the source. Storage, cryptography and unexamined control flow are not proved by that equivalence.
+
+## Finite exploration and reachable failure schedules
 
 | Configuration | Generated states | Distinct states |
 |---|---:|---:|
@@ -37,7 +47,7 @@ The seven original sensitivity checks cover persistence ordering, grant and tran
 
 Reachability probes answer a different question: can the unmodified model make progress? Two traces recover a guest under a successor or on its second connection. Four more reach host-first recovery despite a stale close, guest-first nomination without promotion, acceptance after replay, and refusal followed by another candidate’s acceptance. None establishes that all executions terminate. Focused models are not multiplied into the composed state count.
 
-Exact model sources, configurations and traces are included in the [edition 12 evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r12/Pillowfort-Protocol-v4-CS1-R12.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
+Exact model sources, configurations and traces are included in the [evidence bundle](https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r13/Pillowfort-Protocol-v4-CS1-R13.zip). The [technical appendix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Technical-Appendix.pdf) specifies concrete fields and transitions; the [verification matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/Protocol-Verification-Matrix.md) distinguishes model coverage from implementation tests and unmodeled obligations. The reduced M3 model omits concrete historical-removal IDs and receive-before-close event scheduling; the composition does not establish consensus among arbitrary client host/epoch views.
 
 Browser faults exposed implementation states absent from TLC: a completion ID that outlived its socket, cleanup discarded on roster absence, and reconsumption of an already-applied Remove immediately after close. The model traces and implementation regressions are distinct evidence. The earlier restored-application and explicit-shutdown regressions remain in the artifact.
 
@@ -196,4 +206,4 @@ For each trace, distinguish model error, implementation error and an explicit li
 
 **A completed analysis must publish:** the source snapshot, readable specifications, exact TLC/tool versions and configurations, abstraction assumptions, checked bounds, named properties, state/transition counts, outcomes, counterexample traces and their disposition, and implementation mappings. Record excluded properties and intentional liveness limits alongside successes.
 
-Implementation references: [Secure-room contract](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/docs/SECURE_ROOM_PROTOCOL_V4.md), [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureRelayV4.ts), [Participant controller](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomController.ts), [Participant engine](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/participant/secureRoomEngine.ts), [Application reducer](https://github.com/slee1996/pillowfort/blob/1ba68f2361636ebfd9cd2a9d5509a621a7f1d22b/src/secureGameReducer.ts).
+Deployed implementation: [Secure-room contract](https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/docs/SECURE_ROOM_PROTOCOL_V4.md), [Relay types and transitions](https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/secureRelayV4.ts), [Participant controller](https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/participant/secureRoomController.ts), [Participant engine](https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/participant/secureRoomEngine.ts), [Application reducer](https://github.com/slee1996/pillowfort/blob/ccc195d8c069eeec5ff7190009837c6b93039deb/src/secureGameReducer.ts).
