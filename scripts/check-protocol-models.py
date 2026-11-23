@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--jar", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", help="run only configurations for this TLA+ module")
+    parser.add_argument("--case", help="run one named configuration")
     args = parser.parse_args()
     jar = args.jar.resolve()
     if hashlib.sha256(jar.read_bytes()).hexdigest() != JAR_SHA256:
@@ -30,7 +31,8 @@ def main():
                 ["M1Delivery", "M2Admission", "M3Resume", "M4Succession"]]
     profiles += [(f"composed-M1-M{stage}", "Coordination", 1, 1, "None", stage, 12)
                  for stage in range(1, 5)]
-    profiles += [("composed-larger-backlog", "Coordination", 2, 1, "None", 4, 16)]
+    profiles += [("composed-larger-backlog", "Coordination", 2, 1, "None", 4, 16),
+                 ("composed-full-finite", "Coordination", 1, 1, "None", 4, 0)]
     profiles += [(f"mutation-{mutation}", module, 2, 2, mutation, None, None) for module, mutation in
                  [("M1Delivery", "Persistence"), ("M1Delivery", "Grant"), ("M1Delivery", "Preview"),
                   ("M2Admission", "KeyReuse"), ("M3Resume", "Snapshot"), ("M4Succession", "Target"),
@@ -65,10 +67,20 @@ def main():
                  [("IdleRetirement", "None"), ("mutation-NoMarker", "NoMarker"), ("mutation-NoWake", "NoWake"),
                   ("mutation-AnyDevice", "AnyDevice"), ("mutation-AnyConnection", "AnyConnection"),
                   ("mutation-Unauthenticated", "Unauthenticated"), ("witness-RecoveredIdlePrefix", "None")]]
+    witnesses.update({"witness-RecoveredRejection": "NoRecoveredRejection", "witness-TwoHistoricalRemovals": "NoTwoHistoricalRemovals"})
+    for module, mutations, witness in [("OutcomeRecovery", ("Rewrite", "OtherOutcome", "RewindRatchet"), "RecoveredRejection"),
+                                       ("HistoricalCleanup", ("OldRetire", "LifecycleReceipt", "MissingMarker", "EarlyClose"), "TwoHistoricalRemovals")]:
+        profiles.append((module, module, 2, 2, "None", None, None))
+        profiles.extend(("mutation-" + m, module, 2, 2, m, None, None) for m in mutations)
+        profiles.append(("witness-" + witness, module, 2, 2, "None", None, None))
     if args.model:
         profiles = [p for p in profiles if p[1] == args.model]
         if not profiles:
             parser.error(f"unknown model: {args.model}")
+    if args.case:
+        profiles = [p for p in profiles if p[0] == args.case]
+        if not profiles:
+            parser.error(f"unknown configuration: {args.case}")
     results = []
     for name, module, capacity, operations, mutant, stage, depth in profiles:
         config = output / (name + ".cfg")
@@ -83,7 +95,7 @@ def main():
             command = ["java", "-XX:+UseParallelGC", "-Xmx1024m", "-cp", str(jar), "tlc2.TLC", "-workers", "1",
                        "-seed", "1", "-deadlock", "-metadir", states,
                        "-config", config.name, module + ".tla"]
-            run = subprocess.run(command, cwd=output, capture_output=True, text=True, timeout=300)
+            run = subprocess.run(command, cwd=output, capture_output=True, text=True, timeout=1800 if depth == 0 else 300)
         log = run.stdout + run.stderr
         (output / (name + ".log")).write_text(log)
         expected = witnesses.get(name, "Safety" if mutant != "None" else None)
@@ -98,7 +110,8 @@ def main():
                    else run.returncode == 0 and exhaustive)
         counts = re.search(r"([\d,]+) states generated, ([\d,]+) distinct states found", log)
         result = {"name": name, "module": module, "capacity": capacity, "maxOperations": operations,
-                  "stage": stage, "maxCompositionSteps": depth, "mutation": mutant,
+                  "stage": stage, "maxCompositionSteps": None if depth == 0 else depth,
+                  "compositionToFixedPoint": depth == 0, "mutation": mutant,
                   "exitCode": run.returncode, "expectedCounterexample": mutant != "None",
                   "counterexampleFound": violated in ("Safety", "SilentProgress", "AttachedProgress"), "expectedViolation": expected,
                   "observedViolation": violated, "passed": success,

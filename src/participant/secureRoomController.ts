@@ -1366,7 +1366,7 @@ export class SecureRoomController {
         await this.handleHostChanged(frame.deviceId);
         return;
       case "room-retired":
-        await this.handleRoomRetired();
+        await this.finishTerminal("room-destroyed", "The secure fort was knocked down.");
         return;
       case "error":
         await this.handleServerError(frame, handshake);
@@ -2565,14 +2565,6 @@ export class SecureRoomController {
     }
     this.ui.applySecureRoomUiV4(engine.state, [], engine.deviceId);
     await this.runAutomations();
-  }
-
-  private async handleRoomRetired(): Promise<void> {
-    const engine = this.requireEngine();
-    const close = engine.pendingRelayControls.some((control) => control.kind === "close-room");
-    if (close) await engine.completeRelayControl({ kind: "room-retired" });
-    else await engine.retire();
-    await this.finishTerminal("room-destroyed", "The secure fort was knocked down.", false);
   }
 
   private enqueueGrantIntent(intent: GrantIntent, priority = false): void {

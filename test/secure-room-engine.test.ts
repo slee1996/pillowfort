@@ -1485,7 +1485,7 @@ describe("protocol-v4 durable secure room engine", () => {
       host = await engineModule.SecureRoomEngine.restore({ roomInstance, roomSecret, store: hostStore, lease: hostLease });
       const closeControlSurvivedRestart = host.pendingRelayControls.some((control) => control.kind === "close-room" &&
         control.authorizationMessageId === close.messageId);
-      await host.completeRelayControl({ kind: "room-retired" });
+      await host.retire();
       const closeErasedOpaqueState = await hostStore.loadOpaqueState(storeKey) === null;
       const closedEngineRetiredCode = await code(async () => host.state);
 
@@ -3403,6 +3403,7 @@ describe("protocol-v4 durable secure room engine", () => {
         harness.engine = {
           roomInstance,
           deviceId,
+          pendingRelayControls: [],
           pendingOutbox: [],
           isProvisional: false,
           isAuthenticationAmbiguous: true,
@@ -3427,7 +3428,7 @@ describe("protocol-v4 durable secure room engine", () => {
         if (kind === "terminal" || kind === "lifecycle") {
           harness.authenticated = true;
           if (kind === "terminal") {
-            await harness.finishTerminal("room-destroyed", "This secure fort is no longer available.");
+            await harness.handleServerFrame({kind:"secure-server", v:4, suite:1, type:"room-retired"});
           } else {
             await harness.handleServerFrame({
               kind: "secure-server", v: 4, suite: 1, type: "member-lifecycle",
@@ -4142,8 +4143,8 @@ describe("protocol-v4 durable secure room engine", () => {
     expect(result.retireCalls).toBe(2);
   });
 
-  it("gates terminal relay errors before durable retirement can yield", async () => {
-    const result = await page.evaluate(async () => {
+  for (const terminalFrame of ["error", "room-retired"] as const) it(`gates terminal ${terminalFrame} before durable retirement can yield`, async () => {
+    const result = await page.evaluate(async (terminalFrame) => {
       const [{ SecureRoomController }, stateModule] = await Promise.all([
         import(window.participantTestRoot + "/src/participant/secureRoomController.ts"),
         import(window.participantTestRoot + "/src/participant/secureRoomState.ts"),
@@ -4160,6 +4161,7 @@ describe("protocol-v4 durable secure room engine", () => {
       const harness = controller as any;
       harness.engine = {
         deviceId: stateModule.randomSecureRoomIdV4(16),
+        pendingRelayControls: [],
         retire: async () => {
           retireEntered();
           await retireGate;
@@ -4188,9 +4190,9 @@ describe("protocol-v4 durable secure room engine", () => {
       harness.authenticated = true;
       harness.mapUiAction = async () => { mappedActions += 1; };
 
-      const handling = harness.handleServerFrame({
-        kind: "secure-server", v: 4, suite: 1, type: "error", code: "room-retired",
-      });
+      const handling = harness.handleServerFrame(terminalFrame === "error"
+        ? {kind:"secure-server", v:4, suite:1, type:"error", code:"room-retired"}
+        : {kind:"secure-server", v:4, suite:1, type:"room-retired"});
       await retireStarted;
       const actionAcceptedDuringRetire = controller.sendUiAction("chat", { text: "too late" });
       const gatedBeforeRetireCompleted = harness.terminal && harness.stopped &&
@@ -4208,7 +4210,7 @@ describe("protocol-v4 durable secure room engine", () => {
         handlerWaitedForRetire: handlerState === "pending",
         cleanedAfterRetire: harness.engine === null && disposed === 1 && leaseReleased === 1,
       };
-    });
+    }, terminalFrame);
 
     expect(result.gatedBeforeRetireCompleted).toBe(true);
     expect(result.handlerWaitedForRetire).toBe(true);

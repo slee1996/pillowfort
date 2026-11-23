@@ -15,6 +15,13 @@ export class Room extends ProductionRoom {
       });
     })());
   }
+  // Paired counterfactual only: keep the same host, nonce and socket, but give a late reply
+  // another 30 s after the retry. Never used in the deployed Worker or the treatment runs.
+  async persistHostPath(next) {
+    if (this.env.CUT === "premature-succession" && this.env.STUDY_EXTRA_MS === "30000" &&
+        this.hostPath?.phase === "retry" && next?.phase === "expire") next = { ...next, dueAt: next.dueAt + 30_000 };
+    return super.persistHostPath(next);
+  }
   get idleCut() { return this.env.CUT === "idle-retirement" || this.env.CUT === "idle-retirement-prefix"; }
   async webSocketMessage(ws, message) {
     await super.webSocketMessage(ws, message);

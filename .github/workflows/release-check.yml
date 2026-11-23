@@ -38,8 +38,8 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run release gate
-        run: npm run check
+      - name: Run release gate with relay transition conformance
+        run: PILLOWFORT_RELAY_CONFORMANCE_REPORT="$RUNNER_TEMP/relay-conformance.json" npm run check
 
       - name: Verify chat remains usable with limited vertical space
         run: bun test --timeout 60000 --max-concurrency 1 test/mobile.test.ts --test-name-pattern 'phone landscape|shrinks only'
@@ -72,6 +72,8 @@ jobs:
           for cut in idle-retirement idle-retirement-prefix; do
             node scripts/protocol-workerd-evidence.mjs "$cut" "$RUNNER_TEMP/pillowfort-$cut"
           done
+      - name: Verify a terminal notice survives a participant storage failure
+        run: node scripts/protocol-workerd-evidence.mjs terminal-storage "$RUNNER_TEMP/pillowfort-terminal-storage"
       - name: Verify a guest with lost keys needs new approval and gets a distinct address
         run: bun scripts/protocol-browser-evidence.ts --mode faults --fault lost-guest-keys --output "$RUNNER_TEMP/lost-guest-keys"
 
@@ -127,3 +129,7 @@ jobs:
           npm audit --package-lock-only --audit-level=moderate
           npm --prefix client audit --package-lock-only --audit-level=moderate
           npm --prefix hosted-mcp audit --package-lock-only --audit-level=moderate
+      - name: Verify the pinned native provider against RFC 9180
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal
+          cargo +1.94.1 test --locked --manifest-path crypto/openmls-wasm/Cargo.toml --test hpke_suite1

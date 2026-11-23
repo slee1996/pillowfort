@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
 import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
 import { canonicalBase64UrlV4, signSecureApplicationEventV4 } from "../src/applicationEventsV4";
 import {
@@ -10,15 +10,11 @@ import {
   MAX_SECURE_KEY_PACKAGE_DIGESTS_V4,
   MAX_SECURE_REPLAY_RECORDS_V4,
   MAX_SECURE_RETIRED_TOMBSTONES_V4,
-  advanceSecureRelayV4,
-  createSecureRelayStateV4,
-  disconnectSecureRelayDeviceV4,
   exportSecureRelayStateV4,
   getSecureRelayDeviceSignatureKeyV4,
   importSecureRelayStateV4,
   nextSecureRelayDeadlineV4,
   parseSecureClientFrameV4,
-  reduceSecureRelayV4,
   type SecureApplicationRelayFrameV4,
   type SecureCommitRelayFrameV4,
   type SecureHostTransferAcceptRelayFrameV4,
@@ -28,6 +24,7 @@ import {
   type SecureRelayStateV4,
   type SecureRelayTransitionV4,
 } from "../src/secureRelayV4";
+import { advanceSecureRelayV4, createSecureRelayStateV4, disconnectSecureRelayDeviceV4, reduceSecureRelayV4, reportRelayConformance } from "../verification/relay-conformance";
 import type { SecureRelayEnvelopeV4 } from "../src/protocolV4";
 import { ROOM_INVITATION_AUTH_KDF_V4 } from "../src/roomInvitationAuthV4";
 import {
@@ -35,6 +32,8 @@ import {
   type RoomInvitationMemberBindingModeV4,
   type RoomInvitationMemberBindingV4,
 } from "../src/roomInvitationMemberBindingV4";
+
+afterAll(reportRelayConformance);
 
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -647,6 +646,29 @@ describe("protocol-v4 strict wire and admission authorization", () => {
 });
 
 describe("protocol-v4 cryptographic admission barrier", () => {
+  for (const phase of ["pre-add", "awaiting-proof"] as const) {
+    it(`cancels the exact admission at ${phase} without carrying that cancellation into a new join`, async () => {
+      const {ids, clock, host, state} = await setupRoom();
+      const a = await pendingAdmissionAtPhase(state, host, ids, clock, phase);
+      const cancel = { kind:"cancel-admission", v:4, suite:1, roomInstance:state.roomInstance,
+        requestId:ids(), deviceId:a.guest.deviceId, admissionId:a.admissionId } as const;
+      const apply = (s: SecureRelayStateV4) => reduceSecureRelayV4(s, host, cancel, {now:tick(clock), nextGrantTokenId:ids()});
+      let next = accepted(await apply(a.state)).state;
+      expect(next.members.find(m => m.deviceId === a.guest.deviceId)?.status).toBe("retired");
+      if (phase === "pre-add") expect(next.pendingZombieRemovals).toEqual([]);
+      else {
+        expect(next.pendingZombieRemovals[0]).toMatchObject({deviceId:a.guest.deviceId, admissionCommitMessageId:a.admissionId});
+        next = await removeCurrentZombie(next, host, ids, clock);
+      }
+      const b = await pendingAdmissionAtPhase(next, host, ids, clock, "pre-add");
+      const restored = importSecureRelayStateV4(exportSecureRelayStateV4(b.state))!;
+      const retry = accepted(await apply(restored));
+      expect(retry.effects).toContainEqual({type:"frame-accepted", deviceId:host.deviceId, messageId:cancel.requestId});
+      expect(retry.state.members.find(m => m.deviceId === b.guest.deviceId)).toMatchObject({status:"pending", admissionId:b.admissionId});
+      expect(retry.state.pendingZombieRemovals).toEqual([]);
+    });
+  }
+
   it("cancels work queued behind an Add commit and blocks every non-admission grant", async () => {
     const { ids, clock, host, state: initial } = await setupRoom();
     const active = await admitMember(initial, host, ids, clock);
