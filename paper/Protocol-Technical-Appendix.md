@@ -299,7 +299,7 @@ npm run build
 bun scripts/protocol-browser-evidence.ts --mode faults --fault prompt-host-succession --output /tmp/pillowfort-offer
 ```
 
-The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json) records the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
+The relay tests distinguish immediate offers from the 120-second no-recipient recovery window. The browser check closes the host, observes the first offer, declines it, accepts the next offer, and exchanges encrypted chat. Its duration is one observation, not a deadline for detecting a broken connection. The [local result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/local/browser-results.json) and the [production result](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-22-r7/paper/evidence/prompt-succession-r7/production/browser-results.json) record the environment and signed choices. To reconstruct this revision offline, unpack the baseline source archive and run `git apply` with `sources/prompt-succession-0df3215d9813.patch` from the bundle.
 
 ## I. Related designs
 
