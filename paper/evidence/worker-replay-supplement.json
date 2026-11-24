@@ -1,0 +1,184 @@
+{
+  "profile": "pf-v4-cs1",
+  "publication": "Supplement to evidence edition 14; historical release PDFs and measurements are unchanged.",
+  "publishedRuntime": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "baseline": "6a654f8e67eccaafb9135ee2ef4759a2d00ea218",
+  "verificationSource": "02095e0df0c563549dda44f3efa4980aea849e18",
+  "method": "https://github.com/slee1996/pillowfort/tree/02095e0df0c563549dda44f3efa4980aea849e18",
+  "changedRuntime": false,
+  "workerReplay": {
+    "environment": {
+      "os": "darwin",
+      "release": "27.0.0",
+      "cpu": "Apple M3 Max",
+      "logicalCpus": 14,
+      "memoryBytes": 38654705664,
+      "bun": "1.4.4",
+      "playwright": "1.65.0",
+      "chromium": "158.0.8127.18"
+    },
+    "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+    "redControl": {
+      "intervention": "Before implementing the real eviction boundary, the new test could not continue from the first successor. A browser-only pass is insufficient.",
+      "failure": "Error: Missing browser boundary: real Worker eviction between the two signed transfers"
+    },
+    "actualBrowser": {
+      "fault": "offline-two-transfers",
+      "explicitChoices": 2,
+      "observerOfflineDuringBoth": true,
+      "sameDeviceResume": true,
+      "replayedExactAcceptances": 2,
+      "finalRosterVerified": true,
+      "earlyApplications": 0,
+      "blockedDraftRetained": true,
+      "peerCopiesAfterMatchingReceipt": 1,
+      "deliveredBothDirections": true
+    },
+    "durableObjectEvidence": {
+      "cutAfterCommit": true,
+      "socketsHibernated": true,
+      "recoveredExactPendingWork": true,
+      "distinctInstanceObservedWithFirstSuccessorPolicy": true,
+      "guestDisconnectedAtBothDurableSwitches": true,
+      "evictionError": null
+    },
+    "interpretation": "Both Worker instances independently observed the lagging device disconnected at the two authority commits. In the browser its original device replayed the exact policy, authorization, event and signer for both decisions. The return snapshot named only the two remaining devices. With its genuine current ACK held the endpoint could receive but did not send the draft. One explicit retry after release reached the new host once.",
+    "limit": "One bounded local workerd execution with an honest relay and intact IndexedDB. Not evidence of global MLS epoch convergence, unbounded exactly-once actions or the timing of Cloudflare eviction."
+  },
+  "rustsec": {
+    "scanner": "cargo-audit 0.22.2",
+    "linuxArchiveSha256": "ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39",
+    "lockfile": "crypto/openmls-wasm/Cargo.lock",
+    "lockfileSha256": "131e50f8bddaee5355b191b504936e440650d6d815b78ca11923a395e42884b4",
+    "database": {
+      "advisory-count": 1563,
+      "last-commit": "52384ab5581a4487b62c549eef95cf7ba7e8bad5",
+      "last-updated": "2026-11-23T17:01:22+01:00"
+    },
+    "packages": 119,
+    "vulnerabilities": 0,
+    "warnings": {},
+    "interpretation": "No matched advisory in this database revision. CI scans against the current database and preserves its commit; this does not audit the project’s code or cryptography."
+  },
+  "physicalSleep": {
+    "physicalTrialRun": false,
+    "physicalWakeToChatMs": null,
+    "reason": "No dedicated laptop was available for suspension. No shared service or controller was interrupted.",
+    "reproduction": "https://github.com/slee1996/pillowfort/blob/02095e0df0c563549dda44f3efa4980aea849e18/verification/README.md#separating-physical-sleep-from-browser-suspension",
+    "requiredForAnActualResult": [
+      "A separate dedicated Mac enters OS sleep and full Wake while the two observer profiles and private Worker stay awake.",
+      "Associate time-bounded native power evidence with observer and relay events. Preserve post-wake missing traffic as censored, not zero milliseconds.",
+      "Compare like network paths and real sleep durations before drawing conclusions about avoidable offers. An SSH-forward result is not a direct WLAN or WAN result."
+    ],
+    "awakeControl": {
+      "loopbackWorker": true,
+      "newlySubmittedMessages": 10,
+      "displayedAtOtherGuest": 10,
+      "observedOffers": 0,
+      "rawBrowserObservation": {
+        "fault": "sleep-awake-control",
+        "controlOnly": true,
+        "windowStartUtcMs": 1795478359932,
+        "windowEndUtcMs": 1795478373934,
+        "samplingIntervalMs": 1500,
+        "offers": [],
+        "signedAcceptances": [],
+        "peerObservedSwitches": [],
+        "samples": [
+          {
+            "submittedAt": 1795478359939,
+            "receivedAt": 1795478360015
+          },
+          {
+            "submittedAt": 1795478361451,
+            "receivedAt": 1795478361527
+          },
+          {
+            "submittedAt": 1795478362961,
+            "receivedAt": 1795478363036
+          },
+          {
+            "submittedAt": 1795478364474,
+            "receivedAt": 1795478364550
+          },
+          {
+            "submittedAt": 1795478365984,
+            "receivedAt": 1795478366059
+          },
+          {
+            "submittedAt": 1795478367495,
+            "receivedAt": 1795478367571
+          },
+          {
+            "submittedAt": 1795478369004,
+            "receivedAt": 1795478369078
+          },
+          {
+            "submittedAt": 1795478370517,
+            "receivedAt": 1795478370539
+          },
+          {
+            "submittedAt": 1795478372027,
+            "receivedAt": 1795478372102
+          },
+          {
+            "submittedAt": 1795478373535,
+            "receivedAt": 1795478373557
+          }
+        ],
+        "assumption": "Both observer clocks and the local Worker share the awake machine. A hardware result additionally requires independent OS sleep and full-wake evidence."
+      },
+      "rawRelayObservation": {
+        "fault": "sleep-awake-control",
+        "extraFinalWaitMs": 0,
+        "events": [
+          {
+            "event": "policy-ready",
+            "at": 1795478349877
+          },
+          {
+            "event": "original-probe-send-attempt",
+            "at": 1795478359863
+          },
+          {
+            "event": "original-probe-reply-committed",
+            "at": 1795478359865
+          },
+          {
+            "event": "original-probe-send-attempt",
+            "at": 1795478369866
+          },
+          {
+            "event": "original-probe-reply-committed",
+            "at": 1795478369867
+          },
+          {
+            "event": "original-socket-close-observed",
+            "at": 1795478373953
+          },
+          {
+            "event": "relay-committed-original-disconnect",
+            "at": 1795478373955
+          }
+        ]
+      },
+      "interpretation": "Only events within the browser observation window are part of the control. Closing the disposable profiles after it ends also closes the test host socket. No sleep/wake latency is inferred."
+    },
+    "interpretationChecks": {
+      "passed": 4,
+      "claims": [
+        "An awake control or DarkWake alone cannot establish physical full wake.",
+        "A pre-wake or timing-ambiguous submission is not a newly submitted post-wake message.",
+        "Multiple full cycles invalidate attribution; missing delivery remains explicit.",
+        "An offer that predates sleep is not attributed to sleep."
+      ]
+    }
+  },
+  "commands": [
+    "node scripts/protocol-workerd-evidence.mjs offline-two-transfers <fresh-output>",
+    "node scripts/protocol-workerd-evidence.mjs sleep-awake-control <fresh-output>",
+    "python3 -B test/physical-sleep-observations.py",
+    "cargo audit --file crypto/openmls-wasm/Cargo.lock --json"
+  ],
+  "hardwareCommand": "python3 scripts/measure-laptop-sleep.py --dedicated-mac operator@dedicated-mac --transport ssh-loopback <fresh-output>"
+}

@@ -118,6 +118,8 @@ To exercise admission and resume inside a *chain* of host losses, build the rele
 
 `node scripts/protocol-workerd-evidence.mjs offline-two-transfers /tmp/pillowfort-offline-two-transfers` keeps an enrolled guest offline through two signed authority changes. After the first successor commits its own policy, the test evicts the actual local Durable Object with sockets hibernated. A different instance must restore that policy. Both instances record the guest disconnected at their respective switches. On its original identity, the guest must replay both exact signed acceptances before the final roster and host snapshot; while its genuine completion ACK is held, a draft must remain local. After that ACK, explicit resubmission must reach the new host once. The release workflow retains the Worker and browser records separately.
 
+The [supplemental evidence](../paper/evidence/worker-replay-supplement.json) pins the method, separate Worker/browser observations, native dependency scan, and awake control. It records no physical sleep trial.
+
 The release dependency gate also scans `crypto/openmls-wasm/Cargo.lock` with digest-pinned `cargo-audit` 0.22.2 against the then-current RustSec database. The uploaded JSON records the database commit; it is not a source or cryptographic audit.
 
 The relay regressions and actual browser fault script are separate evidence. Run their documented commands rather than inferring an implementation pass from TLC results.
