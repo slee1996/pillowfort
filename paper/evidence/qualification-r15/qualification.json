@@ -1,0 +1,115 @@
+{
+  "edition": 15,
+  "protocol": "v4 / pf-v4-cs1",
+  "publishedTag": "protocol-v4-cs1-evidence-2026-11-24-r15",
+  "runtimeSource": "ccc195d8c069eeec5ff7190009837c6b93039deb",
+  "verificationSource": "02095e0df0c563549dda44f3efa4980aea849e18",
+  "evidenceCommit": "6762a94ff67faafd15338b41128e52a9dd8251e2",
+  "methodPullRequest": "https://github.com/slee1996/pillowfort/pull/34",
+  "methodMerge": "893b523e66f4cdb81eaaba61d76bbc0905c32966",
+  "independentLinuxRun": "https://github.com/slee1996/pillowfort/actions/runs/45293539952",
+  "previousQualification": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json",
+  "preserved": {
+    "formalAnalysis": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf",
+    "formalAnalysisEdition": 14,
+    "detectorStudy": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json",
+    "runtimeOrTimeoutChanged": false
+  },
+  "evidence": {
+    "macOS": {
+      "url": "https://github.com/slee1996/pillowfort/blob/6762a94ff67faafd15338b41128e52a9dd8251e2/paper/evidence/worker-replay-supplement.json",
+      "bundlePath": "evidence/worker-replay-supplement.json",
+      "sha256": "ff34767ca2fc5de5494d76784d2b60ace3eb288e5700d020d77857c43243c94d"
+    },
+    "linux": {
+      "source": "https://github.com/slee1996/pillowfort/actions/runs/45293539952",
+      "files": [
+        {
+          "file": "linux-replay-browser.json",
+          "sha256": "9ab1806673cb48eaeb10ee114f2454fc2c14a7f2e499f4139ef33bbeaf3eff02"
+        },
+        {
+          "file": "linux-replay-worker.json",
+          "sha256": "6cdf41c74ed536f6ed9c30ea2f40ee625d5a88824020f13fcef005cbfbb66fcf"
+        },
+        {
+          "file": "linux-awake-browser.json",
+          "sha256": "a707060c420c3ccd10e1333e745de4e45f0e25b3112761383041e956e373c027"
+        },
+        {
+          "file": "linux-awake-relay.json",
+          "sha256": "1366d73d36338a4d0eb1ff6c7eca26319ac18a90999c7fd98335ddca54fd186c"
+        },
+        {
+          "file": "linux-rustsec.json",
+          "sha256": "8dc62346a78d9f4f6f19229ce5dd70ba60c7a347b192fefd99467b97513d81ae"
+        }
+      ]
+    }
+  },
+  "findings": {
+    "returningGuest": {
+      "runOn": [
+        "macOS",
+        "Linux"
+      ],
+      "browser": {
+        "fault": "offline-two-transfers",
+        "explicitChoices": 2,
+        "observerOfflineDuringBoth": true,
+        "sameDeviceResume": true,
+        "replayedExactAcceptances": 2,
+        "finalRosterVerified": true,
+        "earlyApplications": 0,
+        "blockedDraftRetained": true,
+        "peerCopiesAfterMatchingReceipt": 1,
+        "deliveredBothDirections": true
+      },
+      "durableObject": {
+        "cutAfterCommit": true,
+        "socketsHibernated": true,
+        "recoveredExactPendingWork": true,
+        "distinctInstanceObservedWithFirstSuccessorPolicy": true,
+        "guestDisconnectedAtBothDurableSwitches": true,
+        "evictionError": null
+      },
+      "limit": "One bounded local workerd execution with an honest relay and intact IndexedDB. Not evidence of global MLS epoch convergence, unbounded exactly-once actions or the timing of Cloudflare eviction."
+    },
+    "awakeControl": {
+      "macOS": {
+        "newMessagesDisplayed": 10,
+        "newMessagesSent": 10,
+        "offers": 0
+      },
+      "linux": {
+        "newMessagesDisplayed": 10,
+        "newMessagesSent": 10,
+        "offers": 0
+      },
+      "physicalSleepMeasured": false,
+      "physicalWakeToChatMs": null,
+      "scope": "An awake control of the observers. It does not measure Wi-Fi reassociation, wake-to-chat latency, or incidence of unnecessary offers."
+    },
+    "rustsec": {
+      "tool": "cargo-audit 0.22.2",
+      "cargoLock": "crypto/openmls-wasm/Cargo.lock",
+      "lockfileSha256": "131e50f8bddaee5355b191b504936e440650d6d815b78ca11923a395e42884b4",
+      "advisoryDatabaseCommit": "52384ab5581a4487b62c549eef95cf7ba7e8bad5",
+      "lockedPackages": 119,
+      "matchedVulnerabilities": 0,
+      "scope": "A result against the recorded public database; not an independent security audit."
+    }
+  },
+  "reproduce": {
+    "sourceArchive": "sources/method-02095e0df0.tar.gz",
+    "archiveSha256": "47903e54666577a05e9d1c4b1d07d76ac3b78a95b37c88d87e1560a1f6cd8cde",
+    "commands": [
+      "node scripts/protocol-workerd-evidence.mjs offline-two-transfers <fresh-output>",
+      "node scripts/protocol-workerd-evidence.mjs sleep-awake-control <fresh-output>",
+      "python3 -B test/physical-sleep-observations.py",
+      "cargo audit --file crypto/openmls-wasm/Cargo.lock --json"
+    ],
+    "instructions": "https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/Protocol-Technical-Appendix.pdf",
+    "hardwareProcedure": "https://github.com/slee1996/pillowfort/blob/02095e0df0c563549dda44f3efa4980aea849e18/verification/README.md#separating-physical-sleep-from-browser-suspension"
+  }
+}

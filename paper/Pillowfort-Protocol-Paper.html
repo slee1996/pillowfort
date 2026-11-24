@@ -29,7 +29,7 @@ Rooms</title>
 id="pillowfort-host-succession-by-consent-in-encrypted-rooms">Pillowfort:
 Host Succession by Consent in Encrypted Rooms</h1>
 <div class="subtitle">
-Protocol v4 · Profile CS1 · Evidence edition 14 · 23 November 2026
+Protocol v4 · Profile CS1 · Evidence edition 15 · 24 November 2026
 </div>
 <h2 class="abstract-heading" id="abstract">Abstract</h2>
 <p>Pillowfort is a protocol for temporary encrypted rooms shared by
@@ -679,6 +679,17 @@ encrypted messages in both directions after each matching completion
 receipt. Both remaining participants observed retirement. This checks
 that the mechanisms work together on one schedule, not all
 schedules.</p>
+<p>In a <a
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/evidence/qualification-r15/qualification.json">four-device
+recovery test</a>, an enrolled guest stayed offline while two other
+guests accepted the host role in turn. The relay’s Worker restarted
+between transfers. With its local keys and storage intact, the guest
+rejoined without a new admission, verified both signed acceptances, and
+recovered the final roster. It received encrypted chat, but its draft
+stayed local until the matching replay acknowledgment arrived. One
+explicit retry then delivered one copy to the new host. The macOS and
+Linux runs establish this outcome for the tested sequence, not
+exactly-once delivery after arbitrary failures.</p>
 <p>An <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r13/paper/evidence/qualification-r13/participants.json">interrupted
 departure</a> tested whether a visible choice could actually be
@@ -916,15 +927,15 @@ href="https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/su
 <li>Model Context Protocol. <em>Tasks Extension</em>. <a
 href="https://modelcontextprotocol.io/extensions/tasks/overview.md">Overview</a>.</li>
 <li>Pillowfort. <em>Protocol v4-CS1.</em> <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Technical-Appendix.pdf">Wire
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/Protocol-Technical-Appendix.pdf">Wire
 contract</a>, <a
 href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf">state
 machines</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md">claim
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/Protocol-Verification-Matrix.md">claim
 matrix</a>, <a
-href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json">results</a>,
-<a
-href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-23-r14/Pillowfort-Protocol-v4-CS1-R14.zip">replication
+href="https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/evidence/qualification-r15/qualification.json">verification
+records</a>, <a
+href="https://github.com/slee1996/pillowfort/releases/download/protocol-v4-cs1-evidence-2026-11-24-r15/Pillowfort-Protocol-v4-CS1-R15.zip">replication
 archive</a>.</li>
 <li>Matrix. <em>Megolm Group Ratchet</em>, specification v1.19. <a
 href="https://spec.matrix.org/v1.19/olm-megolm/megolm/">Specification</a>.</li>

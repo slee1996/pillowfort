@@ -1,0 +1,70 @@
+{
+  "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+  "environment": {
+    "os": "linux",
+    "release": "7.0.0-1020-azure",
+    "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "logicalCpus": 4,
+    "memoryBytes": 16758394880,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "sleep-awake-control",
+      "controlOnly": true,
+      "windowStartUtcMs": 1795478650167,
+      "windowEndUtcMs": 1795478664168,
+      "samplingIntervalMs": 1500,
+      "offers": [],
+      "signedAcceptances": [],
+      "peerObservedSwitches": [],
+      "samples": [
+        {
+          "submittedAt": 1795478650177,
+          "receivedAt": 1795478650252
+        },
+        {
+          "submittedAt": 1795478651694,
+          "receivedAt": 1795478651769
+        },
+        {
+          "submittedAt": 1795478653208,
+          "receivedAt": 1795478653285
+        },
+        {
+          "submittedAt": 1795478654724,
+          "receivedAt": 1795478654799
+        },
+        {
+          "submittedAt": 1795478656239,
+          "receivedAt": 1795478656314
+        },
+        {
+          "submittedAt": 1795478657764,
+          "receivedAt": 1795478657838
+        },
+        {
+          "submittedAt": 1795478659281,
+          "receivedAt": 1795478659457
+        },
+        {
+          "submittedAt": 1795478660801,
+          "receivedAt": 1795478660877
+        },
+        {
+          "submittedAt": 1795478662317,
+          "receivedAt": 1795478662398
+        },
+        {
+          "submittedAt": 1795478663838,
+          "receivedAt": 1795478663913
+        }
+      ],
+      "assumption": "Both observer clocks and the local Worker share the awake machine. A hardware result additionally requires independent OS sleep and full-wake evidence."
+    }
+  ],
+  "passed": true
+}
