@@ -1,10 +1,10 @@
 # Pillowfort v4-CS1: Wire Contract and Failure Semantics
 
-<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 14 · 23 November 2026</div>
+<div class="subtitle">Protocol v4 · Profile CS1 · Evidence edition 15 · 24 November 2026</div>
 
 This appendix specifies the consent-based succession profile of protocol v4. It separates required wire checks, endpoint persistence, relay decisions, and recovery outcomes. The evidence bundle contains the exact source, executable M1–M4 models, configurations, counterexamples for deliberately weakened models, implementation tests, and browser measurements. Separate inductive proofs cover the four abstract safety machines, not all implementation behavior or the cryptography.
 
-**Implementation:** [`ccc195d8`](https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Protocol-Verification-Matrix.md), [state-machine analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf) and [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
+**Implementation:** [`ccc195d8`](https://github.com/slee1996/pillowfort/tree/ccc195d8c069eeec5ff7190009837c6b93039deb). The [claim-to-test matrix](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/Protocol-Verification-Matrix.md), [state-machine analysis](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/Formal-State-Machine-Analysis.pdf) and [verification records](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/evidence/qualification-r15/qualification.json) identify tested contracts and exclusions. Historical experiments retain their own revisions.
 
 ## A. Profile and interoperability
 
@@ -275,7 +275,21 @@ The [coordination analysis](https://github.com/slee1996/pillowfort/blob/3e7acb45
 
 ### H.0 Current release qualification
 
-The [qualification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json) pins the released runtime `ccc195d8` and [verification source `3e7acb45`](https://github.com/slee1996/pillowfort/tree/3e7acb452eae3d1936f8beba624486ac82652c71). Use the latter checkout for these commands; the runtime inputs are unchanged. The [paired detector trials](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json) retain their original measurements and revisions. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
+**Returning guest.** The [paired verification record](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-24-r15/paper/evidence/qualification-r15/qualification.json) links the [macOS observations](https://github.com/slee1996/pillowfort/blob/6762a94ff67faafd15338b41128e52a9dd8251e2/paper/evidence/worker-replay-supplement.json) and the [Linux release run](https://github.com/slee1996/pillowfort/actions/runs/45293539952). Each run used four enrolled devices and a private relay. The first successor committed its own policy before the Worker was evicted. A new Worker instance recovered that policy; both instances recorded the same guest as disconnected at their respective transfers. On return, the guest matched each replayed acceptance to the original event, signer, policy, and authorization. With its current acknowledgment withheld, it received chat, retained its draft, and emitted no ordinary message. A single explicit retry after release reached the new host once.
+
+To reproduce these checks, use [verification source `02095e0d`](https://github.com/slee1996/pillowfort/tree/02095e0df0c563549dda44f3efa4980aea849e18), install the locked dependencies and Playwright Chromium, and build the production client. Set `OUT` to a fresh output directory. Both room experiments run on loopback.
+
+```sh
+node scripts/protocol-workerd-evidence.mjs offline-two-transfers "$OUT/replay"
+node scripts/protocol-workerd-evidence.mjs sleep-awake-control "$OUT/awake"
+python3 -B test/physical-sleep-observations.py
+```
+
+**Awake control.** On each platform, an independent guest displayed all ten newly sent messages; neither run produced a succession offer. No machine slept. The control checks the observers, not wake latency or the frequency of unnecessary offers. The [hardware procedure](https://github.com/slee1996/pillowfort/blob/02095e0df0c563549dda44f3efa4980aea849e18/verification/README.md#separating-physical-sleep-from-browser-suspension) requires a recorded operating-system sleep and full wake for a physical result.
+
+**Dependency scan.** On both platforms, `cargo-audit` 0.22.2 matched no known vulnerabilities among the 119 packages in `crypto/openmls-wasm/Cargo.lock` against [RustSec database `52384ab5`](https://github.com/RustSec/advisory-db/commit/52384ab5581a4487b62c549eef95cf7ba7e8bad5). To repeat the scan against the current database, run `cargo audit --file crypto/openmls-wasm/Cargo.lock --json`. A later database can change the result. This checks published dependency advisories, not the protocol or its cryptographic implementation.
+
+The earlier [model and runtime qualification](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r14/paper/evidence/qualification-r14/qualification.json) pins the released runtime `ccc195d8` and [verification source `3e7acb45`](https://github.com/slee1996/pillowfort/tree/3e7acb452eae3d1936f8beba624486ac82652c71). Use that checkout for the following commands; the runtime inputs are unchanged. The [paired detector trials](https://github.com/slee1996/pillowfort/blob/protocol-v4-cs1-evidence-2026-11-23-r12/paper/evidence/qualification-r12/premature-succession.json) retain their original measurements and revisions. Install locked dependencies in the root, `client` and `hosted-mcp`, install the matching Playwright Chromium, then run `npm run check`, `npm --prefix hosted-mcp run check` and `NODE_ENV=production npm run build`. Use a fresh output directory. All interventions below are private and loopback-only:
 
 ```sh
 for cut in silent-host-loss silent-host-uplink silent-host-downlink probe-restart idle-retirement idle-retirement-prefix terminal-storage; do
@@ -296,7 +310,7 @@ The historical transport-only experiment included a forced-close control. The cu
 
 ### H.0.1 Reproducing the premature-succession study
 
-From this edition’s source export, set `PILLOWFORT_QUALIFICATION_ASSETS` to the absolute path of `study-browser` in the replication archive. This selects the exact released browser byte-for-byte; omitting it evaluates the currently built client instead. Do not point the harness at a public deployment.
+From the [original timing-study source](https://github.com/slee1996/pillowfort/tree/cbd7977df9df29bb6e80baf34a3f32b9f4dc4708), set `PILLOWFORT_QUALIFICATION_ASSETS` to the absolute path of `study-browser` in the replication archive. This selects the exact released browser byte-for-byte; omitting it evaluates the currently built client instead. Do not point the harness at a public deployment.
 
 ```sh
 PILLOWFORT_QUALIFICATION_ASSETS="$BUNDLE/study-browser" \

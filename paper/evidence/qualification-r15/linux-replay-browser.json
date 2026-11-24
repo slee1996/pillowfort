@@ -1,0 +1,29 @@
+{
+  "scope": "Dedicated local workerd Durable Object, hibernatable WebSockets, production browser bundle, MLS and IndexedDB. Not the Cloudflare edge.",
+  "environment": {
+    "os": "linux",
+    "release": "7.0.0-1020-azure",
+    "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "logicalCpus": 4,
+    "memoryBytes": 16758394880,
+    "bun": "1.4.4",
+    "playwright": "1.65.0",
+    "chromium": "158.0.8127.18"
+  },
+  "benchmarks": [],
+  "faults": [
+    {
+      "fault": "offline-two-transfers",
+      "explicitChoices": 2,
+      "observerOfflineDuringBoth": true,
+      "sameDeviceResume": true,
+      "replayedExactAcceptances": 2,
+      "finalRosterVerified": true,
+      "earlyApplications": 0,
+      "blockedDraftRetained": true,
+      "peerCopiesAfterMatchingReceipt": 1,
+      "deliveredBothDirections": true
+    }
+  ],
+  "passed": true
+}

@@ -1,3 +1,14 @@
+Evidence edition 15; protocol v4; profile pf-v4-cs1.
+Runtime and previously deployed Workers: ccc195d8c069eeec5ff7190009837c6b93039deb (unchanged).
+Returning-guest, awake control and dependency-scan method: 02095e0df0c563549dda44f3efa4980aea849e18
+https://github.com/slee1996/pillowfort/tree/02095e0df0c563549dda44f3efa4980aea849e18
+Public evidence tag: protocol-v4-cs1-evidence-2026-11-24-r15
+Cross-platform result and raw-file digests: evidence/qualification-r15/qualification.json
+The archive contains sources/method-02095e0df0.tar.gz (tracked method checkout excluding paper/), the permanent macOS supplement and the independent Linux records. Extract source archives separately.
+The tests used private Workers on macOS and Linux. Neither machine slept; neither production timeouts nor protocol behavior changed. The formal analysis is reproduced unchanged from edition 14, and the 24 detector trials retain their edition-12 provenance.
+
+Historical edition 14 provenance (unchanged):
+
 Evidence edition 14; protocol v4; profile pf-v4-cs1.
 Runtime and previously deployed Workers: ccc195d8c069eeec5ff7190009837c6b93039deb
 Verification source: 3e7acb452eae3d1936f8beba624486ac82652c71

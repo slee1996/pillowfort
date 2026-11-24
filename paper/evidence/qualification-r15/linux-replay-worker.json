@@ -1,0 +1,8 @@
+{
+  "cutAfterCommit": true,
+  "socketsHibernated": true,
+  "recoveredExactPendingWork": true,
+  "distinctInstanceObservedWithFirstSuccessorPolicy": true,
+  "guestDisconnectedAtBothDurableSwitches": true,
+  "evictionError": null
+}

@@ -1,0 +1,34 @@
+{
+  "fault": "sleep-awake-control",
+  "extraFinalWaitMs": 0,
+  "events": [
+    {
+      "event": "policy-ready",
+      "at": 1795478640102
+    },
+    {
+      "event": "original-probe-send-attempt",
+      "at": 1795478650071
+    },
+    {
+      "event": "original-probe-reply-committed",
+      "at": 1795478650073
+    },
+    {
+      "event": "original-probe-send-attempt",
+      "at": 1795478660075
+    },
+    {
+      "event": "original-probe-reply-committed",
+      "at": 1795478660077
+    },
+    {
+      "event": "original-socket-close-observed",
+      "at": 1795478664188
+    },
+    {
+      "event": "relay-committed-original-disconnect",
+      "at": 1795478664193
+    }
+  ]
+}
